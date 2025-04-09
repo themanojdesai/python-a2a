@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/python-a2a.svg)](https://pypi.org/project/python-a2a/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/python-a2a.svg)](https://pypi.org/project/python-a2a/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Downloads](https://static.pepy.tech/badge/python-a2a/month)](https://pepy.tech/project/python-a2a)
+[![Downloads](https://pepy.tech/badge/python-a2a)](https://pepy.tech/project/python-a2a)
 [![Documentation Status](https://readthedocs.org/projects/python-a2a/badge/?version=latest)](https://python-a2a.readthedocs.io/en/latest/?badge=latest)
 
 **The Definitive Python Implementation of Google's Agent-to-Agent (A2A) Protocol**
@@ -297,6 +297,7 @@ For comprehensive documentation, tutorials, and API reference, visit:
 - **[GitHub Issues](https://github.com/themanojdesai/python-a2a/issues)**: Report bugs or request features
 - **[GitHub Discussions](https://github.com/themanojdesai/python-a2a/discussions)**: Ask questions and share ideas
 - **[Contributing Guide](https://python-a2a.readthedocs.io/en/latest/contributing.html)**: Learn how to contribute to the project
+- **[ReadTheDocs](https://about.readthedocs.com/?ref=readthedocs.org)**: Visit our documentation site
 
 ## 🛣️ Roadmap
 
