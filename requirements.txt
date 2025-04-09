@@ -1,0 +1,17 @@
+# Core requirements
+requests>=2.25.0
+
+# Server requirements
+flask>=2.0.0
+
+# LLM integration
+openai>=1.0.0
+anthropic>=0.3.0
+
+# Development requirements
+pytest>=6.0.0
+pytest-cov>=2.12.0
+black>=21.5b2
+flake8>=3.9.2
+mypy>=0.812
+responses>=0.13.3
