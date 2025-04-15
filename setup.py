@@ -11,7 +11,7 @@ except:
 
 setup(
     name="python_a2a",
-    version="0.1.2",
+    version="0.1.3",
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -24,6 +24,9 @@ setup(
         "Source Code": "https://github.com/themanojdesai/python-a2a",
     },
     packages=find_packages(),
+    package_data={
+        "python_a2a": ["py.typed"],
+    },
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

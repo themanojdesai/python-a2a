@@ -23,6 +23,14 @@ class TextContent(BaseModel):
     """Simple text message content"""
     text: str
     type: str = ContentType.TEXT
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'TextContent':
+        """Create a TextContent object from a dictionary"""
+        return cls(
+            text=data.get("text", ""),
+            type=data.get("type", ContentType.TEXT)
+        )
 
 
 @dataclass
