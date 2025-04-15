@@ -11,7 +11,7 @@ except:
 
 setup(
     name="python_a2a",
-    version="0.1.3",
+    version="0.2.0",
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -32,10 +32,6 @@ setup(
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
-        "Programming Language :: Python",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
@@ -43,8 +39,8 @@ setup(
         "Topic :: Software Development :: Libraries",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface",
-    python_requires=">=3.7",
+    keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface, mcp, model-context-protocol",
+    python_requires=">=3.9",
     install_requires=[
         "requests>=2.25.0",
     ],
@@ -66,10 +62,20 @@ setup(
         "anthropic": [
             "anthropic>=0.3.0",
         ],
+        "mcp": [
+            "httpx>=0.23.0",
+            "fastapi>=0.95.0",
+            "uvicorn>=0.21.0",
+            "pydantic>=1.10.7",
+        ],
         "all": [
             "flask>=2.0.0",
             "openai>=1.0.0",
             "anthropic>=0.3.0",
+            "httpx>=0.23.0",
+            "fastapi>=0.95.0",
+            "uvicorn>=0.21.0",
+            "pydantic>=1.10.7",
         ],
     },
     entry_points={

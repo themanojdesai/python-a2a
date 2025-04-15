@@ -9,19 +9,20 @@
 [![Documentation Status](https://readthedocs.org/projects/python-a2a/badge/?version=latest)](https://python-a2a.readthedocs.io/en/latest/?badge=latest)
 [![GitHub stars](https://img.shields.io/github/stars/themanojdesai/python-a2a?style=social)](https://github.com/themanojdesai/python-a2a/stargazers)
 
-**The Definitive Python Implementation of Google's Agent-to-Agent (A2A) Protocol**
+**The Definitive Python Implementation of Google's Agent-to-Agent (A2A) Protocol with Model Context Protocol (MCP) Integration**
 
 </div>
 
 ## 🌟 Overview
 
-Python A2A is a comprehensive, production-ready library for implementing Google's [Agent-to-Agent (A2A) protocol](https://google.github.io/A2A/). It provides everything you need to build interoperable AI agent ecosystems that can collaborate seamlessly to solve complex problems.
+Python A2A is a comprehensive, production-ready library for implementing Google's [Agent-to-Agent (A2A) protocol](https://google.github.io/A2A/) with full support for the [Model Context Protocol (MCP)](https://contextual.ai/introducing-mcp/). It provides everything you need to build interoperable AI agent ecosystems that can collaborate seamlessly to solve complex problems.
 
-The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation. Python A2A makes this protocol accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
+The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation, while MCP extends this capability by providing a standardized way for agents to access external tools and data sources. Python A2A makes these protocols accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
 
 ## ✨ Why Choose Python A2A?
 
 - **Complete Implementation**: Fully implements the official A2A specification with zero compromises
+- **MCP Integration**: First-class support for Model Context Protocol for powerful tool-using agents
 - **Enterprise Ready**: Built for production environments with robust error handling and validation
 - **Framework Agnostic**: Works with any Python framework (Flask, FastAPI, Django, etc.)
 - **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, and HuggingFace
@@ -47,6 +48,9 @@ pip install "python-a2a[openai]"
 
 # For Anthropic Claude integration
 pip install "python-a2a[anthropic]"
+
+# For MCP support (Model Context Protocol)
+pip install "python-a2a[mcp]"
 
 # For all optional dependencies
 pip install "python-a2a[all]"
@@ -117,39 +121,145 @@ if __name__ == "__main__":
     run_server(agent, host="0.0.0.0", port=5000)
 ```
 
-### 4. Build an Agent Chain for Complex Tasks
+### 4. Create an MCP Server with Tools
+
+```python
+from python_a2a.mcp import FastMCP, text_response
+
+# Create a FastMCP server
+calculator_mcp = FastMCP(
+    name="Calculator MCP",
+    version="1.0.0",
+    description="Provides mathematical calculation functions"
+)
+
+# Define tools using decorator syntax
+@calculator_mcp.tool()
+def add(a: float, b: float) -> float:
+    """Add two numbers together."""
+    return a + b
+
+@calculator_mcp.tool()
+def subtract(a: float, b: float) -> float:
+    """Subtract b from a."""
+    return a - b
+
+@calculator_mcp.tool()
+def multiply(a: float, b: float) -> float:
+    """Multiply two numbers together."""
+    return a * b
+
+# Run the MCP server
+if __name__ == "__main__":
+    calculator_mcp.run(host="0.0.0.0", port=5001)
+```
+
+### 5. Create an MCP-Enabled A2A Agent
+
+```python
+from python_a2a import A2AServer, Message, TextContent, MessageRole, run_server
+from python_a2a.mcp import FastMCPAgent, FastMCP
+
+# First, create or connect to MCP servers
+calculator_mcp = FastMCP(
+    name="Calculator MCP",
+    version="1.0.0",
+    description="Provides calculation functions"
+)
+
+@calculator_mcp.tool()
+def add(a: float, b: float) -> float:
+    """Add two numbers together."""
+    return a + b
+
+# Create an A2A agent with MCP capabilities
+class CalculatorAgent(A2AServer, FastMCPAgent):
+    def __init__(self):
+        # Initialize both parent classes
+        A2AServer.__init__(self)
+        FastMCPAgent.__init__(
+            self,
+            mcp_servers={"calc": calculator_mcp}
+        )
+    
+    async def handle_message_async(self, message):
+        try:
+            if message.content.type == "text":
+                # Extract calculation from text
+                text = message.content.text.lower()
+                if "add" in text or "plus" in text or "+" in text:
+                    # Extract numbers
+                    import re
+                    numbers = [float(n) for n in re.findall(r"[-+]?\d*\.?\d+", text)]
+                    if len(numbers) >= 2:
+                        # Call MCP tool
+                        result = await self.call_mcp_tool("calc", "add", a=numbers[0], b=numbers[1])
+                        return Message(
+                            content=TextContent(text=f"The sum is {result}"),
+                            role=MessageRole.AGENT,
+                            parent_message_id=message.message_id,
+                            conversation_id=message.conversation_id
+                        )
+                # Default response
+                return Message(
+                    content=TextContent(text="I can help with calculations."),
+                    role=MessageRole.AGENT,
+                    parent_message_id=message.message_id,
+                    conversation_id=message.conversation_id
+                )
+        except Exception as e:
+            # Error handling
+            return Message(
+                content=TextContent(text=f"Error: {str(e)}"),
+                role=MessageRole.AGENT,
+                parent_message_id=message.message_id,
+                conversation_id=message.conversation_id
+            )
+
+# Run the agent
+if __name__ == "__main__":
+    agent = CalculatorAgent()
+    run_server(agent, host="0.0.0.0", port=5000)
+```
+
+### 6. Build a Multi-Agent System with MCP
 
 ```python
 from python_a2a import A2AClient, Message, TextContent, MessageRole
 
 # Connect to specialized agents
-weather_agent = A2AClient("http://localhost:5001/a2a")
-planning_agent = A2AClient("http://localhost:5002/a2a")
+ticker_agent = A2AClient("http://localhost:5001/a2a")  # DuckDuckGo agent for ticker symbols
+price_agent = A2AClient("http://localhost:5002/a2a")   # YFinance agent for stock prices
 
-def plan_trip(location):
-    """Chain multiple agents to plan a trip."""
-    # Step 1: Get weather information
-    weather_message = Message(
-        content=TextContent(text=f"What's the weather forecast for {location}?"),
+def get_stock_price(company_name):
+    """Chain multiple agents to get stock price information."""
+    # Step 1: Get ticker symbol
+    ticker_message = Message(
+        content=TextContent(text=f"What's the ticker symbol for {company_name}?"),
         role=MessageRole.USER
     )
-    weather_response = weather_agent.send_message(weather_message)
+    ticker_response = ticker_agent.send_message(ticker_message)
     
-    # Step 2: Use weather data to create a trip plan
-    planning_message = Message(
-        content=TextContent(
-            text=f"I'm planning a trip to {location}. Weather forecast: {weather_response.content.text}"
-                 f"Please suggest activities and packing recommendations."
-        ),
-        role=MessageRole.USER
-    )
-    planning_response = planning_agent.send_message(planning_message)
-    
-    return planning_response.content.text
+    # Extract ticker from response
+    import re
+    ticker_match = re.search(r'ticker\s+(?:symbol\s+)?(?:for\s+[\w\s]+\s+)?is\s+([A-Z]{1,5})', 
+                            ticker_response.content.text, re.I)
+    if ticker_match:
+        ticker = ticker_match.group(1)
+        
+        # Step 2: Get stock price using ticker
+        price_message = Message(
+            content=TextContent(text=f"What's the current price of {ticker}?"),
+            role=MessageRole.USER
+        )
+        price_response = price_agent.send_message(price_message)
+        return price_response.content.text
+    else:
+        return f"Could not find ticker symbol for {company_name}"
 
-# Use the chained agents
-trip_plan = plan_trip("Tokyo")
-print(trip_plan)
+# Get stock price for a company
+price_info = get_stock_price("Apple")
+print(price_info)
 ```
 
 ## 🧩 Core Features
@@ -225,9 +335,45 @@ function_response = Message(
 )
 ```
 
+### MCP for Tool Integration
+
+MCP provides a standardized way to expose tools and capabilities:
+
+```python
+from python_a2a.mcp import FastMCP, text_response, error_response
+
+# Create an MCP server
+mcp_server = FastMCP(
+    name="Finance Tools",
+    description="Financial analysis tools"
+)
+
+# Define tools with type hints and documentation
+@mcp_server.tool()
+def calculate_roi(investment: float, returns: float) -> float:
+    """
+    Calculate return on investment.
+    
+    Args:
+        investment: Initial investment amount
+        returns: Returns from the investment
+        
+    Returns:
+        ROI as a percentage
+    """
+    if investment <= 0:
+        return error_response("Investment must be greater than zero")
+    roi = (returns - investment) / investment * 100
+    return text_response(f"ROI: {roi:.2f}%")
+
+# Run the server
+if __name__ == "__main__":
+    mcp_server.run(port=5000)
+```
+
 ### Command-Line Interface
 
-Python A2A includes a CLI for interacting with A2A agents:
+Python A2A includes a CLI for interacting with A2A and MCP agents:
 
 ```bash
 # Send a message to an agent
@@ -239,25 +385,32 @@ a2a serve --host 0.0.0.0 --port 5000
 # Start an OpenAI-powered agent
 a2a openai --api-key YOUR_API_KEY --model gpt-4
 
-# Start an Anthropic-powered agent
-a2a anthropic --api-key YOUR_API_KEY --model claude-3-opus-20240229
+# Start an MCP server
+a2a mcp-serve --port 5001 --name "Calculator" --script calculator_tools.py
+
+# Start an MCP-enabled A2A agent
+a2a mcp-agent --port 5000 --servers calc=http://localhost:5001/
+
+# Call an MCP tool directly
+a2a mcp-call http://localhost:5001/ add --params a=5 b=3
 ```
 
 ## 📖 Architecture & Design Principles
 
 Python A2A is built on three core design principles:
 
-1. **Protocol First**: Adheres strictly to the A2A protocol specification for maximum interoperability
+1. **Protocol First**: Adheres strictly to the A2A and MCP protocol specifications for maximum interoperability
 
 2. **Modularity**: All components are designed to be composable and replaceable
 
 3. **Progressive Enhancement**: Start simple and add complexity only as needed
 
-The architecture consists of four main components:
+The architecture consists of five main components:
 
 - **Models**: Data structures representing A2A messages and conversations
 - **Client**: Components for sending messages to A2A agents
 - **Server**: Components for building A2A-compatible agents
+- **MCP**: Tools for implementing Model Context Protocol servers and clients
 - **Utils**: Helper functions for common tasks
 
 ## 🗺️ Use Cases
@@ -277,12 +430,39 @@ Python A2A can be used to build a wide range of AI systems:
 ### Customer-Facing Applications
 
 - **Multi-Stage Assistants**: Break complex user queries into subtasks handled by specialized agents
-- **Tool-Using Agents**: Connect LLMs to database agents, calculation agents, and more
+- **Tool-Using Agents**: Connect LLMs to database agents, calculation agents, and more using MCP
 
 ### Education & Training
 
 - **AI Education**: Create educational systems that demonstrate agent collaboration
 - **Simulation Environments**: Build simulated environments where multiple agents interact
+
+## 🛠️ Real-World Examples
+
+### Stock Information System
+
+The library includes a complete stock information system example that demonstrates the power of combining A2A with MCP:
+
+1. **DuckDuckGo Agent**: Uses MCP to search for stock ticker symbols
+2. **YFinance Agent**: Uses MCP to fetch current stock prices
+3. **Stock Assistant**: Orchestrates between the specialized agents
+
+```bash
+# Start each component in separate terminals
+python examples/mcp/duckduckgo_agent.py --port 5001
+python examples/mcp/yfinance_agent.py --port 5002
+python examples/mcp/stock_assistant.py --port 5000 --openai-api-key YOUR_API_KEY
+python examples/mcp/stock_client.py
+```
+
+### Calculator Example
+
+A simpler example showing MCP tool integration:
+
+```bash
+# Start the calculator MCP agent
+python examples/mcp/calculator_agent.py --port 5001
+```
 
 ## 🔍 Detailed Documentation
 
@@ -306,13 +486,6 @@ If you find this library useful, please consider giving it a star on GitHub! It 
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/themanojdesai/python-a2a?style=social)](https://github.com/themanojdesai/python-a2a/stargazers)
 
-## 🛣️ Roadmap
-
-- **Streaming Support**: Streaming responses for real-time communication
-- **WebSocket Support**: WebSocket transport for persistent connections
-- **More LLM Integrations**: Support for additional LLM providers
-- **Agent Registry**: A registry for discovering and registering agents
-- **Agent Composition Tools**: Higher-level tools for composing agents
 
 ## 🙏 Acknowledgements
 

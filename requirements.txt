@@ -8,6 +8,12 @@ flask>=2.0.0
 openai>=1.0.0
 anthropic>=0.3.0
 
+# MCP requirements
+httpx>=0.23.0
+fastapi>=0.95.0
+uvicorn>=0.21.0
+pydantic>=1.10.7
+
 # Development requirements
 pytest>=6.0.0
 pytest-cov>=2.12.0

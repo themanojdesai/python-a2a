@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Import core models
 from .models import (
@@ -75,7 +75,52 @@ from .exceptions import (
 # Expose command-line interface
 from .cli import main as cli_main
 
-# Make everything available at the package level
+# Import MCP integration with improved error handling
+try:
+    # MCP client
+    from .mcp.client import (
+        MCPClient, 
+        MCPError, 
+        MCPConnectionError, 
+        MCPTimeoutError, 
+        MCPToolError,
+        MCPTools
+    )
+    
+    # MCP agent integration
+    from .mcp.agent import MCPEnabledAgent
+    
+    # FastMCP implementation
+    from .mcp.fastmcp import (
+        FastMCP,
+        MCPResponse,
+        text_response,
+        error_response,
+        image_response,
+        multi_content_response,
+        ContentType as MCPContentType
+    )
+    
+    # Improved agent integration
+    from .mcp.integration import (
+        FastMCPAgent,
+        A2AMCPAgent
+    )
+    
+    # Proxy functionality
+    from .mcp.proxy import create_proxy_server
+    
+    # Transport for easy imports
+    from .mcp.transport import create_fastapi_app
+    
+    HAS_MCP = True
+except ImportError as e:
+    # Print more detailed error information to help diagnose import issues
+    import sys
+    print(f"Warning: MCP module could not be imported: {e}", file=sys.stderr)
+    HAS_MCP = False
+
+# Base package exports
 __all__ = [
     # Version
     '__version__',
@@ -134,3 +179,38 @@ __all__ = [
     # CLI
     'cli_main',
 ]
+
+# Add MCP classes if available
+if HAS_MCP:
+    # Add to __all__ list
+    __all__.extend([
+        # MCP client
+        'MCPClient',
+        'MCPError',
+        'MCPConnectionError',
+        'MCPTimeoutError',
+        'MCPToolError',
+        'MCPTools',
+        
+        # MCP agent integration
+        'MCPEnabledAgent',
+        
+        # FastMCP implementation
+        'FastMCP',
+        'MCPResponse',
+        'text_response',
+        'error_response',
+        'image_response',
+        'multi_content_response',
+        'MCPContentType',
+        
+        # Improved agent integration
+        'FastMCPAgent',
+        'A2AMCPAgent',
+        
+        # Proxy functionality
+        'create_proxy_server',
+        
+        # Transport
+        'create_fastapi_app'
+    ])
