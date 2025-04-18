@@ -19,13 +19,21 @@ Python A2A is a comprehensive, production-ready library for implementing Google'
 
 The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation, while MCP extends this capability by providing a standardized way for agents to access external tools and data sources. Python A2A makes these protocols accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
 
+## 📋 What's New in v0.3.0
+
+- **Full A2A Protocol Support**: Enhanced implementation with Agent Cards, Tasks, and Skills
+- **Interactive Documentation**: FastAPI-style OpenAPI documentation for agents
+- **Streamlined Developer Experience**: New decorators for easier agent and skill creation
+- **Backward Compatibility**: All existing code continues to work without modification
+- **Enhanced Messaging**: Improved error handling and support for rich message content
+
 ## ✨ Why Choose Python A2A?
 
 - **Complete Implementation**: Fully implements the official A2A specification with zero compromises
 - **MCP Integration**: First-class support for Model Context Protocol for powerful tool-using agents
 - **Enterprise Ready**: Built for production environments with robust error handling and validation
 - **Framework Agnostic**: Works with any Python framework (Flask, FastAPI, Django, etc.)
-- **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, and HuggingFace
+- **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, and more
 - **Minimal Dependencies**: Core functionality requires only the `requests` library
 - **Excellent Developer Experience**: Comprehensive documentation, type hints, and examples
 
@@ -58,49 +66,73 @@ pip install "python-a2a[all]"
 
 ## 🚀 Quick Start Examples
 
-### 1. Create a Simple A2A Agent Server
+### 1. Create a Simple A2A Agent with Skills
 
 ```python
-from python_a2a import A2AServer, Message, TextContent, MessageRole, run_server
+from python_a2a import A2AServer, skill, agent, run_server, TaskStatus, TaskState
 
-class EchoAgent(A2AServer):
-    """A simple agent that echoes back messages with a prefix."""
+@agent(
+    name="Weather Agent",
+    description="Provides weather information",
+    version="1.0.0"
+)
+class WeatherAgent(A2AServer):
     
-    def handle_message(self, message):
-        if message.content.type == "text":
-            return Message(
-                content=TextContent(text=f"Echo: {message.content.text}"),
-                role=MessageRole.AGENT,
-                parent_message_id=message.message_id,
-                conversation_id=message.conversation_id
+    @skill(
+        name="Get Weather",
+        description="Get current weather for a location",
+        tags=["weather", "forecast"]
+    )
+    def get_weather(self, location):
+        """Get weather for a location."""
+        # Mock implementation
+        return f"It's sunny and 75°F in {location}"
+    
+    def handle_task(self, task):
+        # Extract location from message
+        message_data = task.message or {}
+        content = message_data.get("content", {})
+        text = content.get("text", "") if isinstance(content, dict) else ""
+        
+        if "weather" in text.lower() and "in" in text.lower():
+            location = text.split("in", 1)[1].strip().rstrip("?.")
+            
+            # Get weather and create response
+            weather_text = self.get_weather(location)
+            task.artifacts = [{
+                "parts": [{"type": "text", "text": weather_text}]
+            }]
+            task.status = TaskStatus(state=TaskState.COMPLETED)
+        else:
+            task.status = TaskStatus(
+                state=TaskState.INPUT_REQUIRED,
+                message={"role": "agent", "content": {"type": "text", 
+                         "text": "Please ask about weather in a specific location."}}
             )
+        return task
 
 # Run the server
 if __name__ == "__main__":
-    agent = EchoAgent()
-    run_server(agent, host="0.0.0.0", port=5000)
+    agent = WeatherAgent()
+    run_server(agent, port=5000)
 ```
 
-### 2. Send Messages to an A2A Agent
+### 2. Connect to an A2A Agent
 
 ```python
-from python_a2a import A2AClient, Message, TextContent, MessageRole
-from python_a2a.utils import pretty_print_message
+from python_a2a import A2AClient
 
 # Create a client connected to an A2A-compatible agent
-client = A2AClient("http://localhost:5000/a2a")
+client = A2AClient("http://localhost:5000")
 
-# Create a simple message
-message = Message(
-    content=TextContent(text="Hello, A2A!"),
-    role=MessageRole.USER
-)
+# View agent information
+print(f"Connected to: {client.agent_card.name}")
+print(f"Description: {client.agent_card.description}")
+print(f"Skills: {[skill.name for skill in client.agent_card.skills]}")
 
-# Send the message and get a response
-response = client.send_message(message)
-
-# Display the response
-pretty_print_message(response)
+# Ask a question
+response = client.ask("What's the weather in Paris?")
+print(f"Response: {response}")
 ```
 
 ### 3. Create an LLM-Powered Agent
@@ -121,49 +153,53 @@ if __name__ == "__main__":
     run_server(agent, host="0.0.0.0", port=5000)
 ```
 
-### 4. Create an MCP Server with Tools
+### 4. Generate Interactive Documentation
 
 ```python
-from python_a2a.mcp import FastMCP, text_response
+from python_a2a import AgentCard, AgentSkill, generate_a2a_docs, generate_html_docs
+import os
 
-# Create a FastMCP server
-calculator_mcp = FastMCP(
-    name="Calculator MCP",
+# Create an agent card 
+agent_card = AgentCard(
+    name="Travel API",
+    description="Get travel information and recommendations",
+    url="http://localhost:5000",
     version="1.0.0",
-    description="Provides mathematical calculation functions"
+    skills=[
+        AgentSkill(
+            name="Get Weather",
+            description="Get weather for a destination",
+            tags=["weather", "travel"]
+        ),
+        AgentSkill(
+            name="Find Attractions",
+            description="Find attractions at a destination",
+            tags=["attractions", "travel"]
+        )
+    ]
 )
 
-# Define tools using decorator syntax
-@calculator_mcp.tool()
-def add(a: float, b: float) -> float:
-    """Add two numbers together."""
-    return a + b
+# Generate documentation
+output_dir = "docs"
+os.makedirs(output_dir, exist_ok=True)
+spec = generate_a2a_docs(agent_card, output_dir)
+html = generate_html_docs(spec)
 
-@calculator_mcp.tool()
-def subtract(a: float, b: float) -> float:
-    """Subtract b from a."""
-    return a - b
+with open(os.path.join(output_dir, "index.html"), "w") as f:
+    f.write(html)
 
-@calculator_mcp.tool()
-def multiply(a: float, b: float) -> float:
-    """Multiply two numbers together."""
-    return a * b
-
-# Run the MCP server
-if __name__ == "__main__":
-    calculator_mcp.run(host="0.0.0.0", port=5001)
+print(f"Documentation available at: {os.path.abspath(os.path.join(output_dir, 'index.html'))}")
 ```
 
 ### 5. Create an MCP-Enabled A2A Agent
 
 ```python
-from python_a2a import A2AServer, Message, TextContent, MessageRole, run_server
-from python_a2a.mcp import FastMCPAgent, FastMCP
+from python_a2a import A2AServer, A2AMCPAgent, run_server
+from python_a2a.mcp import FastMCP, text_response
 
-# First, create or connect to MCP servers
+# Create MCP server
 calculator_mcp = FastMCP(
     name="Calculator MCP",
-    version="1.0.0",
     description="Provides calculation functions"
 )
 
@@ -172,227 +208,172 @@ def add(a: float, b: float) -> float:
     """Add two numbers together."""
     return a + b
 
-# Create an A2A agent with MCP capabilities
-class CalculatorAgent(A2AServer, FastMCPAgent):
+# Create A2A agent with MCP capabilities
+class CalculatorAgent(A2AServer, A2AMCPAgent):
     def __init__(self):
-        # Initialize both parent classes
         A2AServer.__init__(self)
-        FastMCPAgent.__init__(
-            self,
-            mcp_servers={"calc": calculator_mcp}
-        )
+        A2AMCPAgent.__init__(self, mcp_servers={"calc": calculator_mcp})
     
-    async def handle_message_async(self, message):
+    async def handle_task_async(self, task):
         try:
-            if message.content.type == "text":
-                # Extract calculation from text
-                text = message.content.text.lower()
-                if "add" in text or "plus" in text or "+" in text:
-                    # Extract numbers
-                    import re
-                    numbers = [float(n) for n in re.findall(r"[-+]?\d*\.?\d+", text)]
-                    if len(numbers) >= 2:
-                        # Call MCP tool
-                        result = await self.call_mcp_tool("calc", "add", a=numbers[0], b=numbers[1])
-                        return Message(
-                            content=TextContent(text=f"The sum is {result}"),
-                            role=MessageRole.AGENT,
-                            parent_message_id=message.message_id,
-                            conversation_id=message.conversation_id
-                        )
-                # Default response
-                return Message(
-                    content=TextContent(text="I can help with calculations."),
-                    role=MessageRole.AGENT,
-                    parent_message_id=message.message_id,
-                    conversation_id=message.conversation_id
-                )
+            text = task.message.get("content", {}).get("text", "")
+            if "add" in text:
+                # Extract numbers
+                import re
+                numbers = [float(n) for n in re.findall(r"[-+]?\d*\.?\d+", text)]
+                if len(numbers) >= 2:
+                    # Call MCP tool
+                    result = await self.call_mcp_tool("calc", "add", a=numbers[0], b=numbers[1])
+                    task.artifacts = [{
+                        "parts": [{"type": "text", "text": f"The sum is {result}"}]
+                    }]
+                    return task
+            # Default response
+            task.artifacts = [{
+                "parts": [{"type": "text", "text": "I can help with calculations."}]
+            }]
+            return task
         except Exception as e:
-            # Error handling
-            return Message(
-                content=TextContent(text=f"Error: {str(e)}"),
-                role=MessageRole.AGENT,
-                parent_message_id=message.message_id,
-                conversation_id=message.conversation_id
-            )
+            task.artifacts = [{
+                "parts": [{"type": "text", "text": f"Error: {str(e)}"}]
+            }]
+            return task
 
 # Run the agent
 if __name__ == "__main__":
     agent = CalculatorAgent()
-    run_server(agent, host="0.0.0.0", port=5000)
-```
-
-### 6. Build a Multi-Agent System with MCP
-
-```python
-from python_a2a import A2AClient, Message, TextContent, MessageRole
-
-# Connect to specialized agents
-ticker_agent = A2AClient("http://localhost:5001/a2a")  # DuckDuckGo agent for ticker symbols
-price_agent = A2AClient("http://localhost:5002/a2a")   # YFinance agent for stock prices
-
-def get_stock_price(company_name):
-    """Chain multiple agents to get stock price information."""
-    # Step 1: Get ticker symbol
-    ticker_message = Message(
-        content=TextContent(text=f"What's the ticker symbol for {company_name}?"),
-        role=MessageRole.USER
-    )
-    ticker_response = ticker_agent.send_message(ticker_message)
-    
-    # Extract ticker from response
-    import re
-    ticker_match = re.search(r'ticker\s+(?:symbol\s+)?(?:for\s+[\w\s]+\s+)?is\s+([A-Z]{1,5})', 
-                            ticker_response.content.text, re.I)
-    if ticker_match:
-        ticker = ticker_match.group(1)
-        
-        # Step 2: Get stock price using ticker
-        price_message = Message(
-            content=TextContent(text=f"What's the current price of {ticker}?"),
-            role=MessageRole.USER
-        )
-        price_response = price_agent.send_message(price_message)
-        return price_response.content.text
-    else:
-        return f"Could not find ticker symbol for {company_name}"
-
-# Get stock price for a company
-price_info = get_stock_price("Apple")
-print(price_info)
+    run_server(agent, port=5000)
 ```
 
 ## 🧩 Core Features
 
-### Messages and Conversations
+### Agent Discovery
 
-Python A2A provides a rich set of models for A2A messages and conversations:
+Python A2A provides a rich set of models for agent discovery:
 
 ```python
-from python_a2a import (
-    Message, TextContent, FunctionCallContent, FunctionResponseContent, 
-    MessageRole, Conversation
-)
+from python_a2a import AgentCard, AgentSkill
 
-# Create a conversation
-conversation = Conversation()
-
-# Add messages to the conversation
-conversation.create_text_message(
-    text="What's the weather like in New York?", 
-    role=MessageRole.USER
-)
-
-# Add a function call message
-conversation.create_function_call(
-    name="get_weather",
-    parameters=[
-        {"name": "location", "value": "New York"},
-        {"name": "unit", "value": "celsius"}
-    ],
-    role=MessageRole.AGENT
-)
-
-# Add a function response
-conversation.create_function_response(
-    name="get_weather",
-    response={"temperature": 22, "conditions": "Partly Cloudy"},
-    role=MessageRole.AGENT
+# Create an agent card
+agent_card = AgentCard(
+    name="Weather API",
+    description="Get weather information for locations",
+    url="http://localhost:5000",
+    version="1.0.0",
+    capabilities={"streaming": True},
+    skills=[
+        AgentSkill(
+            name="Get Weather",
+            description="Get current weather for a location",
+            tags=["weather", "current"],
+            examples=["What's the weather in New York?"]
+        ),
+        AgentSkill(
+            name="Get Forecast",
+            description="Get 5-day forecast for a location",
+            tags=["weather", "forecast"],
+            examples=["5-day forecast for Tokyo"]
+        )
+    ]
 )
 ```
 
-### Function Calling
+### Tasks and Messaging
 
-The A2A protocol supports function calling between agents, making it easy to expose capabilities:
+The A2A protocol uses tasks to represent units of work:
 
 ```python
-from python_a2a import (
-    Message, FunctionCallContent, FunctionParameter, FunctionResponseContent,
-    MessageRole
-)
+from python_a2a import Task, TaskStatus, TaskState, Message, TextContent, MessageRole
 
-# Create a function call message
-function_call = Message(
-    content=FunctionCallContent(
-        name="calculate",
-        parameters=[
-            FunctionParameter(name="operation", value="add"),
-            FunctionParameter(name="a", value=5),
-            FunctionParameter(name="b", value=3)
-        ]
-    ),
+# Create a task with a message
+message = Message(
+    content=TextContent(text="What's the weather in Paris?"),
     role=MessageRole.USER
 )
+task = Task(message=message.to_dict())
 
-# Create a function response message
-function_response = Message(
-    content=FunctionResponseContent(
-        name="calculate",
-        response={"result": 8}
-    ),
-    role=MessageRole.AGENT,
-    parent_message_id=function_call.message_id
-)
+# Update task status
+task.status = TaskStatus(state=TaskState.COMPLETED)
+
+# Add response artifact
+task.artifacts = [{
+    "parts": [{
+        "type": "text",
+        "text": "It's sunny and 72°F in Paris"
+    }]
+}]
 ```
 
-### MCP for Tool Integration
+### Decorators for Easy Agent Creation
 
-MCP provides a standardized way to expose tools and capabilities:
+The new decorator syntax makes agent and skill creation seamless:
 
 ```python
-from python_a2a.mcp import FastMCP, text_response, error_response
+from python_a2a import agent, skill, A2AServer, run_server
 
-# Create an MCP server
-mcp_server = FastMCP(
-    name="Finance Tools",
-    description="Financial analysis tools"
+@agent(
+    name="Calculator",
+    description="Performs calculations",
+    version="1.0.0"
 )
-
-# Define tools with type hints and documentation
-@mcp_server.tool()
-def calculate_roi(investment: float, returns: float) -> float:
-    """
-    Calculate return on investment.
+class CalculatorAgent(A2AServer):
     
-    Args:
-        investment: Initial investment amount
-        returns: Returns from the investment
+    @skill(
+        name="Add",
+        description="Add two numbers",
+        tags=["math", "addition"]
+    )
+    def add(self, a, b):
+        """
+        Add two numbers together.
         
-    Returns:
-        ROI as a percentage
-    """
-    if investment <= 0:
-        return error_response("Investment must be greater than zero")
-    roi = (returns - investment) / investment * 100
-    return text_response(f"ROI: {roi:.2f}%")
+        Examples:
+            "What is 5 + 3?"
+            "Add 10 and 20"
+        """
+        return float(a) + float(b)
+    
+    @skill(
+        name="Subtract",
+        description="Subtract two numbers",
+        tags=["math", "subtraction"]
+    )
+    def subtract(self, a, b):
+        """Subtract b from a."""
+        return float(a) - float(b)
+    
+    # Implement task handling
+    def handle_task(self, task):
+        # Task handling logic here
+        pass
 
 # Run the server
-if __name__ == "__main__":
-    mcp_server.run(port=5000)
+calculator = CalculatorAgent()
+run_server(calculator, port=5000)
 ```
 
-### Command-Line Interface
+### Interactive Documentation
 
-Python A2A includes a CLI for interacting with A2A and MCP agents:
+Generate OpenAPI-style documentation for your A2A agents:
 
-```bash
-# Send a message to an agent
-a2a send http://localhost:5000/a2a "What's the weather like in Tokyo?"
+```python
+from python_a2a import AgentCard, generate_a2a_docs, generate_html_docs
+import os
 
-# Start a simple A2A server
-a2a serve --host 0.0.0.0 --port 5000
+# Create or load agent card
+agent_card = AgentCard(...)
 
-# Start an OpenAI-powered agent
-a2a openai --api-key YOUR_API_KEY --model gpt-4
+# Generate documentation
+docs_dir = "docs"
+os.makedirs(docs_dir, exist_ok=True)
 
-# Start an MCP server
-a2a mcp-serve --port 5001 --name "Calculator" --script calculator_tools.py
+# Create OpenAPI spec
+spec = generate_a2a_docs(agent_card, docs_dir)
 
-# Start an MCP-enabled A2A agent
-a2a mcp-agent --port 5000 --servers calc=http://localhost:5001/
-
-# Call an MCP tool directly
-a2a mcp-call http://localhost:5001/ add --params a=5 b=3
+# Generate HTML documentation
+html = generate_html_docs(spec)
+with open(os.path.join(docs_dir, "index.html"), "w") as f:
+    f.write(html)
 ```
 
 ## 📖 Architecture & Design Principles
@@ -407,7 +388,7 @@ Python A2A is built on three core design principles:
 
 The architecture consists of five main components:
 
-- **Models**: Data structures representing A2A messages and conversations
+- **Models**: Data structures representing A2A messages, tasks, and agent cards
 - **Client**: Components for sending messages to A2A agents
 - **Server**: Components for building A2A-compatible agents
 - **MCP**: Tools for implementing Model Context Protocol servers and clients
@@ -439,29 +420,62 @@ Python A2A can be used to build a wide range of AI systems:
 
 ## 🛠️ Real-World Examples
 
-### Stock Information System
+### Weather Information System
 
-The library includes a complete stock information system example that demonstrates the power of combining A2A with MCP:
+Let's build a simple weather information system using A2A agents:
 
-1. **DuckDuckGo Agent**: Uses MCP to search for stock ticker symbols
-2. **YFinance Agent**: Uses MCP to fetch current stock prices
-3. **Stock Assistant**: Orchestrates between the specialized agents
+1. **Weather Data Agent**: Provides current weather and forecasts
+2. **Travel Recommendation Agent**: Uses weather data to make travel suggestions
+3. **User Interface Agent**: Orchestrates the other agents to answer user queries
 
-```bash
-# Start each component in separate terminals
-python examples/mcp/duckduckgo_agent.py --port 5001
-python examples/mcp/yfinance_agent.py --port 5002
-python examples/mcp/stock_assistant.py --port 5000 --openai-api-key YOUR_API_KEY
-python examples/mcp/stock_client.py
-```
+```python
+# Weather Data Agent
+@agent(name="Weather API", description="Weather data source")
+class WeatherAgent(A2AServer):
+    @skill(name="Get Weather", description="Get current weather")
+    def get_weather(self, location):
+        # Implementation...
+        return weather_data
 
-### Calculator Example
+# Travel Recommendation Agent
+@agent(name="Travel Advisor", description="Travel recommendations")
+class TravelAgent(A2AServer):
+    def __init__(self):
+        super().__init__()
+        self.weather_client = A2AClient("http://localhost:5001")
+    
+    @skill(name="Recommend Destination", description="Suggest travel destinations")
+    def recommend(self, preferences):
+        # Get weather for potential destinations
+        weather_data = self.weather_client.ask(f"Get weather for {destination}")
+        # Make recommendations based on weather and preferences
+        return recommendations
 
-A simpler example showing MCP tool integration:
-
-```bash
-# Start the calculator MCP agent
-python examples/mcp/calculator_agent.py --port 5001
+# User Interface Agent
+@agent(name="Travel Assistant", description="Your personal travel assistant")
+class AssistantAgent(A2AServer):
+    def __init__(self):
+        super().__init__()
+        self.weather_client = A2AClient("http://localhost:5001")
+        self.travel_client = A2AClient("http://localhost:5002")
+    
+    def handle_task(self, task):
+        # Extract user query
+        text = task.message.get("content", {}).get("text", "")
+        
+        if "weather" in text.lower():
+            # Forward to weather agent
+            response = self.weather_client.ask(text)
+        elif "recommend" in text.lower() or "suggest" in text.lower():
+            # Forward to travel agent
+            response = self.travel_client.ask(text)
+        else:
+            # General response
+            response = "I can help with weather information and travel recommendations."
+        
+        # Create artifact with response
+        task.artifacts = [{"parts": [{"type": "text", "text": response}]}]
+        return task
 ```
 
 ## 🔍 Detailed Documentation
@@ -486,10 +500,10 @@ If you find this library useful, please consider giving it a star on GitHub! It 
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/themanojdesai/python-a2a?style=social)](https://github.com/themanojdesai/python-a2a/stargazers)
 
-
 ## 🙏 Acknowledgements
 
 - The [Google A2A team](https://github.com/google/A2A) for creating the A2A protocol
+- The [Contextual AI team](https://contextual.ai/) for the Model Context Protocol
 - All our [contributors](https://github.com/themanojdesai/python-a2a/graphs/contributors) for their valuable input
 
 ## 👨‍💻 Author

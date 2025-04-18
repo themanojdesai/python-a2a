@@ -26,6 +26,12 @@ from .conversion import (
     conversation_to_messages
 )
 
+# Import decorators
+from .decorators import (
+    skill,
+    agent
+)
+
 # Make everything available at the utils level
 __all__ = [
     'format_message_as_text',
@@ -41,5 +47,7 @@ __all__ = [
     'create_function_response',
     'create_error_message',
     'format_function_params',
-    'conversation_to_messages'
+    'conversation_to_messages',
+    'skill',
+    'agent'
 ]

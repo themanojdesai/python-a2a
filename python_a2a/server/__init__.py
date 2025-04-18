@@ -4,7 +4,10 @@ Server implementations for the A2A protocol.
 
 # Import and re-export server classes for easy access
 from .base import BaseA2AServer
-from .http import A2AServer, run_server
+from .http import run_server
+
+# Import enhanced A2A server
+from .a2a_server import A2AServer
 
 # Import LLM-specific servers
 from .llm.openai import OpenAIA2AServer

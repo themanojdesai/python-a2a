@@ -17,7 +17,13 @@ from .models import (
     FunctionResponseContent,
     ErrorContent,
     Metadata,
-    ContentType
+    ContentType,
+    # Add new models
+    AgentCard,
+    AgentSkill,
+    Task,
+    TaskStatus,
+    TaskState
 )
 
 # Import clients
@@ -57,7 +63,17 @@ from .utils import (
     create_function_response,
     create_error_message,
     format_function_params,
-    conversation_to_messages
+    conversation_to_messages,
+    
+    # New decorators
+    skill,
+    agent
+)
+
+# Import documentation utilities - now that we have stubs
+from .docs import (
+    generate_a2a_docs,
+    generate_html_docs
 )
 
 # Import exceptions
@@ -136,6 +152,12 @@ __all__ = [
     'ErrorContent',
     'Metadata',
     'ContentType',
+    # New models
+    'AgentCard',
+    'AgentSkill',
+    'Task',
+    'TaskStatus',
+    'TaskState',
     
     # Clients
     'BaseA2AClient',
@@ -165,6 +187,14 @@ __all__ = [
     'create_error_message',
     'format_function_params',
     'conversation_to_messages',
+    
+    # New decorators
+    'skill',
+    'agent',
+    
+    # Documentation
+    'generate_a2a_docs',
+    'generate_html_docs',
     
     # Exceptions
     'A2AError',

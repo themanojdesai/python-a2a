@@ -16,6 +16,10 @@ from .content import (
     Metadata
 )
 
+# Import and re-export new models
+from .agent import AgentCard, AgentSkill
+from .task import Task, TaskStatus, TaskState
+
 # Make everything available at the models level
 __all__ = [
     'BaseModel',
@@ -29,4 +33,10 @@ __all__ = [
     'FunctionResponseContent',
     'ErrorContent',
     'Metadata',
+    # New models
+    'AgentCard',
+    'AgentSkill',
+    'Task',
+    'TaskStatus',
+    'TaskState',
 ]

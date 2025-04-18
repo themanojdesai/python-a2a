@@ -18,74 +18,6 @@ from .base import BaseA2AServer
 from ..exceptions import A2AImportError, A2ARequestError
 
 
-class A2AServer(BaseA2AServer):
-    """
-    A customizable A2A-compatible agent server.
-    
-    This server can be configured with custom message handlers to create
-    specialized agents for different purposes.
-    """
-    
-    def __init__(self, message_handler: Optional[Callable[[Message], Message]] = None):
-        """
-        Initialize the server with an optional message handler
-        
-        Args:
-            message_handler: Optional function that processes messages
-                If provided, this function will be called to handle incoming messages
-                instead of the handle_message method
-        """
-        self.message_handler = message_handler
-        
-    def handle_message(self, message: Message) -> Message:
-        """
-        Process an incoming A2A message and generate a response
-        
-        If a message handler was provided in the constructor, it will be used.
-        Otherwise, this method should be overridden by subclasses.
-        
-        Args:
-            message: The incoming A2A message
-            
-        Returns:
-            The agent's response message
-        """
-        if self.message_handler:
-            return self.message_handler(message)
-        
-        # Default implementation for when no handler is provided
-        # Just echo back the input with a prefix
-        if message.content.type == "text":
-            return Message(
-                content=TextContent(text=f"Echo: {message.content.text}"),
-                role=MessageRole.AGENT,
-                parent_message_id=message.message_id,
-                conversation_id=message.conversation_id
-            )
-        else:
-            return Message(
-                content=ErrorContent(message=f"Unsupported message type: {message.content.type}"),
-                role=MessageRole.AGENT,
-                parent_message_id=message.message_id,
-                conversation_id=message.conversation_id
-            )
-    
-    def get_metadata(self) -> Dict[str, Any]:
-        """
-        Get metadata about this agent server
-        
-        Returns:
-            A dictionary of metadata about this agent
-        """
-        metadata = super().get_metadata()
-        metadata.update({
-            "agent_type": "A2AServer",
-            "capabilities": ["text"],
-            "has_custom_handler": self.message_handler is not None
-        })
-        return metadata
-
-
 def create_flask_app(agent: BaseA2AServer) -> Flask:
     """
     Create a Flask application that serves an A2A agent
@@ -107,6 +39,25 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
     
     app = Flask(__name__)
     
+    # Allow CORS for all routes
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response
+    
+    # Handle OPTIONS requests for CORS preflight
+    @app.route('/', methods=['OPTIONS'])
+    @app.route('/<path:path>', methods=['OPTIONS'])
+    def options_handler(path=None):
+        return '', 200
+    
+    # Set up the agent's routes if it supports it
+    if hasattr(agent, 'setup_routes'):
+        agent.setup_routes(app)
+    
+    # Legacy routes for backward compatibility
     @app.route("/a2a", methods=["POST"])
     def handle_a2a_request() -> Union[Response, tuple]:
         """Handle A2A protocol requests"""
@@ -145,6 +96,23 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
     def health_check() -> Response:
         """Health check endpoint"""
         return jsonify({"status": "ok"})
+    
+    # If we reach here and no routes matched, set up a catch-all route
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def catch_all(path):
+        # Only for GET requests that didn't match other routes
+        if request.method == 'GET':
+            # Redirect to the A2A index
+            return jsonify({
+                "message": "A2A Agent API",
+                "endpoints": {
+                    "agent_card": "/agent.json or /a2a/agent.json",
+                    "api": "/a2a",
+                    "metadata": "/a2a/metadata",
+                    "health": "/a2a/health"
+                }
+            })
     
     return app
 
