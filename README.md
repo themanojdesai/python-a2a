@@ -57,7 +57,7 @@ pip install "python-a2a[openai]"
 # For Anthropic Claude integration
 pip install "python-a2a[anthropic]"
 
-# For Anthropic Claude integration
+# For AWS-Bedrock integration
 pip install "python-a2a[bedrock]"
 
 # For MCP support (Model Context Protocol)
