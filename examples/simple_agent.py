@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from python_a2a import (
     A2AServer, Message, Conversation, TextContent, 
-    FunctionResponseContent, MessageRole, MessageType
+    FunctionResponseContent, MessageRole, Message
 )
 
 class SimpleCalculatorAgent(A2AServer):
@@ -22,7 +22,7 @@ class SimpleCalculatorAgent(A2AServer):
         """Process incoming messages"""
         
         # Handle text messages
-        if message.content.type == MessageType.TEXT:
+        if message.content.type == Message:
             return Message(
                 content=TextContent(
                     text="I'm a calculator agent. You can call my 'calculate' function with 'operation', 'a', and 'b' parameters."
@@ -33,7 +33,7 @@ class SimpleCalculatorAgent(A2AServer):
             )
             
         # Handle function calls
-        elif message.content.type == MessageType.FUNCTION_CALL:
+        elif message.content.type == Message.FUNCTION_CALL:
             function_name = message.content.name
             
             if function_name == "calculate":
@@ -138,4 +138,4 @@ def handle_a2a():
 
 if __name__ == "__main__":
     print("Starting Simple Calculator A2A Agent on http://localhost:5000/a2a")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5005, debug=True)
