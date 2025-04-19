@@ -19,7 +19,7 @@ Python A2A is a comprehensive, production-ready library for implementing Google'
 
 The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation, while MCP extends this capability by providing a standardized way for agents to access external tools and data sources. Python A2A makes these protocols accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
 
-## 📋 What's New in v0.3.0
+## 📋 What's New in v0.3.1
 
 - **Full A2A Protocol Support**: Enhanced implementation with Agent Cards, Tasks, and Skills
 - **Interactive Documentation**: FastAPI-style OpenAPI documentation for agents
@@ -194,7 +194,7 @@ print(f"Documentation available at: {os.path.abspath(os.path.join(output_dir, 'i
 ### 5. Create an MCP-Enabled A2A Agent
 
 ```python
-from python_a2a import A2AServer, A2AMCPAgent, run_server
+from python_a2a import A2AServer, A2AMCPAgent, run_server, AgentCard
 from python_a2a.mcp import FastMCP, text_response
 
 # Create MCP server
@@ -211,8 +211,24 @@ def add(a: float, b: float) -> float:
 # Create A2A agent with MCP capabilities
 class CalculatorAgent(A2AServer, A2AMCPAgent):
     def __init__(self):
-        A2AServer.__init__(self)
-        A2AMCPAgent.__init__(self, mcp_servers={"calc": calculator_mcp})
+        # Create the agent card first with the right information
+        agent_card = AgentCard(
+            name="Calculator Agent",
+            description="An agent that performs calculations",
+            url="http://localhost:5003",  # Set this to your actual URL
+            version="1.0.0"
+        )
+        
+        # Initialize A2AServer with the agent card
+        A2AServer.__init__(self, agent_card=agent_card)
+        
+        # Initialize A2AMCPAgent
+        A2AMCPAgent.__init__(
+            self, 
+            name="Calculator Agent",
+            description="An agent that performs calculations",
+            mcp_servers={"calc": calculator_mcp}
+        )
     
     async def handle_task_async(self, task):
         try:
@@ -242,7 +258,7 @@ class CalculatorAgent(A2AServer, A2AMCPAgent):
 # Run the agent
 if __name__ == "__main__":
     agent = CalculatorAgent()
-    run_server(agent, port=5000)
+    run_server(agent, port=5003)
 ```
 
 ## 🧩 Core Features
@@ -310,6 +326,7 @@ The new decorator syntax makes agent and skill creation seamless:
 
 ```python
 from python_a2a import agent, skill, A2AServer, run_server
+from python_a2a import TaskStatus, TaskState
 
 @agent(
     name="Calculator",
@@ -344,12 +361,40 @@ class CalculatorAgent(A2AServer):
     
     # Implement task handling
     def handle_task(self, task):
-        # Task handling logic here
-        pass
+        # Extract message text
+        message_data = task.message or {}
+        content = message_data.get("content", {})
+        text = content.get("text", "") if isinstance(content, dict) else ""
+        
+        # Simple logic to handle calculations
+        response_text = "I can add or subtract numbers. Try asking something like 'add 5 and 3' or 'subtract 10 from 20'."
+        
+        if text:
+            import re
+            numbers = [float(n) for n in re.findall(r"[-+]?\d*\.?\d+", text)]
+            
+            if len(numbers) >= 2:
+                if "add" in text.lower() or "+" in text:
+                    result = self.add(numbers[0], numbers[1])
+                    response_text = f"{numbers[0]} + {numbers[1]} = {result}"
+                elif "subtract" in text.lower() or "-" in text:
+                    result = self.subtract(numbers[0], numbers[1])
+                    response_text = f"{numbers[0]} - {numbers[1]} = {result}"
+        
+        # Create artifact with response
+        task.artifacts = [{
+            "parts": [{"type": "text", "text": response_text}]
+        }]
+        
+        # Mark as completed
+        task.status = TaskStatus(state=TaskState.COMPLETED)
+        
+        return task
 
 # Run the server
-calculator = CalculatorAgent()
-run_server(calculator, port=5000)
+if __name__ == "__main__":
+    calculator = CalculatorAgent()
+    run_server(calculator, port=5000)
 ```
 
 ### Interactive Documentation

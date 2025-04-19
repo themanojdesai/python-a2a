@@ -7,7 +7,7 @@ import traceback
 from typing import Type, Optional, Dict, Any, Callable, Union
 
 try:
-    from flask import Flask, request, jsonify, Response
+    from flask import Flask, request, jsonify, Response, render_template_string, make_response
 except ImportError:
     Flask = None
 
@@ -16,6 +16,7 @@ from ..models.conversation import Conversation
 from ..models.content import TextContent, ErrorContent
 from .base import BaseA2AServer
 from ..exceptions import A2AImportError, A2ARequestError
+from .ui_templates import AGENT_INDEX_HTML, JSON_HTML_TEMPLATE
 
 
 def create_flask_app(agent: BaseA2AServer) -> Flask:
@@ -53,7 +54,98 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
     def options_handler(path=None):
         return '', 200
     
-    # Set up the agent's routes if it supports it
+    # Define a function to render beautiful HTML UI
+    def get_agent_data():
+        """Get basic agent data for rendering"""
+        if hasattr(agent, 'agent_card'):
+            return agent.agent_card.to_dict() 
+        else:
+            # Fallback for agents without agent_card
+            return {
+                "name": "A2A Agent",
+                "description": "Agent details not available",
+                "version": "1.0.0",
+                "skills": []
+            }
+    
+    # IMPORTANT: Register our enhanced routes FIRST to ensure they take precedence
+    # Enhanced routes for beautiful UI
+    @app.route("/a2a", methods=["GET"])
+    def enhanced_a2a_index():
+        """A2A index with beautiful UI"""
+        # Check if this is a browser request by looking at headers
+        user_agent = request.headers.get('User-Agent', '')
+        accept_header = request.headers.get('Accept', '')
+        
+        # Force JSON if explicitly requested
+        format_param = request.args.get('format', '')
+        
+        # Return JSON if explicitly requested or doesn't look like a browser
+        if format_param == 'json' or (
+            'application/json' in accept_header and 
+            not any(browser in user_agent.lower() for browser in ['mozilla', 'chrome', 'safari', 'edge'])
+        ):
+            return jsonify({
+                "name": agent.agent_card.name if hasattr(agent, 'agent_card') else "A2A Agent",
+                "description": agent.agent_card.description if hasattr(agent, 'agent_card') else "",
+                "agent_card_url": "/a2a/agent.json",
+                "protocol": "a2a"
+            })
+        
+        # Otherwise serve HTML by default
+        response = make_response(render_template_string(
+            AGENT_INDEX_HTML,
+            agent=agent,
+            request=request
+        ))
+        response.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return response
+    
+    @app.route("/", methods=["GET"])
+    def enhanced_root_index():
+        """Root endpoint with beautiful UI"""
+        return enhanced_a2a_index()
+    
+    @app.route("/agent", methods=["GET"])
+    def enhanced_agent_index():
+        """Agent endpoint with beautiful UI"""
+        return enhanced_a2a_index()
+    
+    @app.route("/a2a/agent.json", methods=["GET"])
+    def enhanced_a2a_agent_json():
+        """Agent card JSON with beautiful UI"""
+        # Get agent data
+        agent_data = get_agent_data()
+        
+        # Check request format preferences
+        user_agent = request.headers.get('User-Agent', '')
+        accept_header = request.headers.get('Accept', '')
+        format_param = request.args.get('format', '')
+        
+        # Return JSON if explicitly requested or doesn't look like a browser
+        if format_param == 'json' or (
+            'application/json' in accept_header and 
+            not any(browser in user_agent.lower() for browser in ['mozilla', 'chrome', 'safari', 'edge'])
+        ):
+            return jsonify(agent_data)
+        
+        # Otherwise serve HTML with pretty JSON visualization
+        formatted_json = json.dumps(agent_data, indent=2)
+        response = make_response(render_template_string(
+            JSON_HTML_TEMPLATE,
+            title=agent_data.get('name', 'A2A Agent'),
+            description="Agent Card JSON Data",
+            json_data=formatted_json
+        ))
+        response.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return response
+    
+    @app.route("/agent.json", methods=["GET"])
+    def enhanced_root_agent_json():
+        """Root agent.json endpoint"""
+        return enhanced_a2a_agent_json()
+    
+    # Only AFTER registering our enhanced routes, set up the agent's routes
     if hasattr(agent, 'setup_routes'):
         agent.setup_routes(app)
     
@@ -98,21 +190,12 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
         return jsonify({"status": "ok"})
     
     # If we reach here and no routes matched, set up a catch-all route
-    @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def catch_all(path):
         # Only for GET requests that didn't match other routes
         if request.method == 'GET':
             # Redirect to the A2A index
-            return jsonify({
-                "message": "A2A Agent API",
-                "endpoints": {
-                    "agent_card": "/agent.json or /a2a/agent.json",
-                    "api": "/a2a",
-                    "metadata": "/a2a/metadata",
-                    "health": "/a2a/health"
-                }
-            })
+            return enhanced_a2a_index()
     
     return app
 
