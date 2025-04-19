@@ -142,41 +142,32 @@ print(f"Response: {response}")
 
 ```python
 import os
-from python_a2a import OpenAIA2AServer, run_server
+from python_a2a import OpenAIA2AServer, BedrockA2AServer, run_server
 
-# Create an agent powered by OpenAI
-agent = OpenAIA2AServer(
-    api_key=os.environ["OPENAI_API_KEY"],
-    model="gpt-4",
-    system_prompt="You are a helpful AI assistant specialized in explaining complex topics simply."
-)
-
-# Run the server
-if __name__ == "__main__":
-    run_server(agent, host="0.0.0.0", port=5000)
-```
-
-### 4. Create a Bedrock-Powered Agent
-
-```python
-import os
-from python_a2a import BedrockA2AServer, run_server
-
-# Create an agent powered by AWS Bedrock
-agent = BedrockA2AServer(
-    aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-    aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-    aws_region=os.environ["AWS_REGION"],
-    model_id= "apac.anthropic.claude-3-5-sonnet-20241022-v2:0",  # or any other supported Bedrock model
-    system_prompt="You are a helpful AI assistant specialized in explaining complex topics simply."
-)
+# Check for AWS credentials to determine which provider to use
+if all(k in os.environ for k in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]):
+    # Create an agent powered by AWS Bedrock
+    agent = BedrockA2AServer(
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        aws_region=os.environ["AWS_REGION"],
+        model_id="anthropic.claude-3-sonnet-20240229-v1:0",  # or any other supported Bedrock model
+        system_prompt="You are a helpful AI assistant specialized in explaining complex topics simply."
+    )
+else:
+    # Create an agent powered by OpenAI
+    agent = OpenAIA2AServer(
+        api_key=os.environ["OPENAI_API_KEY"],
+        model="gpt-4",
+        system_prompt="You are a helpful AI assistant specialized in explaining complex topics simply."
+    )
 
 # Run the server
 if __name__ == "__main__":
     run_server(agent, host="0.0.0.0", port=5000)
 ```
 
-### 5. Generate Interactive Documentation
+### 4. Generate Interactive Documentation
 
 ```python
 from python_a2a import AgentCard, AgentSkill, generate_a2a_docs, generate_html_docs
@@ -214,7 +205,7 @@ with open(os.path.join(output_dir, "index.html"), "w") as f:
 print(f"Documentation available at: {os.path.abspath(os.path.join(output_dir, 'index.html'))}")
 ```
 
-### 6. Create an MCP-Enabled A2A Agent
+### 5. Create an MCP-Enabled A2A Agent
 
 ```python
 from python_a2a import A2AServer, A2AMCPAgent, run_server, AgentCard
