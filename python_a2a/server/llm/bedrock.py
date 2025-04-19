@@ -29,10 +29,10 @@ class BedrockA2AServer(BaseA2AServer):
 
     def __init__(
         self,
-        model_id: str = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        model_id: str = "apac.anthropic.claude-3-7-sonnet-20250219-v1:0",
         aws_access_key_id = None,
         aws_secret_access_key = None,
-        aws_region = None,
+        aws_region = "us-east-1",
         temperature: float = 0.7,
         max_tokens: int = 1000,
         system_prompt: Optional[str] = None,
