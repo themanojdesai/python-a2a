@@ -11,7 +11,7 @@ except:
 
 setup(
     name="python_a2a",
-    version="0.3.1",
+    version="0.3.2",
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -39,7 +39,7 @@ setup(
         "Topic :: Software Development :: Libraries",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface, mcp, model-context-protocol",
+    keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface, mcp, model-context-protocol, aws-bedrock",
     python_requires=">=3.9",
     install_requires=[
         "requests>=2.25.0",
@@ -62,6 +62,10 @@ setup(
         "anthropic": [
             "anthropic>=0.3.0",
         ],
+        "bedrock": [
+            "boto3>=1.26.0",
+            "botocore>=1.29.0",
+        ],
         "mcp": [
             "httpx>=0.23.0",
             "fastapi>=0.95.0",
@@ -72,6 +76,8 @@ setup(
             "flask>=2.0.0",
             "openai>=1.0.0",
             "anthropic>=0.3.0",
+            "boto3>=1.26.0",
+            "botocore>=1.29.0",
             "httpx>=0.23.0",
             "fastapi>=0.95.0",
             "uvicorn>=0.21.0",
