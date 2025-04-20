@@ -19,9 +19,10 @@ Python A2A is a comprehensive, production-ready library for implementing Google'
 
 The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation, while MCP extends this capability by providing a standardized way for agents to access external tools and data sources. Python A2A makes these protocols accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
 
-## 📋 What's New in v0.3.1
+## 📋 What's New in v0.3.2
 
 - **Full A2A Protocol Support**: Enhanced implementation with Agent Cards, Tasks, and Skills
+- **AWS Bedrock Integration**: Native support for AWS Bedrock models including Claude via BedrockA2AServer
 - **Interactive Documentation**: FastAPI-style OpenAPI documentation for agents
 - **Streamlined Developer Experience**: New decorators for easier agent and skill creation
 - **Backward Compatibility**: All existing code continues to work without modification
