@@ -31,31 +31,25 @@ jobs:
         
     - name: Install dependencies
       run: |
-        # Create venv without activating it
-        uv venv create .venv
+        # Create venv with the correct syntax
+        uv venv
         
         # Install dependencies directly with UV
         if [ "$RUNNER_OS" == "Windows" ]; then
-          uv pip install -e ".[dev]" --venv .venv
+          uv pip install -e ".[dev]"
         else
-          uv pip install -e ".[dev]" --venv .venv
+          uv pip install -e ".[dev]"
         fi
       shell: bash
         
     - name: Lint with flake8
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          uv pip run flake8 python_a2a --venv .venv
-        else
-          uv pip run flake8 python_a2a --venv .venv
-        fi
+        uv pip install flake8  # Ensure flake8 is installed
+        uv run flake8 python_a2a
       shell: bash
         
     - name: Test with pytest
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          uv pip run pytest --venv .venv
-        else
-          uv pip run pytest --venv .venv
-        fi
+        uv pip install pytest  # Ensure pytest is installed
+        uv run pytest
       shell: bash
