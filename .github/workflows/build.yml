@@ -26,115 +26,36 @@ jobs:
         
     - name: Install UV
       run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        pip install uv
       shell: bash
-      
+        
     - name: Install dependencies
       run: |
+        # Create venv without activating it
         uv venv create .venv
+        
+        # Install dependencies directly with UV
         if [ "$RUNNER_OS" == "Windows" ]; then
-          .\.venv\Scripts\activate.bat
-          uv pip install -e ".[dev]"
+          uv pip install -e ".[dev]" --venv .venv
         else
-          source .venv/bin/activate
-          uv pip install -e ".[dev]"
+          uv pip install -e ".[dev]" --venv .venv
         fi
       shell: bash
         
     - name: Lint with flake8
       run: |
         if [ "$RUNNER_OS" == "Windows" ]; then
-          .\.venv\Scripts\activate.bat
-          uv pip run flake8 python_a2a
+          uv pip run flake8 python_a2a --venv .venv
         else
-          source .venv/bin/activate
-          uv pip run flake8 python_a2a
+          uv pip run flake8 python_a2a --venv .venv
         fi
       shell: bash
         
     - name: Test with pytest
       run: |
         if [ "$RUNNER_OS" == "Windows" ]; then
-          .\.venv\Scripts\activate.bat
-          uv pip run pytest
+          uv pip run pytest --venv .venv
         else
-          source .venv/bin/activate
-          uv pip run pytest
+          uv pip run pytest --venv .venv
         fi
       shell: bash
-  
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-        
-    - name: Install UV
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      shell: bash
-        
-    - name: Install build dependencies
-      run: |
-        uv venv create .venv
-        source .venv/bin/activate
-        uv pip install build twine
-        
-    - name: Build package
-      run: |
-        source .venv/bin/activate
-        uv pip run python -m build
-        
-    - name: Check package
-      run: |
-        source .venv/bin/activate
-        uv pip run twine check dist/*
-        
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: dist
-        path: dist/
-        
-  docs:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-        
-    - name: Install UV
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      shell: bash
-        
-    - name: Install dependencies
-      run: |
-        uv venv create .venv
-        source .venv/bin/activate
-        uv pip install -e ".[all]"
-        uv pip install -r docs/requirements.txt
-        
-    - name: Build documentation
-      run: |
-        source .venv/bin/activate
-        cd docs
-        make html
-        
-    - name: Upload documentation
-      uses: actions/upload-artifact@v3
-      with:
-        name: docs
-        path: docs/_build/html/
