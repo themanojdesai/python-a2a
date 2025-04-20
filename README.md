@@ -7,6 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI Downloads](https://static.pepy.tech/badge/python-a2a)](https://pepy.tech/project/python-a2a)
 [![Documentation Status](https://readthedocs.org/projects/python-a2a/badge/?version=latest)](https://python-a2a.readthedocs.io/en/latest/?badge=latest)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![GitHub stars](https://img.shields.io/github/stars/themanojdesai/python-a2a?style=social)](https://github.com/themanojdesai/python-a2a/stargazers)
 
 **The Definitive Python Implementation of Google's Agent-to-Agent (A2A) Protocol with Model Context Protocol (MCP) Integration**
@@ -43,7 +45,7 @@ The A2A protocol establishes a standard communication format that enables AI age
 Install the base package with minimal dependencies:
 
 ```bash
-pip install python-a2a
+pip install python-a2a  # Only requires requests library
 ```
 
 Or install with optional components based on your needs:
@@ -67,6 +69,8 @@ pip install "python-a2a[mcp]"
 # For all optional dependencies
 pip install "python-a2a[all]"
 ```
+
+> 💡 **Tip**: Click the code blocks to copy them to your clipboard.
 
 ## 🚀 Quick Start Examples
 
@@ -538,14 +542,69 @@ class AssistantAgent(A2AServer):
         return task
 ```
 
-## 🔍 Detailed Documentation
+## 📚 Documentation
 
-For comprehensive documentation, tutorials, and API reference, visit:
+Comprehensive documentation for Python A2A is now available at [ReadTheDocs](https://python-a2a.readthedocs.io/en/latest/index.html).
 
-- **[User Guide](https://python-a2a.readthedocs.io/en/latest/user_guide.html)**: Step-by-step tutorials and guides
-- **[API Reference](https://python-a2a.readthedocs.io/en/latest/api.html)**: Detailed API documentation
-- **[Examples](https://python-a2a.readthedocs.io/en/latest/examples.html)**: Real-world examples and use cases
-- **[Jupyter Notebooks](https://github.com/themanojdesai/python-a2a/tree/main/notebooks)**: Interactive examples and tutorials
+### Building Documentation Locally
+
+To build the documentation locally:
+
+1. Install the required dependencies:
+
+```bash
+pip install -e ".[all]"
+pip install -r docs/requirements.txt
+```
+
+2. Navigate to the `docs` directory:
+
+```bash
+cd docs
+```
+
+3. Build the HTML documentation:
+
+```bash
+make html
+```
+
+4. Open the generated documentation in your browser:
+
+```bash
+# On macOS
+open _build/html/index.html
+
+# On Linux
+xdg-open _build/html/index.html
+
+# On Windows
+start _build/html/index.html
+```
+
+### Contributing to Documentation
+
+If you want to contribute to the documentation, please follow the structure in the `docs` directory and write documentation in reStructuredText (.rst) format. The documentation system uses Sphinx and is automatically built and deployed to ReadTheDocs when changes are pushed to the main branch.
+
+## 🔄 Related Projects
+
+Here are some related projects in the AI agent and interoperability space:
+
+- [**Google A2A**](https://github.com/google/A2A) - The official Google A2A protocol specification
+- [**AutoGen**](https://github.com/microsoft/autogen) - Microsoft's framework for multi-agent conversations
+- [**LangChain**](https://github.com/langchain-ai/langchain) - Framework for building applications with LLMs
+- [**CrewAI**](https://github.com/joaomdmoura/crewAI) - Framework for orchestrating role-playing agents
+- [**MCP**](https://github.com/contextco/mcp) - The Model Context Protocol for tool-using agents
+
+## 👥 Contributors
+
+Thanks to all our contributors!
+
+<a href="https://github.com/themanojdesai/python-a2a/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=themanojdesai/python-a2a" />
+</a>
+
+Want to contribute? Check out our [contributing guide](https://python-a2a.readthedocs.io/en/latest/contributing.html).
 
 ## 🤝 Community & Support
 
@@ -553,6 +612,20 @@ For comprehensive documentation, tutorials, and API reference, visit:
 - **[GitHub Discussions](https://github.com/themanojdesai/python-a2a/discussions)**: Ask questions and share ideas
 - **[Contributing Guide](https://python-a2a.readthedocs.io/en/latest/contributing.html)**: Learn how to contribute to the project
 - **[ReadTheDocs](https://python-a2a.readthedocs.io/en/latest/)**: Visit our documentation site
+
+## 📝 Citing this Project
+
+If you use Python A2A in your research or academic work, please cite it as:
+
+```
+@software{desai2025pythona2a,
+  author = {Desai, Manoj},
+  title = {Python A2A: A Comprehensive Implementation of the Agent-to-Agent Protocol},
+  url = {https://github.com/themanojdesai/python-a2a},
+  version = {0.3.2},
+  year = {2025},
+}
+```
 
 ## ⭐ Star This Repository
 
