@@ -12,6 +12,7 @@ from .a2a_server import A2AServer
 # Import LLM-specific servers
 from .llm.openai import OpenAIA2AServer
 from .llm.anthropic import AnthropicA2AServer
+from .llm.bedrock import BedrockA2AServer
 
 # Make everything available at the server level
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     'run_server',
     'OpenAIA2AServer',
     'AnthropicA2AServer',
+    'BedrockA2AServer'
 ]
