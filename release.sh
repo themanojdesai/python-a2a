@@ -22,18 +22,6 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 1
 fi
 
-# Check if we're in a clean git state
-if [[ -n $(git status -s) ]]; then
-    echo -e "${YELLOW}You have uncommitted changes.${NC}"
-    echo -e "It's recommended to commit all changes before releasing."
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${RED}Release aborted.${NC}"
-        exit 1
-    fi
-fi
-
 # Clean up previous builds first
 echo -e "${GREEN}Cleaning up previous builds...${NC}"
 rm -rf dist/ build/ *.egg-info/
@@ -43,32 +31,69 @@ find . -type d -name "__pycache__" -exec rm -rf {} +
 # Update version numbers in files
 echo -e "${GREEN}Updating version numbers...${NC}"
 
+# Update files only if they exist
+files_to_commit=()
+
 # Update __init__.py
-sed -i.bak "s/__version__ = \"[0-9.]*\"/__version__ = \"$VERSION\"/" python_a2a/__init__.py
-rm python_a2a/__init__.py.bak
+if [ -f "python_a2a/__init__.py" ]; then
+    sed -i.bak "s/__version__ = \"[0-9.]*\"/__version__ = \"$VERSION\"/" python_a2a/__init__.py
+    rm python_a2a/__init__.py.bak
+    files_to_commit+=("python_a2a/__init__.py")
+else
+    echo -e "${YELLOW}Warning: python_a2a/__init__.py not found${NC}"
+fi
 
 # Update pyproject.toml
-sed -i.bak "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" pyproject.toml
-rm pyproject.toml.bak
+if [ -f "pyproject.toml" ]; then
+    sed -i.bak "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" pyproject.toml
+    rm pyproject.toml.bak
+    files_to_commit+=("pyproject.toml")
+else
+    echo -e "${YELLOW}Warning: pyproject.toml not found${NC}"
+fi
 
 # Update setup.py
-sed -i.bak "s/version=\"[0-9.]*\"/version=\"$VERSION\"/" setup.py
-rm setup.py.bak
+if [ -f "setup.py" ]; then
+    sed -i.bak "s/version=\"[0-9.]*\"/version=\"$VERSION\"/" setup.py
+    rm setup.py.bak
+    files_to_commit+=("setup.py")
+else
+    echo -e "${YELLOW}Warning: setup.py not found${NC}"
+fi
 
 # Update UVManifest.toml
-sed -i.bak "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" UVManifest.toml
-rm UVManifest.toml.bak
+if [ -f ".uv/UVManifest.toml" ]; then
+    sed -i.bak "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" .uv/UVManifest.toml
+    rm .uv/UVManifest.toml.bak
+    files_to_commit+=(".uv/UVManifest.toml")
+elif [ -f "simple_a2a/.uv/UVManifest.toml" ]; then
+    sed -i.bak "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" simple_a2a/.uv/UVManifest.toml
+    rm simple_a2a/.uv/UVManifest.toml.bak
+    files_to_commit+=("simple_a2a/.uv/UVManifest.toml")
+else
+    echo -e "${YELLOW}Warning: UVManifest.toml not found${NC}"
+fi
 
 echo -e "${GREEN}Version numbers updated to $VERSION${NC}"
 
-# Commit changes
-echo -e "${GREEN}Committing version changes...${NC}"
-git add python_a2a/__init__.py pyproject.toml setup.py UVManifest.toml
-git commit -m "Bump version to $VERSION"
+# Commit changes if any files were updated
+if [ ${#files_to_commit[@]} -gt 0 ]; then
+    echo -e "${GREEN}Committing version changes...${NC}"
+    git add "${files_to_commit[@]}"
+    git commit -m "Bump version to $VERSION"
 
-# Push to GitHub
-echo -e "${GREEN}Pushing changes to GitHub...${NC}"
-git push origin main
+    # Push to GitHub
+    echo -e "${GREEN}Pushing changes to GitHub...${NC}"
+    git push origin main
+else
+    echo -e "${RED}No files updated. Cannot continue.${NC}"
+    exit 1
+fi
+
+# Create and activate a virtual environment for building
+echo -e "${GREEN}Creating build environment...${NC}"
+uv venv create --fresh .build-env
+source .build-env/bin/activate
 
 # Install build dependencies
 echo -e "${GREEN}Installing build dependencies...${NC}"
@@ -76,11 +101,17 @@ uv pip install build twine
 
 # Build the package
 echo -e "${GREEN}Building the package...${NC}"
-uv pip run python -m build
+python -m build
 
 # Check the distribution with twine
 echo -e "${GREEN}Checking the distribution...${NC}"
-uv pip run twine check dist/*
+twine check dist/*
+
+# Ask for PyPI credentials
+echo -e "${YELLOW}Please enter your PyPI credentials:${NC}"
+read -p "Username: " PYPI_USERNAME
+read -s -p "Password or API token: " PYPI_PASSWORD
+echo  # Add a newline after the hidden password input
 
 # Upload to PyPI
 echo -e "${YELLOW}Ready to upload to PyPI.${NC}"
@@ -88,7 +119,7 @@ read -p "Upload to PyPI? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo -e "${GREEN}Uploading to PyPI...${NC}"
-    uv pip run twine upload dist/*
+    twine upload dist/* --username "$PYPI_USERNAME" --password "$PYPI_PASSWORD"
     
     echo -e "${GREEN}Package uploaded to PyPI successfully!${NC}"
     
@@ -120,6 +151,6 @@ fi
 
 # Clean up
 deactivate
-rm -rf .verify-env
+rm -rf .build-env .verify-env
 
 echo -e "${GREEN}Release process completed!${NC}"
