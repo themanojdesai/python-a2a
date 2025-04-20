@@ -1,3 +1,104 @@
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-a2a"
+version = "0.3.3"  # Updated version
+description = "A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Manoj Desai", email = "themanojdesai@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["a2a", "agent", "ai", "llm", "interoperability", "google", "protocol", "chatbot", "openai", "anthropic", "claude", "huggingface", "mcp", "model-context-protocol", "aws-bedrock"]
+dependencies = [
+    "requests>=2.25.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/themanojdesai/python-a2a"
+"Bug Tracker" = "https://github.com/themanojdesai/python-a2a/issues"
+"Documentation" = "https://python-a2a.readthedocs.io"
+"Source Code" = "https://github.com/themanojdesai/python-a2a"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.12.0",
+    "black>=21.5b2",
+    "flake8>=3.9.2",
+    "mypy>=0.812",
+    "responses>=0.13.3",
+]
+server = [
+    "flask>=2.0.0",
+]
+openai = [
+    "openai>=1.0.0",
+]
+anthropic = [
+    "anthropic>=0.3.0",
+]
+bedrock = [
+    "boto3>=1.26.0",
+    "botocore>=1.29.0",
+]
+mcp = [
+    "httpx>=0.23.0",
+    "fastapi>=0.95.0",
+    "uvicorn>=0.21.0",
+    "pydantic>=1.10.7",
+]
+all = [
+    "flask>=2.0.0",
+    "openai>=1.0.0",
+    "anthropic>=0.3.0",
+    "boto3>=1.26.0",
+    "botocore>=1.29.0",
+    "httpx>=0.23.0",
+    "fastapi>=0.95.0",
+    "uvicorn>=0.21.0",
+    "pydantic>=1.10.7",
+]
+
+[project.scripts]
+a2a = "python_a2a.cli:main"
+
+[tool.setuptools]
+package-data = {"python_a2a" = ["py.typed"]}
+packages = ["python_a2a"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

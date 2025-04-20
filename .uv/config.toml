@@ -1,0 +1,17 @@
+# UV configuration for python-a2a
+# https://github.com/astral-sh/uv
+
+[install]
+# Use the latest available release for dependencies
+resolution-mode = "newest-compatible"
+
+# Automatically create a virtual environment if not present
+no-prompt = true
+
+[venv]
+# Create virtual environment with clear names
+venv-name = "venv"
+
+[dev]
+# Tools to automatically install in development mode
+extras = ["dev"]

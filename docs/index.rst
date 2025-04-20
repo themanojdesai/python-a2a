@@ -44,6 +44,7 @@ Getting Started
    :maxdepth: 2
    
    installation
+   uv-installation
    quickstart
    
 User Guides

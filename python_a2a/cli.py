@@ -579,7 +579,7 @@ def main() -> int:
     
     if not args.command:
         print("Error: No command specified")
-        return 1
+        sys.exit(1)  # Add this line to exit with error code
     
     if not hasattr(args, 'func'):
         print(f"Error: Unknown command '{args.command}'")

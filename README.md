@@ -9,6 +9,7 @@
 [![Documentation Status](https://readthedocs.org/projects/python-a2a/badge/?version=latest)](https://python-a2a.readthedocs.io/en/latest/?badge=latest)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+[![UV Compatible](https://img.shields.io/badge/UV-Compatible-5C63FF.svg)](https://github.com/astral-sh/uv)
 [![GitHub stars](https://img.shields.io/github/stars/themanojdesai/python-a2a?style=social)](https://github.com/themanojdesai/python-a2a/stargazers)
 
 **The Definitive Python Implementation of Google's Agent-to-Agent (A2A) Protocol with Model Context Protocol (MCP) Integration**
@@ -42,6 +43,8 @@ The A2A protocol establishes a standard communication format that enables AI age
 
 ## 📦 Installation
 
+### Using pip (traditional)
+
 Install the base package with minimal dependencies:
 
 ```bash
@@ -68,6 +71,51 @@ pip install "python-a2a[mcp]"
 
 # For all optional dependencies
 pip install "python-a2a[all]"
+```
+
+### Using UV (recommended)
+
+[UV](https://github.com/astral-sh/uv) is a modern Python package management tool that's faster and more reliable than pip. To install with UV:
+
+```bash
+# Install UV if you don't have it already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install the base package
+uv install python-a2a
+
+# For Flask-based server support
+uv install "python-a2a[server]"
+
+# For OpenAI integration
+uv install "python-a2a[openai]"
+
+# For Anthropic Claude integration
+uv install "python-a2a[anthropic]"
+
+# For AWS-Bedrock integration
+uv install "python-a2a[bedrock]"
+
+# For MCP support (Model Context Protocol)
+uv install "python-a2a[mcp]"
+
+# For all optional dependencies
+uv install "python-a2a[all]"
+```
+
+### Development Installation
+
+For development, UV is recommended for its speed:
+
+```bash
+# Clone the repository
+git clone https://github.com/themanojdesai/python-a2a.git
+cd python-a2a
+
+# Create a virtual environment and install development dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
 ```
 
 > 💡 **Tip**: Click the code blocks to copy them to your clipboard.

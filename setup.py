@@ -1,3 +1,10 @@
+"""
+Setup script for python-a2a.
+
+This setup script is maintained for backward compatibility.
+For modern installations, please use pyproject.toml with pip or uv.
+"""
+
 from setuptools import setup, find_packages
 import os
 
@@ -9,9 +16,11 @@ try:
 except:
     long_description = "A Python library for Google's Agent-to-Agent (A2A) protocol"
 
+# This setup.py is maintained for backward compatibility
+# For modern installations, please use pyproject.toml with pip or uv
 setup(
     name="python_a2a",
-    version="0.3.2",
+    version="0.3.3",  # Updated version
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -20,7 +29,7 @@ setup(
     url="https://github.com/themanojdesai/python-a2a",
     project_urls={
         "Bug Tracker": "https://github.com/themanojdesai/python-a2a/issues",
-        "Documentation": "https://github.com/themanojdesai/python-a2a#readme",
+        "Documentation": "https://python-a2a.readthedocs.io",
         "Source Code": "https://github.com/themanojdesai/python-a2a",
     },
     packages=find_packages(),

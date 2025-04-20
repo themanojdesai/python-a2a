@@ -52,22 +52,26 @@ class BaseA2AServer(ABC):
         Returns:
             The updated conversation with the agent's response
         """
+        # Create a deep copy of the conversation to avoid modifying the original
+        from copy import deepcopy
+        result = deepcopy(conversation)
+        
         # By default, just respond to the last message
-        if not conversation.messages:
+        if not result.messages:
             # Empty conversation, create an error
-            conversation.create_error_message("Empty conversation received")
-            return conversation
+            result.create_error_message("Empty conversation received")
+            return result
             
-        last_message = conversation.messages[-1]
+        last_message = result.messages[-1]
         response = self.handle_message(last_message)
         
         # Set correct parent and conversation IDs
         response.parent_message_id = last_message.message_id
-        response.conversation_id = conversation.conversation_id
+        response.conversation_id = result.conversation_id
         
         # Add the response to the conversation
-        conversation.add_message(response)
-        return conversation
+        result.add_message(response)
+        return result
         
     def get_metadata(self) -> Dict[str, Any]:
         """

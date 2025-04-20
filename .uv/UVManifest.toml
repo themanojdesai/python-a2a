@@ -1,0 +1,45 @@
+# UVManifest.toml
+# This file enables reproducible builds with UV
+
+[manifest]
+version = "1.0.0"  # UVManifest version
+
+[project]
+name = "python-a2a"
+version = "0.3.3"  # Updated version
+
+[python]
+# List of Python versions supported by the project
+python-versions = ["3.9", "3.10", "3.11"]
+
+[dependencies]
+# Core dependencies
+requests = ">=2.25.0"
+
+# Optional dependency groups
+[dependencies.server]
+flask = ">=2.0.0"
+
+[dependencies.openai]
+openai = ">=1.0.0"
+
+[dependencies.anthropic]
+anthropic = ">=0.3.0"
+
+[dependencies.bedrock]
+boto3 = ">=1.26.0"
+botocore = ">=1.29.0"
+
+[dependencies.mcp]
+httpx = ">=0.23.0"
+fastapi = ">=0.95.0"
+uvicorn = ">=0.21.0"
+pydantic = ">=1.10.7"
+
+[dependencies.dev]
+pytest = ">=6.0.0"
+pytest-cov = ">=2.12.0"
+black = ">=21.5b2"
+flake8 = ">=3.9.2"
+mypy = ">=0.812"
+responses = ">=0.13.3"

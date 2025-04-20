@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.3"  # Updated version number
 
 # Import core models
 from .models import (

@@ -1,0 +1,55 @@
+name: Python Tests with UV
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.9', '3.10', '3.11']
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install UV
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      shell: bash
+        
+    - name: Install dependencies with UV
+      run: |
+        uv venv
+        . .venv/bin/activate
+        uv install -e ".[dev]"
+      shell: bash
+        
+    - name: Lint with flake8
+      run: |
+        . .venv/bin/activate
+        flake8 python_a2a
+      shell: bash
+        
+    - name: Type check with mypy
+      run: |
+        . .venv/bin/activate
+        mypy python_a2a
+      shell: bash
+        
+    - name: Test with pytest
+      run: |
+        . .venv/bin/activate
+        pytest --cov=python_a2a
+      shell: bash

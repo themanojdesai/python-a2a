@@ -7,7 +7,7 @@ import uuid
 from python_a2a import (
     Message, MessageRole, Conversation,
     TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent,
-    FunctionParameter, A2AServer
+    FunctionParameter, A2AServer, BaseA2AServer  # Add BaseA2AServer import here
 )
 
 
@@ -77,22 +77,28 @@ def conversation(text_message, function_call_message, function_response_message)
 
 @pytest.fixture
 def echo_server():
-    """Fixture for a simple echo server"""
-    class EchoServer(A2AServer):
+    """Create a simple echo server for testing"""
+    class EchoServer(BaseA2AServer):
         def handle_message(self, message):
+            """Echo the input message, handling different content types"""
+            # Handle different content types
             if message.content.type == "text":
-                return Message(
-                    content=TextContent(text=f"Echo: {message.content.text}"),
-                    role=MessageRole.AGENT,
-                    parent_message_id=message.message_id,
-                    conversation_id=message.conversation_id
-                )
+                response_text = f"Echo: {message.content.text}"
+            elif message.content.type == "function_call":
+                params_str = ", ".join([f"{p.name}={p.value}" for p in message.content.parameters])
+                response_text = f"Echo: function call to {message.content.name}({params_str})"
+            elif message.content.type == "function_response":
+                response_text = f"Echo: function response from {message.content.name}"
+            elif message.content.type == "error":
+                response_text = f"Echo: error - {message.content.message}"
             else:
-                return Message(
-                    content=TextContent(text=f"Received {message.content.type} message"),
-                    role=MessageRole.AGENT,
-                    parent_message_id=message.message_id,
-                    conversation_id=message.conversation_id
-                )
+                response_text = f"Echo: unknown content type {message.content.type}"
+                
+            return Message(
+                content=TextContent(text=response_text),
+                role=MessageRole.AGENT,
+                parent_message_id=message.message_id,
+                conversation_id=message.conversation_id
+            )
     
     return EchoServer()
