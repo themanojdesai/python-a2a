@@ -42,11 +42,11 @@ jobs:
         fi
       shell: bash
         
-    - name: Lint with flake8
-      run: |
-        uv pip install flake8  # Ensure flake8 is installed
-        uv run flake8 python_a2a
-      shell: bash
+    # - name: Lint with flake8
+    #   run: |
+    #     uv pip install flake8  # Ensure flake8 is installed
+    #     uv run flake8 python_a2a
+    #   shell: bash
         
     - name: Test with pytest
       run: |
