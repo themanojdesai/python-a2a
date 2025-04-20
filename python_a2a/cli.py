@@ -6,10 +6,11 @@ import argparse
 import json
 import sys
 import os
+import asyncio
 from typing import Dict, Any, Optional, List, Tuple
 
 from .models import Message, TextContent, MessageRole, Conversation
-from .client import A2AClient
+from .client import A2AClient, AgentNetwork, StreamingClient
 from .server import A2AServer, run_server
 from .utils import (
     pretty_print_message, 
@@ -475,6 +476,216 @@ def mcp_call_command(args: argparse.Namespace) -> int:
         return 1
 
 
+def stream_command(args: argparse.Namespace) -> int:
+    """
+    Stream a response from an A2A agent
+    
+    Args:
+        args: Command-line arguments
+        
+    Returns:
+        Exit code (0 for success, non-zero for failure)
+    """
+    try:
+        # Create streaming client
+        client = StreamingClient(args.endpoint)
+        
+        # Create a simple text message
+        message = create_text_message(args.message)
+        
+        print(f"Streaming response for: {args.message}")
+        print("-" * 50)
+        
+        # Define callback for handling chunks
+        def print_chunk(chunk):
+            print(chunk, end="", flush=True)
+        
+        # Run the streaming request using asyncio
+        async def stream_response():
+            async for chunk in client.stream_response(message, chunk_callback=print_chunk):
+                pass  # Chunks are handled by the callback
+            print("\n" + "-" * 50)
+        
+        # Run the async function
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(stream_response())
+        
+        return 0
+    
+    except A2AError as e:
+        print(f"Error: {str(e)}")
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return 1
+
+
+def workflow_command(args: argparse.Namespace) -> int:
+    """
+    Run an agent workflow
+    
+    Args:
+        args: Command-line arguments
+        
+    Returns:
+        Exit code (0 for success, non-zero for failure)
+    """
+    try:
+        # Import workflow components
+        from .workflow import Flow
+        from .client import AgentNetwork
+        
+        # Create agent network
+        agent_network = AgentNetwork()
+        
+        # Add agents from arguments
+        if args.agents:
+            for agent_spec in args.agents:
+                try:
+                    name, url = agent_spec.split("=", 1)
+                    agent_network.add(name, url)
+                    print(f"Added agent '{name}' from {url}")
+                except ValueError:
+                    print(f"Error: Invalid agent specification '{agent_spec}'. Use format 'name=url'")
+                    return 1
+        
+        # Load workflow definition from script if provided
+        if args.script:
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("workflow_script", args.script)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                # Look for a create_workflow function in the module
+                if hasattr(module, 'create_workflow'):
+                    # Create the workflow
+                    flow = module.create_workflow(agent_network)
+                    print(f"Loaded workflow from {args.script}")
+                else:
+                    print(f"Error: No create_workflow function found in {args.script}")
+                    return 1
+            except Exception as e:
+                print(f"Error loading script {args.script}: {e}")
+                return 1
+        else:
+            # No script provided, show error
+            print("Error: Workflow script is required. Use --script to specify a Python script.")
+            return 1
+        
+        # Set initial context from JSON file if provided
+        initial_context = None
+        if args.context:
+            try:
+                with open(args.context, 'r') as f:
+                    initial_context = json.load(f)
+                print(f"Loaded initial context from {args.context}")
+            except Exception as e:
+                print(f"Error loading context file {args.context}: {e}")
+                return 1
+        
+        # Execute the workflow
+        print("Executing workflow...")
+        if args.async_mode:
+            # Run asynchronously
+            result = asyncio.run(flow.run(initial_context))
+        else:
+            # Run synchronously
+            result = flow.run_sync(initial_context)
+        
+        # Print result
+        print("\nWorkflow result:")
+        if isinstance(result, dict):
+            print(json.dumps(result, indent=2))
+        else:
+            print(result)
+        
+        return 0
+    
+    except A2AError as e:
+        print(f"Error: {str(e)}")
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return 1
+
+
+def network_command(args: argparse.Namespace) -> int:
+    """
+    Manage an agent network
+    
+    Args:
+        args: Command-line arguments
+        
+    Returns:
+        Exit code (0 for success, non-zero for failure)
+    """
+    try:
+        # Import AgentNetwork
+        from .client import AgentNetwork
+        
+        # Create agent network
+        network = AgentNetwork(name=args.name)
+        
+        # Add agents
+        if args.add:
+            for agent_spec in args.add:
+                try:
+                    name, url = agent_spec.split("=", 1)
+                    network.add(name, url)
+                    print(f"Added agent '{name}' from {url}")
+                except ValueError:
+                    print(f"Error: Invalid agent specification '{agent_spec}'. Use format 'name=url'")
+                    return 1
+        
+        # Discover agents
+        if args.discover:
+            count = network.discover_agents(args.discover)
+            print(f"Discovered {count} new agent(s)")
+        
+        # List agents
+        agents_info = network.list_agents()
+        if agents_info:
+            print("\nAgent Network:")
+            for info in agents_info:
+                print(f"- {info['name']}: {info['url']}")
+                if 'description' in info:
+                    print(f"  Description: {info['description']}")
+                if 'skills_count' in info:
+                    print(f"  Skills: {info['skills_count']}")
+                print()
+        else:
+            print("No agents in the network")
+        
+        # Save network to JSON file if requested
+        if args.save:
+            try:
+                # Simplify network for serialization
+                network_data = {
+                    "name": network.name,
+                    "agents": {
+                        name: url for name, url in network.agent_urls.items()
+                    }
+                }
+                
+                # Fixed: Place the file object before the keyword argument
+                with open(args.save, 'w') as f:
+                    json.dump(network_data, f, indent=2)
+                print(f"Saved agent network to {args.save}")
+            except Exception as e:
+                print(f"Error saving network to {args.save}: {e}")
+                return 1
+        
+        return 0
+    
+    except A2AError as e:
+        print(f"Error: {str(e)}")
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return 1
+
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command-line arguments
@@ -490,6 +701,12 @@ def parse_args() -> argparse.Namespace:
     send_parser.add_argument("endpoint", help="A2A endpoint URL")
     send_parser.add_argument("message", help="Message text or JSON file path")
     send_parser.set_defaults(func=send_command)
+    
+    # Stream response command
+    stream_parser = subparsers.add_parser("stream", help="Stream a response from an A2A agent")
+    stream_parser.add_argument("endpoint", help="A2A endpoint URL")
+    stream_parser.add_argument("message", help="Message text to send")
+    stream_parser.set_defaults(func=stream_command)
     
     # Common server arguments
     server_args = argparse.ArgumentParser(add_help=False)
@@ -564,6 +781,28 @@ def parse_args() -> argparse.Namespace:
     mcp_call_parser.add_argument("tool", help="Tool name to call")
     mcp_call_parser.add_argument("--params", nargs="*", help="Parameters in format 'name=value'")
     mcp_call_parser.set_defaults(func=mcp_call_command)
+    
+    # Run workflow command
+    workflow_parser = subparsers.add_parser(
+        "workflow",
+        help="Run an agent workflow"
+    )
+    workflow_parser.add_argument("--script", required=True, help="Python script with workflow definition")
+    workflow_parser.add_argument("--agents", nargs="*", help="Agents in format 'name=url'")
+    workflow_parser.add_argument("--context", help="JSON file with initial context data")
+    workflow_parser.add_argument("--async-mode", action="store_true", help="Run workflow in async mode")
+    workflow_parser.set_defaults(func=workflow_command)
+    
+    # Manage agent network command
+    network_parser = subparsers.add_parser(
+        "network",
+        help="Manage an agent network"
+    )
+    network_parser.add_argument("--name", default="Agent Network", help="Name for the agent network")
+    network_parser.add_argument("--add", nargs="*", help="Add agents in format 'name=url'")
+    network_parser.add_argument("--discover", nargs="*", help="Discover agents from URLs")
+    network_parser.add_argument("--save", help="Save network to JSON file")
+    network_parser.set_defaults(func=network_command)
     
     return parser.parse_args()
 

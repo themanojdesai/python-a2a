@@ -7,13 +7,20 @@ from .base import BaseA2AClient
 from .http import A2AClient
 
 # Import LLM-specific clients
-from .llm.openai import OpenAIA2AClient
-from .llm.anthropic import AnthropicA2AClient
+from .llm import OpenAIA2AClient, AnthropicA2AClient
+
+# Import enhanced components
+from .network import AgentNetwork
+from .router import AIAgentRouter
+from .streaming import StreamingClient
 
 # Make everything available at the client level
 __all__ = [
     'BaseA2AClient',
     'A2AClient',
     'OpenAIA2AClient',
-    'AnthropicA2AClient'
+    'AnthropicA2AClient',
+    'AgentNetwork',
+    'AIAgentRouter',
+    'StreamingClient'
 ]

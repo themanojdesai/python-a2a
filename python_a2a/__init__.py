@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.3.3"  # Updated version number
+__version__ = "0.4.0"  # Updated version number
 
 # Import core models
 from .models import (
@@ -26,12 +26,16 @@ from .models import (
     TaskState
 )
 
-# Import clients
+# Import clients with new components
 from .client import (
     BaseA2AClient,
     A2AClient,
     OpenAIA2AClient,
-    AnthropicA2AClient
+    AnthropicA2AClient,
+    # Add new client components
+    AgentNetwork,
+    AIAgentRouter,
+    StreamingClient
 )
 
 # Import servers
@@ -42,6 +46,21 @@ from .server import (
     OpenAIA2AServer,
     AnthropicA2AServer,
     BedrockA2AServer
+)
+
+# Import workflow system
+from .workflow import (
+    Flow,
+    WorkflowContext,
+    WorkflowStep,
+    QueryStep,
+    AutoRouteStep,
+    FunctionStep,
+    ConditionalBranch,
+    ConditionStep,
+    ParallelStep,
+    ParallelBuilder,
+    StepType
 )
 
 # Import utility functions
@@ -165,6 +184,9 @@ __all__ = [
     'A2AClient',
     'OpenAIA2AClient',
     'AnthropicA2AClient',
+    'AgentNetwork',
+    'AIAgentRouter',
+    'StreamingClient',
 
     # Servers
     'BaseA2AServer',
@@ -172,7 +194,20 @@ __all__ = [
     'run_server',
     'OpenAIA2AServer',
     'AnthropicA2AServer',
-    'BedrockA2AServer'
+    'BedrockA2AServer',
+
+    # Workflow system
+    'Flow',
+    'WorkflowContext',
+    'WorkflowStep',
+    'QueryStep',
+    'AutoRouteStep',
+    'FunctionStep',
+    'ConditionalBranch',
+    'ConditionStep',
+    'ParallelStep',
+    'ParallelBuilder',
+    'StepType',
 
     # Utilities
     'format_message_as_text',
@@ -189,8 +224,6 @@ __all__ = [
     'create_error_message',
     'format_function_params',
     'conversation_to_messages',
-
-    # New decorators
     'skill',
     'agent',
 

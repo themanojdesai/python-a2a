@@ -45,6 +45,18 @@ Connect A2A to various AI services:
 | [Bedrock Agent](ai_powered_agents/bedrock_agent.py) | Use AWS Bedrock models | Connecting to AWS Bedrock |
 | [LLM Client](ai_powered_agents/llm_client.py) | Direct connection to LLMs | Working with various LLM providers |
 
+### Agent Network Examples
+
+Build and manage networks of cooperating agents:
+
+| Example | Description | Key Learning |
+|---------|-------------|--------------|
+| [Basic Workflow](agent_network/basic_workflow.py) | Create condition-based workflows | Building and executing agent workflows |
+| [Parallel Workflow](agent_network/parallel_workflow.py) | Execute tasks concurrently | Parallel execution for better performance |
+| [Agents Workflow](agent_network/agents_workflow.py) | Orchestrate LLM-powered agents | Intelligent routing between AI models |
+| [Smart Routing](agent_network/smart_routing.py) | Route queries to specialized agents | AI-driven query analysis and routing |
+| [Agent Discovery](agent_network/agent_discovery.py) | Automatically discover available agents | Dynamic agent network management |
+
 ### Model Context Protocol (MCP) Tools
 
 Add external tool capabilities to your agents:
@@ -88,6 +100,10 @@ Tools to enhance your development workflow:
 - **I want to call an existing AI agent**: [Simple Client](getting_started/simple_client.py)
 - **I need to build my own agent**: [Simple Server](getting_started/simple_server.py) or [Agent Skills](building_blocks/agent_skills.py)
 - **I want to use OpenAI with A2A**: [OpenAI Agent](ai_powered_agents/openai_agent.py)
+- **I need to route queries to specialized agents**: [Smart Routing](agent_network/smart_routing.py)
+- **I want to execute tasks concurrently**: [Parallel Workflow](agent_network/parallel_workflow.py)
+- **I need to create agent workflows**: [Basic Workflow](agent_network/basic_workflow.py)
+- **I want to discover agents automatically**: [Agent Discovery](agent_network/agent_discovery.py)
 - **I need to add external tools to my agent**: [MCP Tools](mcp/mcp_tools.py)
 - **I want to build a complete application**: [Weather Assistant](applications/weather_assistant.py)
 
@@ -127,9 +143,10 @@ For a structured learning experience, we recommend following this sequence:
 1. **Start with the basics**: Run through the Getting Started examples
 2. **Understand core concepts**: Explore the Building Blocks examples
 3. **Add AI capabilities**: Try the AI-Powered Agents examples
-4. **Extend with tools**: Experiment with the MCP examples
-5. **Build complete applications**: Study the Applications examples
-6. **Improve your workflow**: Use the Developer Tools examples
+4. **Learn agent networking**: Experiment with the Agent Network examples
+5. **Extend with tools**: Experiment with the MCP examples
+6. **Build complete applications**: Study the Applications examples
+7. **Improve your workflow**: Use the Developer Tools examples
 
 ## 🤝 Contributing
 

@@ -20,7 +20,7 @@ except:
 # For modern installations, please use pyproject.toml with pip or uv
 setup(
     name="python_a2a",
-    version="0.3.3",  # Updated version
+    version="0.4.0",  # Updated version
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -64,6 +64,7 @@ setup(
         ],
         "server": [
             "flask>=2.0.0",
+            "aiohttp>=3.8.0",  # Added for streaming support
         ],
         "openai": [
             "openai>=1.0.0",
@@ -91,6 +92,7 @@ setup(
             "fastapi>=0.95.0",
             "uvicorn>=0.21.0",
             "pydantic>=1.10.7",
+            "aiohttp>=3.8.0",  # Added for streaming support
         ],
     },
     entry_points={
