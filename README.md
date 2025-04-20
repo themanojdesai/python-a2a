@@ -681,6 +681,10 @@ If you find this library useful, please consider giving it a star on GitHub! It 
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/themanojdesai/python-a2a?style=social)](https://github.com/themanojdesai/python-a2a/stargazers)
 
+### Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=themanojdesai/python-a2a&type=Date)](https://star-history.com/#themanojdesai/python-a2a&Date)
+
 ## 🙏 Acknowledgements
 
 - The [Google A2A team](https://github.com/google/A2A) for creating the A2A protocol
