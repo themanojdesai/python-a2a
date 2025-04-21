@@ -51,7 +51,7 @@ class A2AClient(BaseA2AClient):
         """Fetch the agent card from the well-known URL"""
         # Try standard A2A endpoint first
         try:
-            card_url = f"{self.endpoint_url}/agent.json"
+            card_url = f"{self.endpoint_url}/.well-known/agent.json"
             response = requests.get(card_url, headers=self.headers, timeout=self.timeout)
             response.raise_for_status()
             card_data = response.json()

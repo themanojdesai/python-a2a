@@ -23,7 +23,7 @@ def generate_a2a_docs(agent_card, output_dir=None):
             "description": agent_card.description
         },
         "paths": {
-            "/agent.json": {
+            "/.well-known/agent.json": {
                 "get": {
                     "summary": "Get agent card",
                     "responses": {

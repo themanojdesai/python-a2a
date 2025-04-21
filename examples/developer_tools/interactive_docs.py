@@ -431,7 +431,7 @@ def generate_html_template():
             <h3>Agent Information</h3>
             <div class="endpoint">
                 <span class="http-method">GET</span>
-                <span class="url-path">{{agent_url}}/agent.json</span>
+                <span class="url-path">{{agent_url}}/.well-known/agent.json</span>
             </div>
             <p>Returns information about the agent, including its capabilities and available skills.</p>
             
@@ -664,7 +664,7 @@ def main():
                 }
             ],
             "paths": {
-                "/agent.json": {
+                "/.well-known/agent.json": {
                     "get": {
                         "summary": "Get agent information",
                         "description": "Returns information about the agent, including its capabilities and skills",
