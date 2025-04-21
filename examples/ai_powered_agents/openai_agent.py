@@ -207,6 +207,7 @@ def main():
     # Create the OpenAI server
     openai_server = OpenAIA2AServer(
         api_key=os.environ["OPENAI_API_KEY"],
+        base_url=os.environ["OPENAI_API_BASE"],
         model=args.model,
         temperature=args.temperature,
         system_prompt="You are a helpful AI assistant that provides accurate, concise, and useful information. Your responses should be informative yet easy to understand."

@@ -3,10 +3,20 @@ OpenAI-based server implementation for the A2A protocol.
 """
 
 import uuid
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, Mapping
+import httpx
 
 try:
-    from openai import OpenAI
+    from openai import OpenAI, DEFAULT_MAX_RETRIES
+    from openai._types import (
+        NOT_GIVEN,
+        Omit,
+        Timeout,
+        NotGiven,
+        Transport,
+        ProxiesTypes,
+        RequestOptions,
+    )
 except ImportError:
     OpenAI = None
 
@@ -31,7 +41,12 @@ class OpenAIA2AServer(BaseA2AServer):
         model: str = "gpt-4",
         temperature: float = 0.7,
         system_prompt: Optional[str] = None,
-        functions: Optional[List[Dict[str, Any]]] = None
+        functions: Optional[List[Dict[str, Any]]] = None,
+        base_url: str | httpx.URL | None = None,
+        timeout: Union[float, Timeout, None, NotGiven] = NOT_GIVEN,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        default_headers: Mapping[str, str] | None = None,
+        http_client: httpx.Client | None = None,
     ):
         """
         Initialize the OpenAI A2A server
@@ -57,7 +72,8 @@ class OpenAIA2AServer(BaseA2AServer):
         self.temperature = temperature
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
         self.functions = functions
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
+                             default_headers=default_headers, http_client=http_client)
     
     def handle_message(self, message: Message) -> Message:
         """
