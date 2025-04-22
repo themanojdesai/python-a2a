@@ -22,14 +22,15 @@ Python A2A is a comprehensive, production-ready library for implementing Google'
 
 The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation, while MCP extends this capability by providing a standardized way for agents to access external tools and data sources. Python A2A makes these protocols accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
 
-## 📋 What's New in v0.3.2
+## 📋 What's New in v0.4.X
 
-- **Full A2A Protocol Support**: Enhanced implementation with Agent Cards, Tasks, and Skills
-- **AWS Bedrock Integration**: Native support for AWS Bedrock models including Claude via BedrockA2AServer
-- **Interactive Documentation**: FastAPI-style OpenAPI documentation for agents
-- **Streamlined Developer Experience**: New decorators for easier agent and skill creation
-- **Backward Compatibility**: All existing code continues to work without modification
-- **Enhanced Messaging**: Improved error handling and support for rich message content
+- **Agent Network System**: Manage and discover multiple agents with the new `AgentNetwork` class
+- **Real-time Streaming**: Implement streaming responses with `StreamingClient` for responsive UIs
+- **Workflow Engine**: Define complex multi-agent workflows using the new fluent API with conditional branching and parallel execution
+- **AI-Powered Router**: Automatically route queries to the most appropriate agent with the `AIAgentRouter`
+- **Command Line Interface**: Control your agents from the terminal with the new CLI tool
+- **Enhanced Asynchronous Support**: Better async/await support throughout the library
+- **New Connection Options**: Improved error handling and retry logic for more robust agent communication
 
 ## ✨ Why Choose Python A2A?
 
@@ -37,7 +38,7 @@ The A2A protocol establishes a standard communication format that enables AI age
 - **MCP Integration**: First-class support for Model Context Protocol for powerful tool-using agents
 - **Enterprise Ready**: Built for production environments with robust error handling and validation
 - **Framework Agnostic**: Works with any Python framework (Flask, FastAPI, Django, etc.)
-- **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, and more
+- **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, AWS Bedrock, and more
 - **Minimal Dependencies**: Core functionality requires only the `requests` library
 - **Excellent Developer Experience**: Comprehensive documentation, type hints, and examples
 
@@ -173,319 +174,361 @@ if __name__ == "__main__":
     run_server(agent, port=5000)
 ```
 
-### 2. Connect to an A2A Agent
+### 2. Build an Agent Network with Multiple Agents
 
 ```python
-from python_a2a import A2AClient
+from python_a2a import AgentNetwork, A2AClient, AIAgentRouter
 
-# Create a client connected to an A2A-compatible agent
-client = A2AClient("http://localhost:5000")
+# Create an agent network
+network = AgentNetwork(name="Travel Assistant Network")
 
-# View agent information
-print(f"Connected to: {client.agent_card.name}")
-print(f"Description: {client.agent_card.description}")
-print(f"Skills: {[skill.name for skill in client.agent_card.skills]}")
+# Add agents to the network
+network.add("weather", "http://localhost:5001")
+network.add("hotels", "http://localhost:5002")
+network.add("attractions", "http://localhost:5003")
 
-# Ask a question
-response = client.ask("What's the weather in Paris?")
+# Create a router to intelligently direct queries to the best agent
+router = AIAgentRouter(
+    llm_client=A2AClient("http://localhost:5000/openai"),  # LLM for making routing decisions
+    agent_network=network
+)
+
+# Route a query to the appropriate agent
+agent_name, confidence = router.route_query("What's the weather like in Paris?")
+print(f"Routing to {agent_name} with {confidence:.2f} confidence")
+
+# Get the selected agent and ask the question
+agent = network.get_agent(agent_name)
+response = agent.ask("What's the weather like in Paris?")
 print(f"Response: {response}")
+
+# List all available agents
+print("\nAvailable Agents:")
+for agent_info in network.list_agents():
+    print(f"- {agent_info['name']}: {agent_info['description']}")
 ```
 
-### 3. Create an LLM-Powered Agent
+### 3. Stream Responses for Real-time Updates
 
 ```python
-import os
-from python_a2a import OpenAIA2AServer, BedrockA2AServer, run_server
+import asyncio
+from python_a2a import StreamingClient, Message, TextContent, MessageRole
+from python_a2a import Task, TaskStatus, TaskState
 
-# Check for AWS credentials to determine which provider to use
-if all(k in os.environ for k in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]):
-    # Create an agent powered by AWS Bedrock
-    agent = BedrockA2AServer(
-        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-        aws_region=os.environ["AWS_REGION"],
-        model_id="anthropic.claude-3-sonnet-20240229-v1:0",  # or any other supported Bedrock model
-        system_prompt="You are a helpful AI assistant specialized in explaining complex topics simply."
-    )
-else:
-    # Create an agent powered by OpenAI
-    agent = OpenAIA2AServer(
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4",
-        system_prompt="You are a helpful AI assistant specialized in explaining complex topics simply."
-    )
-
-# Run the server
-if __name__ == "__main__":
-    run_server(agent, host="0.0.0.0", port=5000)
-```
-
-### 4. Generate Interactive Documentation
-
-```python
-from python_a2a import AgentCard, AgentSkill, generate_a2a_docs, generate_html_docs
-import os
-
-# Create an agent card 
-agent_card = AgentCard(
-    name="Travel API",
-    description="Get travel information and recommendations",
-    url="http://localhost:5000",
-    version="1.0.0",
-    skills=[
-        AgentSkill(
-            name="Get Weather",
-            description="Get weather for a destination",
-            tags=["weather", "travel"]
-        ),
-        AgentSkill(
-            name="Find Attractions",
-            description="Find attractions at a destination",
-            tags=["attractions", "travel"]
-        )
-    ]
-)
-
-# Generate documentation
-output_dir = "docs"
-os.makedirs(output_dir, exist_ok=True)
-spec = generate_a2a_docs(agent_card, output_dir)
-html = generate_html_docs(spec)
-
-with open(os.path.join(output_dir, "index.html"), "w") as f:
-    f.write(html)
-
-print(f"Documentation available at: {os.path.abspath(os.path.join(output_dir, 'index.html'))}")
-```
-
-### 5. Create an MCP-Enabled A2A Agent
-
-```python
-from python_a2a import A2AServer, A2AMCPAgent, run_server, AgentCard
-from python_a2a.mcp import FastMCP, text_response
-
-# Create MCP server
-calculator_mcp = FastMCP(
-    name="Calculator MCP",
-    description="Provides calculation functions"
-)
-
-@calculator_mcp.tool()
-def add(a: float, b: float) -> float:
-    """Add two numbers together."""
-    return a + b
-
-# Create A2A agent with MCP capabilities
-class CalculatorAgent(A2AServer, A2AMCPAgent):
-    def __init__(self):
-        # Create the agent card first with the right information
-        agent_card = AgentCard(
-            name="Calculator Agent",
-            description="An agent that performs calculations",
-            url="http://localhost:5003",  # Set this to your actual URL
-            version="1.0.0"
-        )
-        
-        # Initialize A2AServer with the agent card
-        A2AServer.__init__(self, agent_card=agent_card)
-        
-        # Initialize A2AMCPAgent
-        A2AMCPAgent.__init__(
-            self, 
-            name="Calculator Agent",
-            description="An agent that performs calculations",
-            mcp_servers={"calc": calculator_mcp}
-        )
+async def main():
+    # Create a streaming client
+    client = StreamingClient("http://localhost:5000")
     
-    async def handle_task_async(self, task):
-        try:
-            text = task.message.get("content", {}).get("text", "")
-            if "add" in text:
-                # Extract numbers
-                import re
-                numbers = [float(n) for n in re.findall(r"[-+]?\d*\.?\d+", text)]
-                if len(numbers) >= 2:
-                    # Call MCP tool
-                    result = await self.call_mcp_tool("calc", "add", a=numbers[0], b=numbers[1])
-                    task.artifacts = [{
-                        "parts": [{"type": "text", "text": f"The sum is {result}"}]
-                    }]
-                    return task
-            # Default response
-            task.artifacts = [{
-                "parts": [{"type": "text", "text": "I can help with calculations."}]
-            }]
-            return task
-        except Exception as e:
-            task.artifacts = [{
-                "parts": [{"type": "text", "text": f"Error: {str(e)}"}]
-            }]
-            return task
+    # Stream a simple message
+    message = Message(
+        content=TextContent(text="Write a short story about space exploration"),
+        role=MessageRole.USER
+    )
+    
+    print("Streaming response:")
+    print("-" * 50)
+    
+    # Define a callback function to process chunks
+    def print_chunk(chunk):
+        print(chunk, end="", flush=True)
+    
+    # Stream the response with the callback
+    async for chunk in client.stream_response(message, chunk_callback=print_chunk):
+        pass  # Chunks are handled by the callback
+    
+    print("\n" + "-" * 50)
+    
+    # Alternatively, create and stream a task
+    task = await client.create_task("Explain quantum computing in simple terms")
+    
+    print("\nStreaming task response:")
+    print("-" * 50)
+    
+    # Stream the task execution
+    async for chunk in client.stream_task(task, chunk_callback=lambda c: print(c.get("text", ""), end="", flush=True)):
+        pass
 
-# Run the agent
 if __name__ == "__main__":
-    agent = CalculatorAgent()
-    run_server(agent, port=5003)
+    asyncio.run(main())
+```
+
+### 4. Define Complex Workflows with Multiple Agents
+
+```python
+from python_a2a import AgentNetwork, Flow, AIAgentRouter
+import asyncio
+
+async def main():
+    # Create an agent network
+    network = AgentNetwork()
+    network.add("weather", "http://localhost:5001")
+    network.add("recommendations", "http://localhost:5002")
+    network.add("booking", "http://localhost:5003")
+    
+    # Create a router
+    router = AIAgentRouter(
+        llm_client=network.get_agent("weather"),  # Using one agent as LLM for routing
+        agent_network=network
+    )
+    
+    # Define a workflow with conditional logic
+    flow = Flow(agent_network=network, router=router, name="Travel Planning Workflow")
+    
+    # Start by getting the weather
+    flow.ask("weather", "What's the weather in {destination}?")
+    
+    # Conditionally branch based on weather
+    flow.if_contains("sunny")
+    
+    # If sunny, recommend outdoor activities
+    flow.ask("recommendations", "Recommend outdoor activities in {destination}")
+    
+    # End the condition and add an else branch
+    flow.else_branch()
+    
+    # If not sunny, recommend indoor activities
+    flow.ask("recommendations", "Recommend indoor activities in {destination}")
+    
+    # End the if-else block
+    flow.end_if()
+    
+    # Add parallel processing steps
+    (flow.parallel()
+        .ask("booking", "Find hotels in {destination}")
+        .branch()
+        .ask("booking", "Find restaurants in {destination}")
+        .end_parallel())
+    
+    # Execute the workflow with initial context
+    result = await flow.run({
+        "destination": "Paris",
+        "travel_dates": "June 12-20"
+    })
+    
+    print("Workflow result:")
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### 5. Use the Command Line Interface
+
+```bash
+# Start an OpenAI-powered agent
+a2a openai --api-key YOUR_API_KEY --model gpt-4 --port 5000
+
+# In another terminal, send a message to the agent
+a2a send http://localhost:5000 "Explain quantum computing in simple terms"
+
+# Stream a response with real-time updates
+a2a stream http://localhost:5000 "Write a short story about aliens visiting Earth"
+
+# Start an MCP server with custom tools
+a2a mcp-serve --name "Calculator MCP" --script calculator_tools.py --port 5001
+
+# Create an agent network
+a2a network --add weather=http://localhost:5001 recommendations=http://localhost:5002 --save network.json
+
+# Run a workflow from a script
+a2a workflow --script travel_workflow.py --agents weather=http://localhost:5001 recommendations=http://localhost:5002
 ```
 
 ## 🧩 Core Features
 
-### Agent Discovery
+### Agent Networks
 
-Python A2A provides a rich set of models for agent discovery:
+Python A2A now includes a powerful system for managing multiple agents:
 
 ```python
-from python_a2a import AgentCard, AgentSkill
+from python_a2a import AgentNetwork, A2AClient
 
-# Create an agent card
-agent_card = AgentCard(
-    name="Weather API",
-    description="Get weather information for locations",
-    url="http://localhost:5000",
-    version="1.0.0",
-    capabilities={"streaming": True},
-    skills=[
-        AgentSkill(
-            name="Get Weather",
-            description="Get current weather for a location",
-            tags=["weather", "current"],
-            examples=["What's the weather in New York?"]
-        ),
-        AgentSkill(
-            name="Get Forecast",
-            description="Get 5-day forecast for a location",
-            tags=["weather", "forecast"],
-            examples=["5-day forecast for Tokyo"]
-        )
-    ]
-)
+# Create a network of agents
+network = AgentNetwork(name="Medical Assistant Network")
+
+# Add agents in different ways
+network.add("diagnosis", "http://localhost:5001")  # From URL
+network.add("medications", A2AClient("http://localhost:5002"))  # From client instance
+
+# Discover agents from a list of URLs
+discovered_count = network.discover_agents([
+    "http://localhost:5003",
+    "http://localhost:5004",
+    "http://localhost:5005"
+])
+print(f"Discovered {discovered_count} new agents")
+
+# List all agents in the network
+for agent_info in network.list_agents():
+    print(f"Agent: {agent_info['name']}")
+    print(f"URL: {agent_info['url']}")
+    if 'description' in agent_info:
+        print(f"Description: {agent_info['description']}")
+    print()
+
+# Get a specific agent
+agent = network.get_agent("diagnosis")
+response = agent.ask("What are the symptoms of the flu?")
 ```
 
-### Tasks and Messaging
+### Real-time Streaming
 
-The A2A protocol uses tasks to represent units of work:
-
-```python
-from python_a2a import Task, TaskStatus, TaskState, Message, TextContent, MessageRole
-
-# Create a task with a message
-message = Message(
-    content=TextContent(text="What's the weather in Paris?"),
-    role=MessageRole.USER
-)
-task = Task(message=message.to_dict())
-
-# Update task status
-task.status = TaskStatus(state=TaskState.COMPLETED)
-
-# Add response artifact
-task.artifacts = [{
-    "parts": [{
-        "type": "text",
-        "text": "It's sunny and 72°F in Paris"
-    }]
-}]
-```
-
-### Decorators for Easy Agent Creation
-
-The new decorator syntax makes agent and skill creation seamless:
+Get real-time responses from agents with streaming support:
 
 ```python
-from python_a2a import agent, skill, A2AServer, run_server
-from python_a2a import TaskStatus, TaskState
+import asyncio
+from python_a2a import StreamingClient
 
-@agent(
-    name="Calculator",
-    description="Performs calculations",
-    version="1.0.0"
-)
-class CalculatorAgent(A2AServer):
+async def main():
+    client = StreamingClient("http://localhost:5000")
     
-    @skill(
-        name="Add",
-        description="Add two numbers",
-        tags=["math", "addition"]
-    )
-    def add(self, a, b):
-        """
-        Add two numbers together.
-        
-        Examples:
-            "What is 5 + 3?"
-            "Add 10 and 20"
-        """
-        return float(a) + float(b)
+    # Define a callback to process each chunk as it arrives
+    def handle_chunk(chunk):
+        if isinstance(chunk, str):
+            print(chunk, end="", flush=True)
+        elif isinstance(chunk, dict) and "text" in chunk:
+            print(chunk["text"], end="", flush=True)
     
-    @skill(
-        name="Subtract",
-        description="Subtract two numbers",
-        tags=["math", "subtraction"]
-    )
-    def subtract(self, a, b):
-        """Subtract b from a."""
-        return float(a) - float(b)
+    # Stream a response in real-time
+    print("Generating a story...")
+    async for chunk in client.stream_response(
+        "Write me a short story about a robot that learns to paint",
+        chunk_callback=handle_chunk
+    ):
+        pass  # Processing is done in the callback
     
-    # Implement task handling
-    def handle_task(self, task):
-        # Extract message text
-        message_data = task.message or {}
-        content = message_data.get("content", {})
-        text = content.get("text", "") if isinstance(content, dict) else ""
-        
-        # Simple logic to handle calculations
-        response_text = "I can add or subtract numbers. Try asking something like 'add 5 and 3' or 'subtract 10 from 20'."
-        
-        if text:
-            import re
-            numbers = [float(n) for n in re.findall(r"[-+]?\d*\.?\d+", text)]
-            
-            if len(numbers) >= 2:
-                if "add" in text.lower() or "+" in text:
-                    result = self.add(numbers[0], numbers[1])
-                    response_text = f"{numbers[0]} + {numbers[1]} = {result}"
-                elif "subtract" in text.lower() or "-" in text:
-                    result = self.subtract(numbers[0], numbers[1])
-                    response_text = f"{numbers[0]} - {numbers[1]} = {result}"
-        
-        # Create artifact with response
-        task.artifacts = [{
-            "parts": [{"type": "text", "text": response_text}]
-        }]
-        
-        # Mark as completed
-        task.status = TaskStatus(state=TaskState.COMPLETED)
-        
-        return task
+    print("\nDone!")
 
-# Run the server
 if __name__ == "__main__":
-    calculator = CalculatorAgent()
-    run_server(calculator, port=5000)
+    asyncio.run(main())
 ```
 
-### Interactive Documentation
+### Workflow Engine
 
-Generate OpenAPI-style documentation for your A2A agents:
+The new workflow engine allows you to define complex agent interactions:
 
 ```python
-from python_a2a import AgentCard, generate_a2a_docs, generate_html_docs
-import os
+from python_a2a import AgentNetwork, Flow
+import asyncio
 
-# Create or load agent card
-agent_card = AgentCard(...)
+async def main():
+    # Set up agent network
+    network = AgentNetwork()
+    network.add("research", "http://localhost:5001")
+    network.add("summarizer", "http://localhost:5002")
+    network.add("factchecker", "http://localhost:5003")
+    
+    # Define a workflow for research report generation
+    flow = Flow(agent_network=network, name="Research Report Workflow")
+    
+    # First, gather initial research
+    flow.ask("research", "Research the latest developments in {topic}")
+    
+    # Then process the results in parallel
+    parallel_results = (flow.parallel()
+        # Branch 1: Create a summary
+        .ask("summarizer", "Summarize this research: {latest_result}")
+        # Branch 2: Verify key facts
+        .branch()
+        .ask("factchecker", "Verify these key facts: {latest_result}")
+        # End parallel processing and collect results
+        .end_parallel(max_concurrency=2))
+    
+    # Extract insights based on verification results
+    flow.execute_function(
+        lambda results, context: f"Summary: {results['1']}\nVerified Facts: {results['2']}",
+        parallel_results
+    )
+    
+    # Execute the workflow
+    result = await flow.run({
+        "topic": "quantum computing advancements in 2025"
+    })
+    
+    print(result)
 
-# Generate documentation
-docs_dir = "docs"
-os.makedirs(docs_dir, exist_ok=True)
+if __name__ == "__main__":
+    asyncio.run(main())
+```
 
-# Create OpenAPI spec
-spec = generate_a2a_docs(agent_card, docs_dir)
+### AI-Powered Router
 
-# Generate HTML documentation
-html = generate_html_docs(spec)
-with open(os.path.join(docs_dir, "index.html"), "w") as f:
-    f.write(html)
+Intelligent routing to select the best agent for each query:
+
+```python
+from python_a2a import AgentNetwork, AIAgentRouter, A2AClient
+import asyncio
+
+async def main():
+    # Create a network with specialized agents
+    network = AgentNetwork()
+    network.add("math", "http://localhost:5001")
+    network.add("history", "http://localhost:5002")
+    network.add("science", "http://localhost:5003")
+    network.add("literature", "http://localhost:5004")
+    
+    # Create a router using an LLM for decision making
+    router = AIAgentRouter(
+        llm_client=A2AClient("http://localhost:5000/openai"),
+        agent_network=network
+    )
+    
+    # Sample queries to route
+    queries = [
+        "What is the formula for the area of a circle?",
+        "Who wrote The Great Gatsby?",
+        "When did World War II end?",
+        "How does photosynthesis work?",
+        "What are Newton's laws of motion?"
+    ]
+    
+    # Route each query to the best agent
+    for query in queries:
+        agent_name, confidence = router.route_query(query)
+        agent = network.get_agent(agent_name)
+        
+        print(f"Query: {query}")
+        print(f"Routed to: {agent_name} (confidence: {confidence:.2f})")
+        
+        # Get response from the selected agent
+        response = agent.ask(query)
+        print(f"Response: {response[:100]}...\n")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Command Line Interface
+
+The new CLI provides easy access to agent functionality:
+
+```bash
+# Send a message to an agent
+a2a send http://localhost:5000 "What is artificial intelligence?"
+
+# Stream a response in real-time
+a2a stream http://localhost:5000 "Generate a step-by-step tutorial for making pasta"
+
+# Start an OpenAI-powered A2A server
+a2a openai --model gpt-4 --system-prompt "You are a helpful coding assistant"
+
+# Start an Anthropic-powered A2A server
+a2a anthropic --model claude-3-opus-20240229 --system-prompt "You are a friendly AI teacher"
+
+# Start an MCP server with tools
+a2a mcp-serve --name "Data Analysis MCP" --port 5001 --script analysis_tools.py
+
+# Start an MCP-enabled A2A agent
+a2a mcp-agent --servers data=http://localhost:5001 calc=http://localhost:5002
+
+# Call an MCP tool directly
+a2a mcp-call http://localhost:5001 analyze_csv --params file=data.csv columns=price,date
+
+# Manage agent networks
+a2a network --add weather=http://localhost:5001 travel=http://localhost:5002 --save network.json
+
+# Run a workflow from a script
+a2a workflow --script research_workflow.py --context initial_data.json
 ```
 
 ## 📖 Architecture & Design Principles
@@ -498,13 +541,15 @@ Python A2A is built on three core design principles:
 
 3. **Progressive Enhancement**: Start simple and add complexity only as needed
 
-The architecture consists of five main components:
+The architecture consists of seven main components:
 
 - **Models**: Data structures representing A2A messages, tasks, and agent cards
-- **Client**: Components for sending messages to A2A agents
+- **Client**: Components for sending messages to A2A agents and managing agent networks
 - **Server**: Components for building A2A-compatible agents
 - **MCP**: Tools for implementing Model Context Protocol servers and clients
+- **Workflow**: Engine for orchestrating complex agent interactions
 - **Utils**: Helper functions for common tasks
+- **CLI**: Command-line interface for interacting with agents
 
 ## 🗺️ Use Cases
 
@@ -514,80 +559,166 @@ Python A2A can be used to build a wide range of AI systems:
 
 - **Experimentation Framework**: Easily swap out different LLM backends while keeping the same agent interface
 - **Benchmark Suite**: Compare performance of different agent implementations on standardized tasks
+- **Streaming Research Assistants**: Create responsive research tools with real-time output using streaming
 
 ### Enterprise Systems
 
-- **AI Orchestration**: Coordinate multiple AI agents across different departments
+- **AI Orchestration**: Coordinate multiple AI agents across different departments using agent networks
 - **Legacy System Integration**: Wrap legacy systems with A2A interfaces for AI accessibility
+- **Complex Workflows**: Create sophisticated business processes with multi-agent workflows and conditional branching
 
 ### Customer-Facing Applications
 
 - **Multi-Stage Assistants**: Break complex user queries into subtasks handled by specialized agents
 - **Tool-Using Agents**: Connect LLMs to database agents, calculation agents, and more using MCP
+- **Real-time Chat Interfaces**: Build responsive chat applications with streaming response support
 
 ### Education & Training
 
 - **AI Education**: Create educational systems that demonstrate agent collaboration
 - **Simulation Environments**: Build simulated environments where multiple agents interact
+- **Educational Workflows**: Design step-by-step learning processes with feedback loops
 
 ## 🛠️ Real-World Examples
 
-### Weather Information System
+### Multi-Agent Customer Support System
 
-Let's build a simple weather information system using A2A agents:
-
-1. **Weather Data Agent**: Provides current weather and forecasts
-2. **Travel Recommendation Agent**: Uses weather data to make travel suggestions
-3. **User Interface Agent**: Orchestrates the other agents to answer user queries
+Let's build an advanced customer support system using the new features in Python A2A 0.4.0:
 
 ```python
-# Weather Data Agent
-@agent(name="Weather API", description="Weather data source")
-class WeatherAgent(A2AServer):
-    @skill(name="Get Weather", description="Get current weather")
-    def get_weather(self, location):
-        # Implementation...
-        return weather_data
+from python_a2a import A2AServer, AgentNetwork, AIAgentRouter, Flow, StreamingClient
+from python_a2a.mcp import FastMCP, A2AMCPAgent, text_response
+import asyncio
 
-# Travel Recommendation Agent
-@agent(name="Travel Advisor", description="Travel recommendations")
-class TravelAgent(A2AServer):
-    def __init__(self):
-        super().__init__()
-        self.weather_client = A2AClient("http://localhost:5001")
-    
-    @skill(name="Recommend Destination", description="Suggest travel destinations")
-    def recommend(self, preferences):
-        # Get weather for potential destinations
-        weather_data = self.weather_client.ask(f"Get weather for {destination}")
-        # Make recommendations based on weather and preferences
-        return recommendations
+# Create specialized MCP servers for different functions
+product_db_mcp = FastMCP(name="Product Database")
 
-# User Interface Agent
-@agent(name="Travel Assistant", description="Your personal travel assistant")
-class AssistantAgent(A2AServer):
+@product_db_mcp.tool()
+async def search_products(query: str) -> dict:
+    """Search for products in the database."""
+    # In a real implementation, this would query a database
+    return {"products": [{"id": 101, "name": "Super Laptop", "price": 999.99}]}
+
+@product_db_mcp.tool()
+async def get_product_details(product_id: int) -> dict:
+    """Get detailed information about a product."""
+    return {
+        "id": product_id,
+        "name": "Super Laptop",
+        "description": "Powerful laptop with 16GB RAM and 512GB SSD",
+        "price": 999.99,
+        "availability": "In Stock"
+    }
+
+# Create specialized agents for different functions
+@agent(name="Support Agent", description="Customer support specialist")
+class SupportAgent(A2AServer, A2AMCPAgent):
     def __init__(self):
-        super().__init__()
-        self.weather_client = A2AClient("http://localhost:5001")
-        self.travel_client = A2AClient("http://localhost:5002")
+        A2AServer.__init__(self)
+        A2AMCPAgent.__init__(
+            self,
+            name="Support Agent",
+            description="Handles customer inquiries",
+            mcp_servers={"products": product_db_mcp}
+        )
     
-    def handle_task(self, task):
-        # Extract user query
+    async def handle_task_async(self, task):
+        # Process customer query
         text = task.message.get("content", {}).get("text", "")
         
-        if "weather" in text.lower():
-            # Forward to weather agent
-            response = self.weather_client.ask(text)
-        elif "recommend" in text.lower() or "suggest" in text.lower():
-            # Forward to travel agent
-            response = self.travel_client.ask(text)
+        if "product" in text.lower():
+            # Search for products
+            search_results = await self.call_mcp_tool("products", "search_products", query=text)
+            
+            if search_results.get("products"):
+                product = search_results["products"][0]
+                details = await self.call_mcp_tool("products", "get_product_details", product_id=product["id"])
+                
+                task.artifacts = [{
+                    "parts": [{"type": "text", "text": f"I found this product: {details['name']}\n\n"
+                                                     f"Price: ${details['price']}\n"
+                                                     f"Description: {details['description']}\n"
+                                                     f"Availability: {details['availability']}"}]
+                }]
+            else:
+                task.artifacts = [{
+                    "parts": [{"type": "text", "text": "I couldn't find any products matching your query."}]
+                }]
         else:
-            # General response
-            response = "I can help with weather information and travel recommendations."
+            task.artifacts = [{
+                "parts": [{"type": "text", "text": "How can I help you with our products today?"}]
+            }]
         
-        # Create artifact with response
-        task.artifacts = [{"parts": [{"type": "text", "text": response}]}]
         return task
+
+# Create a network of agents
+async def setup_agent_network():
+    network = AgentNetwork(name="Customer Support Network")
+    
+    # Add agents to the network
+    network.add("support", "http://localhost:5001")
+    network.add("billing", "http://localhost:5002")
+    network.add("technical", "http://localhost:5003")
+    
+    # Create a router
+    router = AIAgentRouter(
+        llm_client=network.get_agent("support"),
+        agent_network=network
+    )
+    
+    # Define a workflow for handling customer inquiries
+    flow = Flow(agent_network=network, router=router, name="Customer Support Workflow")
+    
+    # Route the initial query
+    flow.auto_route("{customer_query}")
+    
+    # If the query is about a technical issue, follow up with specific questions
+    flow.if_contains("technical")
+    flow.ask("technical", "What operating system are you using? Please provide details about {latest_result}")
+    flow.else_if_contains("billing")
+    flow.ask("billing", "Can you provide your order number related to {latest_result}")
+    flow.else_branch()
+    flow.ask("support", "Thank you for your query. Let me check on {latest_result}")
+    flow.end_if()
+    
+    return network, flow
+
+# Main customer support application
+async def main():
+    # Set up the agent network and workflow
+    network, workflow = await setup_agent_network()
+    
+    # Create a streaming client to get real-time responses
+    client = StreamingClient("http://localhost:5001")
+    
+    # Simulate a customer query
+    print("Customer: I need information about your laptop products")
+    
+    # Stream the response
+    print("\nSupport Agent (streaming):")
+    
+    def print_chunk(chunk):
+        print(chunk, end="", flush=True)
+    
+    # Create and stream a task
+    task = await client.create_task("I need information about your laptop products")
+    
+    async for chunk in client.stream_task(task, chunk_callback=print_chunk):
+        pass  # Chunks are handled by the callback
+    
+    print("\n\nNext Steps:")
+    
+    # Run the workflow with the customer query
+    result = await workflow.run({
+        "customer_query": "I'm having technical problems with my Super Laptop"
+    })
+    
+    print(result)
+
+# Run the application
+if __name__ == "__main__":
+    # In a real application, you would start each agent in a separate process
+    asyncio.run(main())
 ```
 
 ## 📚 Documentation
@@ -670,7 +801,7 @@ If you use Python A2A in your research or academic work, please cite it as:
   author = {Desai, Manoj},
   title = {Python A2A: A Comprehensive Implementation of the Agent-to-Agent Protocol},
   url = {https://github.com/themanojdesai/python-a2a},
-  version = {0.3.2},
+  version = {0.4.0},
   year = {2025},
 }
 ```
