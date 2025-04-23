@@ -36,7 +36,7 @@ echo "Using $PYTHON_VERSION"
 
 # Check for required tools
 echo -e "${GREEN}Checking for required tools...${NC}"
-REQUIRED_TOOLS=("git" "grep" "sed" "awk")
+REQUIRED_TOOLS=("git" "grep" "sed" "awk" "perl")
 MISSING_TOOLS=()
 
 for tool in "${REQUIRED_TOOLS[@]}"; do
@@ -80,51 +80,71 @@ find . -type d -name "*.egg-info" -exec rm -rf {} +
 find . -type d -name "__pycache__" -exec rm -rf {} +
 find . -type f -name "*.pyc" -delete
 
-# Update version numbers in files
-echo -e "${GREEN}Updating version numbers...${NC}"
-
-# Function to update version in a file
+# Function to safely update version in a file
 update_version() {
     local file=$1
     local pattern=$2
-    local replacement=$3
-    local backup_ext=".bak"
     
-    if [ -f "$file" ]; then
-        echo "  Updating $file"
-        sed -i$backup_ext "$pattern" "$file"
-        rm -f "${file}${backup_ext}"
-        return 0
-    else
+    if [ ! -f "$file" ]; then
         echo -e "  ${YELLOW}Warning: $file not found${NC}"
         return 1
     fi
+    
+    echo "  Updating $file"
+    
+    # Create a backup before making changes
+    cp "$file" "${file}.bak"
+    
+    # Use perl for reliable in-place editing with the provided pattern
+    perl -pi -e "$pattern" "$file"
+    
+    # Verify nothing went wrong (line count should be the same)
+    orig_lines=$(wc -l < "${file}.bak")
+    new_lines=$(wc -l < "$file")
+    
+    if [ "$orig_lines" != "$new_lines" ]; then
+        echo -e "  ${RED}ERROR: Line count changed. Restoring original file.${NC}"
+        mv "${file}.bak" "$file"
+        return 1
+    fi
+    
+    # Check if any changes were actually made
+    if diff -q "$file" "${file}.bak" > /dev/null; then
+        echo -e "  ${YELLOW}Warning: No version patterns found in $file${NC}"
+        rm -f "${file}.bak"
+        return 1
+    fi
+    
+    # Remove backup if all checks pass
+    rm -f "${file}.bak"
+    return 0
 }
 
-# Files to commit
+# Update version numbers in files
+echo -e "${GREEN}Updating version numbers...${NC}"
+
+# Files to check and update with their specific patterns
+declare -a files_to_update=(
+    "python_a2a/__init__.py:s/__version__ = \"[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*\"/__version__ = \"$VERSION\"/"
+    "pyproject.toml:s/version = \"[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*\"/version = \"$VERSION\"/"
+    "setup.py:s/version=\"[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*\"/version=\"$VERSION\"/"
+    ".uv/UVManifest.toml:s/version = \"[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*\"/version = \"$VERSION\"/"
+    "UVManifest.toml:s/version = \"[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*\"/version = \"$VERSION\"/"
+)
+
+# Files that were actually updated
 files_to_commit=()
 
-# Update __init__.py
-if update_version "python_a2a/__init__.py" "s/__version__ = \"[0-9.]*\"/__version__ = \"$VERSION\"/" ; then
-    files_to_commit+=("python_a2a/__init__.py")
-fi
-
-# Update pyproject.toml
-if update_version "pyproject.toml" "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" ; then
-    files_to_commit+=("pyproject.toml")
-fi
-
-# Update setup.py
-if update_version "setup.py" "s/version=\"[0-9.]*\"/version=\"$VERSION\"/" ; then
-    files_to_commit+=("setup.py")
-fi
-
-# Update UVManifest.toml if exists
-if update_version ".uv/UVManifest.toml" "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" ; then
-    files_to_commit+=(".uv/UVManifest.toml")
-elif update_version "UVManifest.toml" "s/version = \"[0-9.]*\"/version = \"$VERSION\"/" ; then
-    files_to_commit+=("UVManifest.toml")
-fi
+# Update each file
+for file_entry in "${files_to_update[@]}"; do
+    # Split the entry into file path and pattern
+    file=$(echo "$file_entry" | cut -d':' -f1)
+    pattern=$(echo "$file_entry" | cut -d':' -f2-)
+    
+    if update_version "$file" "$pattern"; then
+        files_to_commit+=("$file")
+    fi
+done
 
 echo -e "${GREEN}Version numbers updated to $VERSION${NC}"
 
@@ -573,23 +593,58 @@ deactivate
 # Clean up any existing environment
 rm -rf $VERIFY_ENV
 
-# Wait a bit for PyPI to process the upload
+# Wait for PyPI to process the upload - may take some time
 echo "Waiting for PyPI to process the package..."
-sleep 30
+# Longer initial wait
+sleep 60
 
+# Create verification environment
 if $USE_UV; then
     echo "Creating verification environment with UV..."
     uv venv $VERIFY_ENV
     source $VERIFY_ENV/bin/activate
-    uv pip install "python-a2a==$VERSION"
 else
     echo "Creating verification environment with pip..."
     $PYTHON_CMD -m venv $VERIFY_ENV
     source $VERIFY_ENV/bin/activate
-    $PYTHON_CMD -m pip install "python-a2a==$VERSION"
 fi
 
-# Test core imports again
+# Try several times with increasing delays
+MAX_ATTEMPTS=5
+for (( attempt=1; attempt<=MAX_ATTEMPTS; attempt++ ))
+do
+    echo "Attempt $attempt/$MAX_ATTEMPTS to install $VERSION from PyPI..."
+    
+    if $USE_UV; then
+        uv pip install "python-a2a==$VERSION" && break
+    else
+        $PYTHON_CMD -m pip install "python-a2a==$VERSION" && break
+    fi
+    
+    echo "Package not available yet. Waiting longer..."
+    # Exponential backoff
+    sleep $((30 * attempt))
+    
+    if [ $attempt -eq $MAX_ATTEMPTS ]; then
+        echo -e "${YELLOW}Could not verify the package after $MAX_ATTEMPTS attempts.${NC}"
+        echo -e "${YELLOW}This is often normal - PyPI can take 5-15 minutes to process new packages.${NC}"
+        echo -e "${YELLOW}You can verify manually later with: pip install python-a2a==$VERSION${NC}"
+        deactivate
+        rm -rf $VERIFY_ENV
+        
+        echo -e "${BLUE}"
+        echo "==============================================="
+        echo "    🎉 Release process completed! 🎉"
+        echo "==============================================="
+        echo -e "${NC}"
+        exit 0
+    fi
+done
+
+# If we got here, the installation was successful
+echo -e "${GREEN}Successfully installed python-a2a $VERSION from PyPI!${NC}"
+
+# Test core imports
 $PYTHON_CMD -c "import python_a2a; print(f'Installed version: {python_a2a.__version__}')"
 VERIFY_RESULT=$?
 

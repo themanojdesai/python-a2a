@@ -2,11 +2,11 @@
 # This file enables reproducible builds with UV
 
 [manifest]
-version = "0.4.3a"  # UVManifest version
+version = "0.4.4"  # UVManifest version
 
 [project]
 name = "python-a2a"
-version = "0.4.3a"  # Updated version
+version = "0.4.4"  # Updated version
 
 [python]
 # List of Python versions supported by the project
@@ -42,4 +42,3 @@ pytest-cov = ">=2.12.0"
 black = ">=21.5b2"
 flake8 = ">=3.9.2"
 mypy = ">=0.812"
-responses = ">=0.13.3"
