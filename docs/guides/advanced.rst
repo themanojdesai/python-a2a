@@ -148,7 +148,7 @@ You can add authentication to your A2A agents to protect them from unauthorized 
             @app.before_request
             def authenticate():
                 # Skip authentication for agent card
-                if request.path in ["/", "/a2a", "/agent.json", "/a2a/agent.json"]:
+                if request.path in ["/", "/a2a", "/.well-known/agent.json", "/a2a/agent.json"]:
                     return None
                 
                 # Check for Authorization header

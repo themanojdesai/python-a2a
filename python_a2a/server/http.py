@@ -140,7 +140,7 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
         response.headers['Content-Type'] = 'text/html; charset=utf-8'
         return response
     
-    @app.route("/agent.json", methods=["GET"])
+    @app.route("/.well-known/agent.json", methods=["GET"])
     def enhanced_root_agent_json():
         """Root agent.json endpoint"""
         return enhanced_a2a_agent_json()

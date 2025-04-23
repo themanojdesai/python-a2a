@@ -30,7 +30,7 @@ class TestA2AClient:
         # Mock all possible agent card and task endpoints 
         responses.add(
             responses.GET,
-            "https://example.com/agent.json",
+            "https://example.com/.well-known/agent.json",
             json={"error": "Not found"},
             status=404
         )
@@ -84,7 +84,7 @@ class TestA2AClient:
         # Mock the agent card endpoints to prevent additional calls
         responses.add(
             responses.GET,
-            "https://example.com/agent.json",
+            "https://example.com/.well-known/agent.json",
             json={"error": "Not found"},
             status=404
         )

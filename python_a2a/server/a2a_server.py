@@ -164,7 +164,7 @@ class A2AServer(BaseA2AServer):
             return jsonify({
                 "name": self.agent_card.name,
                 "description": self.agent_card.description,
-                "agent_card_url": "/agent.json",
+                "agent_card_url": "/.well-known/agent.json",
                 "protocol": "a2a"
             })
             
@@ -215,7 +215,7 @@ class A2AServer(BaseA2AServer):
             return jsonify(self.agent_card.to_dict())
             
         # Also support the standard agent.json at the root
-        @app.route("/agent.json", methods=["GET"])
+        @app.route("/.well-known/agent.json", methods=["GET"])
         def agent_card():
             """Return the agent card as JSON (standard location)"""
             return jsonify(self.agent_card.to_dict())
