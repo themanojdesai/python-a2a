@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-a2a"
-version = "0.4.1"  # Updated version
+version = "0.4.2"  # Updated version
 description = "A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -95,7 +95,7 @@ line_length = 88
 multi_line_output = 3
 
 [tool.mypy]
-python_version = "0.3.3"
+python_version = "0.4.2"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

@@ -20,7 +20,7 @@ except:
 # For modern installations, please use pyproject.toml with pip or uv
 setup(
     name="python_a2a",
-    version="0.4.1",  # Updated version
+    version="0.4.2",  # Updated version
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
