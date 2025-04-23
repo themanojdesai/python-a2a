@@ -22,7 +22,7 @@ Python A2A is a comprehensive, production-ready library for implementing Google'
 
 The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation, while MCP extends this capability by providing a standardized way for agents to access external tools and data sources. Python A2A makes these protocols accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
 
-## 📋 What's New in v0.4.X
+## 📋 What's New in v0.4.4
 
 - **Agent Network System**: Manage and discover multiple agents with the new `AgentNetwork` class
 - **Real-time Streaming**: Implement streaming responses with `StreamingClient` for responsive UIs
