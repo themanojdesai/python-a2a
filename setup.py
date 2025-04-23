@@ -1,8 +1,5 @@
 """
 Setup script for python-a2a.
-
-This setup script is maintained for backward compatibility.
-For modern installations, please use pyproject.toml with pip or uv.
 """
 
 from setuptools import setup, find_packages
@@ -16,11 +13,9 @@ try:
 except:
     long_description = "A Python library for Google's Agent-to-Agent (A2A) protocol"
 
-# This setup.py is maintained for backward compatibility
-# For modern installations, please use pyproject.toml with pip or uv
 setup(
-    name="python_a2a",
-    version="0.4.2",  # Updated version
+    name="python-a2a",
+    version="0.4.3",
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -32,7 +27,7 @@ setup(
         "Documentation": "https://python-a2a.readthedocs.io",
         "Source Code": "https://github.com/themanojdesai/python-a2a",
     },
-    packages=find_packages(),
+    packages=find_packages(include=['python_a2a', 'python_a2a.*']),
     package_data={
         "python_a2a": ["py.typed"],
     },
@@ -50,9 +45,32 @@ setup(
     ],
     keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface, mcp, model-context-protocol, aws-bedrock",
     python_requires=">=3.9",
+    # Include all dependencies by default
     install_requires=[
+        # Core dependencies
         "requests>=2.25.0",
+        
+        # Server dependencies
+        "flask>=2.0.0",
+        "aiohttp>=3.8.0",
+        
+        # OpenAI dependencies
+        "openai>=1.0.0",
+        
+        # Anthropic dependencies
+        "anthropic>=0.3.0",
+        
+        # AWS Bedrock dependencies
+        "boto3>=1.26.0",
+        "botocore>=1.29.0",
+        
+        # MCP dependencies
+        "httpx>=0.23.0",
+        "fastapi>=0.95.0",
+        "uvicorn>=0.21.0",
+        "pydantic>=1.10.7",
     ],
+    # Keep extras for backward compatibility
     extras_require={
         "dev": [
             "pytest>=6.0.0",
@@ -64,7 +82,7 @@ setup(
         ],
         "server": [
             "flask>=2.0.0",
-            "aiohttp>=3.8.0",  # Added for streaming support
+            "aiohttp>=3.8.0",
         ],
         "openai": [
             "openai>=1.0.0",
@@ -92,7 +110,7 @@ setup(
             "fastapi>=0.95.0",
             "uvicorn>=0.21.0",
             "pydantic>=1.10.7",
-            "aiohttp>=3.8.0",  # Added for streaming support
+            "aiohttp>=3.8.0",
         ],
     },
     entry_points={

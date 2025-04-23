@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 # Import basic exceptions first as they're used everywhere
 from .exceptions import (
@@ -18,215 +18,204 @@ from .exceptions import (
     A2AConfigurationError
 )
 
-# Import core models
-try:
-    from .models.base import BaseModel
-    from .models.message import Message, MessageRole
-    from .models.conversation import Conversation
-    from .models.content import (
-        ContentType,
-        TextContent,
-        FunctionParameter,
-        FunctionCallContent,
-        FunctionResponseContent,
-        ErrorContent,
-        Metadata
-    )
-    
-    # Try to import newer models
+# Setup feature flags and import tracking
+import sys
+import importlib.util
+import warnings
+
+# Initialize feature flags
+HAS_MODELS = True
+HAS_ADVANCED_MODELS = True
+HAS_CLIENT_BASE = True
+HAS_HTTP_CLIENT = True
+HAS_LLM_CLIENTS = True
+HAS_ADVANCED_CLIENTS = True
+HAS_SERVER_BASE = True
+HAS_SERVER = True
+HAS_LLM_SERVERS = True
+HAS_UTILS = True
+HAS_DECORATORS = True
+HAS_WORKFLOW = True
+HAS_DOCS = True
+HAS_CLI = True
+HAS_MCP = True
+
+# Define a helper function to check if a module exists
+def _check_module(module_name):
+    """Check if a module exists without importing it"""
+    return importlib.util.find_spec(module_name) is not None
+
+# Define a function to import a module and handle import errors
+def _safe_import(import_statement, error_message, feature_flag=None):
+    """Execute an import statement safely and set a feature flag if provided"""
     try:
-        from .models.agent import AgentCard, AgentSkill
-        from .models.task import Task, TaskStatus, TaskState
-        HAS_ADVANCED_MODELS = True
-    except ImportError:
-        HAS_ADVANCED_MODELS = False
+        exec(import_statement)
+        return True
+    except ImportError as e:
+        # Only show warnings in verbose mode
+        if "--verbose" in sys.argv or "--debug" in sys.argv:
+            warnings.warn(f"{error_message}: {e}", ImportWarning)
+        if feature_flag:
+            globals()[feature_flag] = False
+        return False
+    except Exception as e:
+        # Only show warnings in verbose mode
+        if "--verbose" in sys.argv or "--debug" in sys.argv:
+            warnings.warn(f"Unexpected error importing {import_statement}: {e}", ImportWarning)
+        if feature_flag:
+            globals()[feature_flag] = False
+        return False
 
-    HAS_MODELS = True
-except ImportError as e:
-    # Handle missing models gracefully
-    import sys
-    print(f"Warning: Basic A2A models not fully available: {e}", file=sys.stderr)
-    HAS_MODELS = False
-    HAS_ADVANCED_MODELS = False
+# Import all modules - we expect all dependencies to be installed now
+_safe_import("""
+from .models.base import BaseModel
+from .models.message import Message, MessageRole
+from .models.conversation import Conversation
+from .models.content import (
+    ContentType,
+    TextContent,
+    FunctionParameter,
+    FunctionCallContent,
+    FunctionResponseContent,
+    ErrorContent,
+    Metadata
+)
+""", "Failed to import basic models", "HAS_MODELS")
 
-# Import basic client functionality
-try:
-    from .client.base import BaseA2AClient
-    HAS_CLIENT_BASE = True
-    
-    # Try to import more advanced client components
-    try:
-        from .client.http import A2AClient
-        HAS_HTTP_CLIENT = True
-    except ImportError:
-        HAS_HTTP_CLIENT = False
-        
-    # Try to import LLM clients
-    try:
-        from .client.llm import OpenAIA2AClient, AnthropicA2AClient
-        HAS_LLM_CLIENTS = True
-    except ImportError:
-        HAS_LLM_CLIENTS = False
-        
-    # Try to import enhanced components
-    try:
-        from .client.network import AgentNetwork
-        from .client.router import AIAgentRouter
-        from .client.streaming import StreamingClient
-        HAS_ADVANCED_CLIENTS = True
-    except ImportError:
-        HAS_ADVANCED_CLIENTS = False
-except ImportError:
-    HAS_CLIENT_BASE = False
-    HAS_HTTP_CLIENT = False
-    HAS_LLM_CLIENTS = False
-    HAS_ADVANCED_CLIENTS = False
+_safe_import("""
+from .models.agent import AgentCard, AgentSkill
+from .models.task import Task, TaskStatus, TaskState
+""", "Failed to import advanced models", "HAS_ADVANCED_MODELS")
 
-# Import server functionality
-try:
-    from .server.base import BaseA2AServer
-    HAS_SERVER_BASE = True
-    
-    try:
-        from .server.http import run_server
-        from .server.a2a_server import A2AServer
-        HAS_SERVER = True
-    except ImportError:
-        HAS_SERVER = False
-    
-    # Try to import LLM servers
-    try:
-        from .server.llm import (
-            OpenAIA2AServer,
-            AnthropicA2AServer,
-            BedrockA2AServer
-        )
-        HAS_LLM_SERVERS = True
-    except ImportError:
-        HAS_LLM_SERVERS = False
-except ImportError:
-    HAS_SERVER_BASE = False
-    HAS_SERVER = False
-    HAS_LLM_SERVERS = False
+_safe_import("""
+from .client.base import BaseA2AClient
+""", "Failed to import client base", "HAS_CLIENT_BASE")
 
-# Import utility functions conditionally
-try:
-    from .utils.formatting import (
-        format_message_as_text,
-        format_conversation_as_text,
-        pretty_print_message,
-        pretty_print_conversation
-    )
-    from .utils.validation import (
-        validate_message,
-        validate_conversation,
-        is_valid_message,
-        is_valid_conversation
-    )
-    from .utils.conversion import (
-        create_text_message,
-        create_function_call,
-        create_function_response,
-        create_error_message,
-        format_function_params,
-        conversation_to_messages
-    )
-    
-    # Try to import decorators
-    try:
-        from .utils.decorators import (
-            skill,
-            agent
-        )
-        HAS_DECORATORS = True
-    except ImportError:
-        HAS_DECORATORS = False
-        
-    HAS_UTILS = True
-except ImportError:
-    HAS_UTILS = False
-    HAS_DECORATORS = False
+_safe_import("""
+from .client.http import A2AClient
+""", "Failed to import HTTP client", "HAS_HTTP_CLIENT")
 
-# Try to import workflow system
-try:
-    from .workflow import (
-        Flow,
-        WorkflowContext,
-        WorkflowStep,
-        QueryStep,
-        AutoRouteStep,
-        FunctionStep,
-        ConditionalBranch,
-        ConditionStep,
-        ParallelStep,
-        ParallelBuilder,
-        StepType
-    )
-    HAS_WORKFLOW = True
-except ImportError:
-    HAS_WORKFLOW = False
+_safe_import("""
+from .client.llm import OpenAIA2AClient, AnthropicA2AClient
+""", "Failed to import LLM clients", "HAS_LLM_CLIENTS")
 
-# Import documentation utilities conditionally
-try:
-    from .docs import (
-        generate_a2a_docs,
-        generate_html_docs
-    )
-    HAS_DOCS = True
-except ImportError:
-    HAS_DOCS = False
+_safe_import("""
+from .client.network import AgentNetwork
+from .client.router import AIAgentRouter
+from .client.streaming import StreamingClient
+""", "Failed to import advanced client features", "HAS_ADVANCED_CLIENTS")
 
-# Try to import CLI
-try:
-    from .cli import main as cli_main
-    HAS_CLI = True
-except ImportError:
-    HAS_CLI = False
+_safe_import("""
+from .server.base import BaseA2AServer
+""", "Failed to import server base", "HAS_SERVER_BASE")
 
-# Import MCP integration with improved error handling
-try:
-    # MCP client
-    from .mcp.client import (
-        MCPClient,
-        MCPError,
-        MCPConnectionError,
-        MCPTimeoutError,
-        MCPToolError,
-        MCPTools
-    )
+_safe_import("""
+from .server.http import run_server
+from .server.a2a_server import A2AServer
+""", "Failed to import server", "HAS_SERVER")
 
-    # MCP agent integration
-    from .mcp.agent import MCPEnabledAgent
+_safe_import("""
+from .server.llm import (
+    OpenAIA2AServer,
+    AnthropicA2AServer,
+    BedrockA2AServer
+)
+""", "Failed to import LLM servers", "HAS_LLM_SERVERS")
 
-    # FastMCP implementation
-    from .mcp.fastmcp import (
-        FastMCP,
-        MCPResponse,
-        text_response,
-        error_response,
-        image_response,
-        multi_content_response,
-        ContentType as MCPContentType
-    )
+_safe_import("""
+from .utils.formatting import (
+    format_message_as_text,
+    format_conversation_as_text,
+    pretty_print_message,
+    pretty_print_conversation
+)
+from .utils.validation import (
+    validate_message,
+    validate_conversation,
+    is_valid_message,
+    is_valid_conversation
+)
+from .utils.conversion import (
+    create_text_message,
+    create_function_call,
+    create_function_response,
+    create_error_message,
+    format_function_params,
+    conversation_to_messages
+)
+""", "Failed to import utilities", "HAS_UTILS")
 
-    # Improved agent integration
-    from .mcp.integration import (
-        FastMCPAgent,
-        A2AMCPAgent
-    )
+_safe_import("""
+from .utils.decorators import (
+    skill,
+    agent
+)
+""", "Failed to import decorators", "HAS_DECORATORS")
 
-    # Proxy functionality
-    from .mcp.proxy import create_proxy_server
+_safe_import("""
+from .workflow import (
+    Flow,
+    WorkflowContext,
+    WorkflowStep,
+    QueryStep,
+    AutoRouteStep,
+    FunctionStep,
+    ConditionalBranch,
+    ConditionStep,
+    ParallelStep,
+    ParallelBuilder,
+    StepType
+)
+""", "Failed to import workflow system", "HAS_WORKFLOW")
 
-    # Transport for easy imports
-    from .mcp.transport import create_fastapi_app
+_safe_import("""
+from .docs import (
+    generate_a2a_docs,
+    generate_html_docs
+)
+""", "Failed to import documentation utilities", "HAS_DOCS")
 
-    HAS_MCP = True
-except ImportError as e:
-    # Print more detailed error information to help diagnose import issues
-    import sys
-    print(f"Warning: MCP module could not be imported: {e}", file=sys.stderr)
-    HAS_MCP = False
+_safe_import("""
+from .cli import main as cli_main
+""", "Failed to import CLI", "HAS_CLI")
+
+_safe_import("""
+# MCP client
+from .mcp.client import (
+    MCPClient,
+    MCPError,
+    MCPConnectionError,
+    MCPTimeoutError,
+    MCPToolError,
+    MCPTools
+)
+
+# MCP agent integration
+from .mcp.agent import MCPEnabledAgent
+
+# FastMCP implementation
+from .mcp.fastmcp import (
+    FastMCP,
+    MCPResponse,
+    text_response,
+    error_response,
+    image_response,
+    multi_content_response,
+    ContentType as MCPContentType
+)
+
+# Improved agent integration
+from .mcp.integration import (
+    FastMCPAgent,
+    A2AMCPAgent
+)
+
+# Proxy functionality
+from .mcp.proxy import create_proxy_server
+
+# Transport for easy imports
+from .mcp.transport import create_fastapi_app
+""", "Failed to import MCP module", "HAS_MCP")
 
 # Define __all__ based on what was successfully imported
 __all__ = [
@@ -394,3 +383,32 @@ if HAS_MCP:
         # Transport
         'create_fastapi_app'
     ])
+
+# Add a single informational message about potential missing dependencies
+def check_and_report_issues():
+    """Check for any potential issues and report if necessary"""
+    # Only show this in verbose or debug mode
+    if "--verbose" not in sys.argv and "--debug" not in sys.argv:
+        return
+    
+    issues = []
+    
+    # Check for critical missing features
+    if not HAS_MODELS:
+        issues.append("Basic models not available - check package installation")
+    if not HAS_CLIENT_BASE:
+        issues.append("Client functionality not available - check package installation")
+    if not HAS_SERVER_BASE:
+        issues.append("Server functionality not available - check package installation")
+    if not HAS_MCP:
+        issues.append("MCP functionality not available - check package installation")
+    
+    if issues:
+        print("\nWarning: Python A2A detected issues:")
+        for issue in issues:
+            print(f"  - {issue}")
+        print("\nReinstall the package with: pip install --force-reinstall python-a2a\n")
+
+# Only check in verbose mode
+if "--verbose" in sys.argv or "--debug" in sys.argv:
+    check_and_report_issues()
