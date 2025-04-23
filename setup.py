@@ -15,7 +15,7 @@ except:
 
 setup(
     name="python-a2a",
-    version="0.4.3",
+    version="0.4.4",
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -46,6 +46,7 @@ setup(
     keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface, mcp, model-context-protocol, aws-bedrock",
     python_requires=">=3.9",
     # Include all dependencies by default
+    # In setup.py
     install_requires=[
         # Core dependencies
         "requests>=2.25.0",
