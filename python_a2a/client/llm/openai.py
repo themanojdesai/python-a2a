@@ -3,6 +3,8 @@ OpenAI client implementation for the A2A protocol.
 """
 
 import uuid
+import json
+import re
 from typing import List, Dict, Any, Optional, Union
 
 try:
@@ -13,13 +15,14 @@ except ImportError:
 from ...models.message import Message, MessageRole
 from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, FunctionParameter
 from ...models.conversation import Conversation
+from ...models.agent import AgentCard, AgentSkill
 from ..base import BaseA2AClient
 from ...exceptions import A2AImportError, A2AConnectionError
 
 
 class OpenAIA2AClient(BaseA2AClient):
     """
-    A2A client that uses OpenAI API to process messages.
+    A2A client that uses OpenAI's API to process messages.
     
     This client converts A2A messages to OpenAI's format, sends them to the OpenAI API,
     and converts the responses back to A2A format.
@@ -47,6 +50,31 @@ class OpenAIA2AClient(BaseA2AClient):
         self.model = model
         self.temperature = temperature
         self.client = OpenAI(api_key=api_key)
+        
+        # Create a default agent card
+        self.agent_card = AgentCard(
+            name=f"OpenAI {model}",
+            description=f"OpenAI {model} model accessible via A2A",
+            url="https://api.openai.com",
+            version="1.0.0",
+            capabilities={
+                "streaming": True,
+                "pushNotifications": False,
+                "stateTransitionHistory": False
+            },
+            skills=[
+                AgentSkill(
+                    name="Text Generation",
+                    description=f"Generate text using the OpenAI {model} model",
+                    tags=["openai", "language-model", "text-generation"]
+                ),
+                AgentSkill(
+                    name="Function Calling",
+                    description="Use function calling capabilities",
+                    tags=["openai", "function-calling"]
+                )
+            ]
+        )
         
     def send_message(self, message: Message) -> Message:
         """
@@ -193,7 +221,35 @@ class OpenAIA2AClient(BaseA2AClient):
         choice = response.choices[0]
         content = choice.message.content
         
-        # Create an A2A message
+        # Check for function call
+        if hasattr(choice.message, "function_call") and choice.message.function_call:
+            # Extract function call details
+            function_call = choice.message.function_call
+            
+            # Parse arguments as JSON
+            try:
+                args = json.loads(function_call.arguments)
+                parameters = [
+                    FunctionParameter(name=key, value=value)
+                    for key, value in args.items()
+                ]
+            except json.JSONDecodeError:
+                # Handle non-JSON arguments
+                parameters = [FunctionParameter(name="arguments", value=function_call.arguments)]
+            
+            # Create function call content
+            return Message(
+                content=FunctionCallContent(
+                    name=function_call.name,
+                    parameters=parameters
+                ),
+                role=MessageRole.AGENT,
+                message_id=str(uuid.uuid4()),
+                parent_message_id=parent_id,
+                conversation_id=conversation_id
+            )
+        
+        # Create an A2A message with text content
         return Message(
             content=TextContent(text=content),
             role=MessageRole.AGENT,
@@ -201,3 +257,36 @@ class OpenAIA2AClient(BaseA2AClient):
             parent_message_id=parent_id,
             conversation_id=conversation_id
         )
+    
+    def ask(self, message_text):
+        """
+        Simple helper for text-based queries
+        
+        Args:
+            message_text: Text message to send
+            
+        Returns:
+            Text response from the agent
+        """
+        # Check if message is already a Message object
+        if isinstance(message_text, str):
+            message = Message(
+                content=TextContent(text=message_text),
+                role=MessageRole.USER
+            )
+        else:
+            message = message_text
+        
+        # Send message
+        response = self.send_message(message)
+        
+        # Extract text from response
+        if response and hasattr(response, "content"):
+            if hasattr(response.content, "text"):
+                return response.content.text
+            elif hasattr(response.content, "message"):
+                return response.content.message
+            elif response.content is not None:
+                return str(response.content)
+        
+        return "No text response"

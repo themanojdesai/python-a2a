@@ -218,6 +218,47 @@ def start_streaming_server(agent, port, ready_event=None):
             # If there's an error, return it
             return jsonify({"error": str(e)}), 400
     
+    # Add task endpoints to avoid 404 errors
+    @app.route('/tasks/send', methods=['POST'])
+    @app.route('/a2a/tasks/send', methods=['POST'])
+    def handle_task_send():
+        """Handle task send requests."""
+        try:
+            # Extract the request data
+            data = request.json
+            
+            # This is a JSON-RPC request for tasks
+            if "params" in data:
+                # Extract the task from params
+                task_data = data.get("params", {})
+                task = Task.from_dict(task_data)
+                
+                # Process the task
+                result = agent.handle_task(task)
+                
+                # Return JSON-RPC response
+                return jsonify({
+                    "jsonrpc": "2.0",
+                    "id": data.get("id", 1),
+                    "result": result.to_dict()
+                })
+            else:
+                # Direct task submission
+                task = Task.from_dict(data)
+                result = agent.handle_task(task)
+                return jsonify(result.to_dict())
+                
+        except Exception as e:
+            # If there's an error, return it as a JSON-RPC error
+            return jsonify({
+                "jsonrpc": "2.0",
+                "id": data.get("id", 1) if 'data' in locals() else 1,
+                "error": {
+                    "code": -32603,
+                    "message": f"Internal error: {str(e)}"
+                }
+            }), 500
+    
     @app.route('/stream', methods=['POST'])
     def handle_streaming():
         """Handle streaming requests."""
@@ -311,6 +352,7 @@ class EnhancedClient(A2AClient):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.url = self.endpoint_url  # Ensure URL is accessible for compatibility
     
     async def check_streaming_support(self):
         """Check if the agent supports streaming capabilities."""
@@ -321,10 +363,33 @@ class EnhancedClient(A2AClient):
         try:
             # Try to fetch the agent card to check capabilities
             async with aiohttp.ClientSession() as session:
+                headers = dict(self.headers)
+                headers["Accept"] = "application/json"  # Prefer JSON response
+                
                 # Try the primary endpoint
-                async with session.get(f"{self.url}/agent.json") as response:
+                async with session.get(f"{self.url}/agent.json", headers=headers) as response:
                     if response.status == 200:
-                        data = await response.json()
+                        # Check content type
+                        content_type = response.headers.get("Content-Type", "").lower()
+                        
+                        if "json" in content_type:
+                            # Parse as JSON directly
+                            data = await response.json()
+                        else:
+                            # Try to extract JSON from HTML or text
+                            try:
+                                text = await response.text()
+                                # Simple extraction of JSON (could be enhanced)
+                                import re
+                                json_match = re.search(r'({[\s\S]*"capabilities"[\s\S]*})', text)
+                                if json_match:
+                                    import json
+                                    data = json.loads(json_match.group(1))
+                                else:
+                                    data = {}
+                            except:
+                                data = {}
+                        
                         # Check capabilities
                         return (
                             isinstance(data, dict) and
@@ -333,9 +398,29 @@ class EnhancedClient(A2AClient):
                         )
                 
                 # Try the alternate endpoint
-                async with session.get(f"{self.url}/a2a/agent.json") as response:
+                async with session.get(f"{self.url}/a2a/agent.json", headers=headers) as response:
                     if response.status == 200:
-                        data = await response.json()
+                        # Check content type
+                        content_type = response.headers.get("Content-Type", "").lower()
+                        
+                        if "json" in content_type:
+                            # Parse as JSON directly
+                            data = await response.json()
+                        else:
+                            # Try to extract JSON from HTML or text
+                            try:
+                                text = await response.text()
+                                # Simple extraction of JSON (could be enhanced)
+                                import re
+                                json_match = re.search(r'({[\s\S]*"capabilities"[\s\S]*})', text)
+                                if json_match:
+                                    import json
+                                    data = json.loads(json_match.group(1))
+                                else:
+                                    data = {}
+                            except:
+                                data = {}
+                        
                         # Check capabilities
                         return (
                             isinstance(data, dict) and
@@ -344,7 +429,8 @@ class EnhancedClient(A2AClient):
                         )
             
             return False
-        except Exception:
+        except Exception as e:
+            print(f"Error checking streaming support: {e}")
             return False
     
     async def stream_response(self, message, chunk_callback=None):
@@ -375,7 +461,8 @@ class EnhancedClient(A2AClient):
         
         try:
             # Set up headers for streaming
-            headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+            headers = dict(self.headers)
+            headers["Accept"] = "text/event-stream"
             
             # Create a session and send the request
             async with aiohttp.ClientSession() as session:
@@ -424,9 +511,7 @@ class EnhancedClient(A2AClient):
         
         except Exception as e:
             # Fall back to simulated streaming on error
-            error_msg = f"Streaming error (falling back to non-streaming): {str(e)}"
-            if chunk_callback:
-                chunk_callback(error_msg)
+            print(f"Streaming error (falling back to non-streaming): {str(e)}")
             async for chunk in self._simulate_streaming(message, chunk_callback):
                 yield chunk
     
@@ -436,10 +521,17 @@ class EnhancedClient(A2AClient):
         response = self.send_message(message)
         
         # Extract text
-        if hasattr(response.content, "text"):
-            full_text = response.content.text
-        else:
-            full_text = str(response.content)
+        full_text = ""
+        if response and hasattr(response, "content"):
+            if hasattr(response.content, "text"):
+                full_text = response.content.text
+            elif hasattr(response.content, "message"):
+                full_text = response.content.message
+            else:
+                full_text = str(response.content)
+        
+        if not full_text:
+            full_text = "No response received from the agent."
         
         # Break into words to simulate chunks
         words = full_text.split()
@@ -614,6 +706,7 @@ def main():
                       help="Query to send to the streaming agent")
     parser.add_argument("--mode", choices=["simple", "visualize"], default="simple",
                       help="Streaming display mode: simple (continuous) or visualize (chunk by chunk)")
+    parser.add_argument("--debug", action="store_true", help="Show debug information")
     args = parser.parse_args()
     
     print("=== Basic Streaming Example ===\n")
@@ -666,6 +759,9 @@ def main():
     
     try:
         # Check if streaming is supported
+        if args.debug:
+            print("Checking streaming support...")
+            
         supports_streaming = loop.run_until_complete(client.check_streaming_support())
         
         if supports_streaming:
@@ -681,6 +777,12 @@ def main():
             print("✓ Agent supports simulated streaming")
             print("Falling back to simulated streaming mode...")
             
+            # Test the raw message send first if debugging
+            if args.debug:
+                print("Testing direct message send...")
+                response = client.send_message(message)
+                print(f"Direct response received: {response.content.text[:50]}...")
+            
             # Use simulated streaming
             if args.mode == "visualize":
                 loop.run_until_complete(visualize_streaming(client, message))
@@ -691,6 +793,9 @@ def main():
         print("\nStreaming interrupted by user")
     except Exception as e:
         print(f"\nError during streaming: {e}")
+        if args.debug:
+            import traceback
+            traceback.print_exc()
         return 1
     
     return 0
