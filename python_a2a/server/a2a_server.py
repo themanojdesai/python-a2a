@@ -10,7 +10,7 @@ from ..models.agent import AgentCard, AgentSkill
 from ..models.task import Task, TaskStatus, TaskState
 from ..models.message import Message, MessageRole
 from ..models.conversation import Conversation
-from ..models.content import TextContent, ErrorContent
+from ..models.content import TextContent, ErrorContent, FunctionResponseContent, FunctionCallContent
 from .base import BaseA2AServer
 from ..exceptions import A2AConfigurationError
 
@@ -60,45 +60,46 @@ class A2AServer(BaseA2AServer):
     def handle_message(self, message):
         """
         Legacy method for backward compatibility
+        
+        This method is automatically called by handle_task when a message is received.
+        You can override either this method or handle_task.
+        
+        Args:
+            message: The incoming A2A message
+            
+        Returns:
+            The response message
         """
         # Use message handler if provided in constructor
         if hasattr(self, 'message_handler') and self.message_handler:
             return self.message_handler(message)
             
-        # Convert message to task
-        task = Task(message=message.to_dict())
-        
-        # Process task
-        processed_task = self.handle_task(task)
-        
-        # Extract response message
-        if processed_task.status.message:
+        # Default implementation just echoes the text content
+        if message.content.type == "text":
             return Message(
-                content=TextContent(text=processed_task.get_text()),
+                content=TextContent(text=message.content.text),  # Simply echo the text
                 role=MessageRole.AGENT,
                 parent_message_id=message.message_id,
                 conversation_id=message.conversation_id
             )
-        
-        # Create a response from artifacts if available
-        if processed_task.artifacts:
-            # Look for text parts and use the first one
-            for part in processed_task.artifacts[0].get("parts", []):
-                if part.get("type") == "text":
-                    return Message(
-                        content=TextContent(text=part.get("text", "")),
-                        role=MessageRole.AGENT,
-                        parent_message_id=message.message_id,
-                        conversation_id=message.conversation_id
-                    )
-        
-        # Default response
-        return Message(
-            content=TextContent(text="Task processed"),
-            role=MessageRole.AGENT,
-            parent_message_id=message.message_id,
-            conversation_id=message.conversation_id
-        )
+        elif message.content.type == "function_call":
+            # Basic echo for function calls when no handler is defined
+            return Message(
+                content=TextContent(
+                    text=f"Received function call '{message.content.name}' with parameters, but no handler is defined."
+                ),
+                role=MessageRole.AGENT,
+                parent_message_id=message.message_id,
+                conversation_id=message.conversation_id
+            )
+        else:
+            # Basic handling for non-text content
+            return Message(
+                content=TextContent(text="Received a non-text message"),
+                role=MessageRole.AGENT,
+                parent_message_id=message.message_id,
+                conversation_id=message.conversation_id
+            )
     
     def handle_task(self, task):
         """
@@ -106,11 +107,13 @@ class A2AServer(BaseA2AServer):
         
         Override this in your custom server implementation.
         """
-        # Default implementation calls legacy handle_message if exists
+        # Get the message from the task
         message_data = task.message or {}
         
-        # For backward compatibility with tests
-        if hasattr(self, "_handle_message_impl") and self._handle_message_impl:
+        # Check if the subclass has overridden handle_message
+        has_message_handler = hasattr(self, 'handle_message') and self.handle_message != A2AServer.handle_message
+        
+        if has_message_handler or hasattr(self, "_handle_message_impl") and self._handle_message_impl:
             try:
                 # Convert to Message object if it's a dict
                 if isinstance(message_data, dict):
@@ -119,36 +122,121 @@ class A2AServer(BaseA2AServer):
                 else:
                     message = message_data
                     
-                response = self._handle_message_impl(message)
+                # Call the appropriate message handler
+                if has_message_handler:
+                    response = self.handle_message(message)
+                else:
+                    response = self._handle_message_impl(message)
                 
-                # Create artifact from response
-                if hasattr(response, "content") and hasattr(response.content, "text"):
+                # Create artifact based on response content type
+                if hasattr(response, "content"):
+                    content_type = getattr(response.content, "type", None)
+                    
+                    if content_type == "text":
+                        # Handle TextContent
+                        task.artifacts = [{
+                            "parts": [{
+                                "type": "text", 
+                                "text": response.content.text
+                            }]
+                        }]
+                    elif content_type == "function_response":
+                        # Handle FunctionResponseContent
+                        task.artifacts = [{
+                            "parts": [{
+                                "type": "function_response",
+                                "name": response.content.name,
+                                "response": response.content.response
+                            }]
+                        }]
+                    elif content_type == "function_call":
+                        # Handle FunctionCallContent
+                        params = []
+                        for param in response.content.parameters:
+                            params.append({
+                                "name": param.name,
+                                "value": param.value
+                            })
+                        
+                        task.artifacts = [{
+                            "parts": [{
+                                "type": "function_call",
+                                "name": response.content.name,
+                                "parameters": params
+                            }]
+                        }]
+                    elif content_type == "error":
+                        # Handle ErrorContent
+                        task.artifacts = [{
+                            "parts": [{
+                                "type": "error",
+                                "message": response.content.message
+                            }]
+                        }]
+                    else:
+                        # Handle other content types
+                        task.artifacts = [{
+                            "parts": [{
+                                "type": "text", 
+                                "text": str(response.content)
+                            }]
+                        }]
+                else:
+                    # Handle responses without content
                     task.artifacts = [{
                         "parts": [{
-                            "type": "text",
-                            "text": response.content.text
+                            "type": "text", 
+                            "text": str(response)
                         }]
                     }]
             except Exception as e:
-                # Handle errors in legacy handler
+                # Handle errors in message handler
                 task.artifacts = [{
                     "parts": [{
-                        "type": "text", 
-                        "text": f"Error in message handler: {str(e)}"
+                        "type": "error", 
+                        "message": f"Error in message handler: {str(e)}"
                     }]
                 }]
         else:
-            # Echo the message for test compatibility
+            # Basic echo response when no message handler exists
             content = message_data.get("content", {})
-            text = content.get("text", "") if isinstance(content, dict) else ""
             
-            # Create echo response for test compatibility
-            task.artifacts = [{
-                "parts": [{
-                    "type": "text",
-                    "text": f"Echo: {text}"
+            # Handle different content types in passthrough mode
+            if isinstance(content, dict):
+                content_type = content.get("type")
+                
+                if content_type == "text":
+                    # Text content
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "text", 
+                            "text": content.get("text", "")
+                        }]
+                    }]
+                elif content_type == "function_call":
+                    # Function call - pass through
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "text", 
+                            "text": f"Received function call '{content.get('name', '')}' without handler"
+                        }]
+                    }]
+                else:
+                    # Other content types
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "text", 
+                            "text": f"Received message of type '{content_type}'"
+                        }]
+                    }]
+            else:
+                # Non-dict content
+                task.artifacts = [{
+                    "parts": [{
+                        "type": "text", 
+                        "text": str(content)
+                    }]
                 }]
-            }]
         
         # Mark as completed
         from ..models import TaskStatus, TaskState
@@ -207,6 +295,12 @@ class A2AServer(BaseA2AServer):
                 "agent_card_url": "/a2a/agent.json",
                 "protocol": "a2a"
             })
+        
+        # Also support direct POST to /a2a endpoint
+        @app.route("/a2a", methods=["POST"])
+        def a2a_post():
+            """POST endpoint for A2A - mirrors root POST behavior"""
+            return a2a_root_post()
         
         # Agent card endpoint
         @app.route("/a2a/agent.json", methods=["GET"])

@@ -10,7 +10,10 @@ from typing import Optional, Dict, Any, List, Union
 
 from ..models.message import Message, MessageRole
 from ..models.conversation import Conversation
-from ..models.content import TextContent, ErrorContent
+from ..models.content import (
+    TextContent, ErrorContent, FunctionCallContent, 
+    FunctionResponseContent, FunctionParameter
+)
 from ..models.agent import AgentCard, AgentSkill
 from ..models.task import Task, TaskStatus, TaskState
 from .base import BaseA2AClient
@@ -200,84 +203,149 @@ class A2AClient(BaseA2AClient):
             A2AConnectionError: If connection to the agent fails
             A2AResponseError: If the agent returns an invalid response
         """
+        # Try possible endpoints in order of preference
+        endpoints_to_try = [
+            self.endpoint_url,                  # Try the exact URL first
+            self.endpoint_url.rstrip("/"),      # URL without trailing slash
+            f"{self.endpoint_url.rstrip('/')}/a2a",  # Try /a2a endpoint
+            f"{self.endpoint_url.rstrip('/')}/tasks/send"  # Try direct tasks endpoint
+        ]
+        
+        # Deduplicate endpoints
+        endpoints_to_try = list(dict.fromkeys(endpoints_to_try))
+        
         # First try A2A protocol style with tasks
         task_response = None
-        try:
-            # Create a task from the message
-            task = self._create_task(message)
-            
-            # Send the task
-            result = self._send_task(task)
-            
-            # Convert the task result back to a message
-            if result.artifacts and len(result.artifacts) > 0:
-                for part in result.artifacts[0].get("parts", []):
-                    if part.get("type") == "text":
-                        task_response = Message(
-                            content=TextContent(text=part.get("text", "")),
-                            role=MessageRole.AGENT,
-                            parent_message_id=message.message_id,
-                            conversation_id=message.conversation_id
-                        )
-        except Exception:
-            # Fall back to legacy behavior if A2A protocol fails
-            task_response = None
-        
-        # Return task response if we got one
-        if task_response is not None:
-            return task_response
-            
-        # Legacy behavior - direct message posting
-        try:
-            response = requests.post(
-                self.endpoint_url,
-                json=message.to_dict(),
-                headers=self.headers,
-                timeout=self.timeout
-            )
-            
-            # Handle HTTP errors
+        for endpoint in endpoints_to_try:
             try:
-                response.raise_for_status()
-            except requests.HTTPError as e:
-                # Try to extract error message from JSON response if possible
-                error_msg = str(e)
-                try:
-                    error_data = response.json()
-                    if "error" in error_data:
-                        error_msg = f"{error_msg}: {error_data['error']}"
-                except:
-                    pass
+                # Create a task from the message
+                task = self._create_task(message)
                 
-                raise A2AConnectionError(error_msg)
-            
-            # Parse the response
-            try:
-                return Message.from_dict(response.json())
-            except ValueError as e:
-                # Try to get plain text if JSON parsing fails
-                try:
-                    text_content = response.text.strip()
-                    if text_content:
-                        return Message(
-                            content=TextContent(text=text_content),
-                            role=MessageRole.AGENT,
-                            parent_message_id=message.message_id,
-                            conversation_id=message.conversation_id
-                        )
-                except:
-                    pass
+                # Try to send the task to this endpoint
+                result = self._send_task(task, endpoint_override=endpoint)
+                
+                # If we get here, the endpoint worked
+                # Remember this working endpoint for future requests
+                self.endpoint_url = endpoint
+                
+                # Convert the task result back to a message
+                if result.artifacts and len(result.artifacts) > 0:
+                    for part in result.artifacts[0].get("parts", []):
+                        if part.get("type") == "text":
+                            task_response = Message(
+                                content=TextContent(text=part.get("text", "")),
+                                role=MessageRole.AGENT,
+                                parent_message_id=message.message_id,
+                                conversation_id=message.conversation_id
+                            )
+                            break
+                        elif part.get("type") == "function_response":
+                            task_response = Message(
+                                content=FunctionResponseContent(
+                                    name=part.get("name", ""),
+                                    response=part.get("response", {})
+                                ),
+                                role=MessageRole.AGENT,
+                                parent_message_id=message.message_id,
+                                conversation_id=message.conversation_id
+                            )
+                            break
+                        elif part.get("type") == "function_call":
+                            # Convert parameters to FunctionParameter objects
+                            params = []
+                            for param in part.get("parameters", []):
+                                params.append(FunctionParameter(
+                                    name=param.get("name", ""),
+                                    value=param.get("value", "")
+                                ))
+                            
+                            task_response = Message(
+                                content=FunctionCallContent(
+                                    name=part.get("name", ""),
+                                    parameters=params
+                                ),
+                                role=MessageRole.AGENT,
+                                parent_message_id=message.message_id,
+                                conversation_id=message.conversation_id
+                            )
+                            break
+                        elif part.get("type") == "error":
+                            task_response = Message(
+                                content=ErrorContent(message=part.get("message", "")),
+                                role=MessageRole.AGENT,
+                                parent_message_id=message.message_id,
+                                conversation_id=message.conversation_id
+                            )
+                            break
+                        
+                # If we got a response, return it
+                if task_response is not None:
+                    return task_response
                     
-                raise A2AResponseError(f"Invalid response from agent: {str(e)}")
-            
-        except requests.RequestException as e:
-            # Create an error message as response
-            return Message(
-                content=ErrorContent(message=f"Failed to communicate with agent: {str(e)}"),
-                role=MessageRole.AGENT,
-                parent_message_id=message.message_id,
-                conversation_id=message.conversation_id
-            )
+            except Exception as e:
+                # This endpoint didn't work, try the next one
+                continue
+        
+        # If we get here, all task endpoints failed, try legacy behavior - direct message posting
+        for endpoint in endpoints_to_try:
+            try:
+                response = requests.post(
+                    endpoint,
+                    json=message.to_dict(),
+                    headers=self.headers,
+                    timeout=self.timeout
+                )
+                
+                # If we succeed, remember this endpoint
+                self.endpoint_url = endpoint
+                
+                # Handle HTTP errors
+                try:
+                    response.raise_for_status()
+                except requests.HTTPError as e:
+                    # Try to extract error message from JSON response if possible
+                    error_msg = str(e)
+                    try:
+                        error_data = response.json()
+                        if "error" in error_data:
+                            error_msg = f"{error_msg}: {error_data['error']}"
+                    except:
+                        pass
+                    
+                    # Try next endpoint instead of raising immediately
+                    continue
+                
+                # Parse the response
+                try:
+                    return Message.from_dict(response.json())
+                except ValueError as e:
+                    # Try to get plain text if JSON parsing fails
+                    try:
+                        text_content = response.text.strip()
+                        if text_content:
+                            return Message(
+                                content=TextContent(text=text_content),
+                                role=MessageRole.AGENT,
+                                parent_message_id=message.message_id,
+                                conversation_id=message.conversation_id
+                            )
+                    except:
+                        pass
+                        
+                    # Try next endpoint
+                    continue
+                    
+            except requests.RequestException:
+                # Try next endpoint
+                continue
+        
+        # If we get here, all endpoints failed
+        return Message(
+            content=ErrorContent(message=f"Failed to communicate with agent at {self.endpoint_url}. Tried multiple endpoint variations."),
+            role=MessageRole.AGENT,
+            parent_message_id=message.message_id,
+            conversation_id=message.conversation_id
+        )
     
     def send_conversation(self, conversation: Conversation) -> Conversation:
         """
@@ -293,59 +361,70 @@ class A2AClient(BaseA2AClient):
             A2AConnectionError: If connection to the agent fails
             A2AResponseError: If the agent returns an invalid response
         """
-        # Try legacy behavior first
-        try:
-            response = requests.post(
-                self.endpoint_url,
-                json=conversation.to_dict(),
-                headers=self.headers,
-                timeout=self.timeout
-            )
-            
-            # Handle HTTP errors
+        # Try possible endpoints in order of preference
+        endpoints_to_try = [
+            self.endpoint_url,                  # Try the exact URL first
+            self.endpoint_url.rstrip("/"),      # URL without trailing slash
+            f"{self.endpoint_url.rstrip('/')}/a2a",  # Try /a2a endpoint
+        ]
+        
+        # Deduplicate endpoints
+        endpoints_to_try = list(dict.fromkeys(endpoints_to_try))
+        
+        # Try each endpoint
+        for endpoint in endpoints_to_try:
             try:
-                response.raise_for_status()
-            except requests.HTTPError as e:
-                # Try to extract error message from JSON response if possible
-                error_msg = str(e)
-                try:
-                    error_data = response.json()
-                    if "error" in error_data:
-                        error_msg = f"{error_msg}: {error_data['error']}"
-                except:
-                    pass
+                response = requests.post(
+                    endpoint,
+                    json=conversation.to_dict(),
+                    headers=self.headers,
+                    timeout=self.timeout
+                )
                 
-                raise A2AConnectionError(error_msg)
-            
-            # Parse the response
-            try:
-                return Conversation.from_dict(response.json())
-            except ValueError as e:
-                # Try to extract text content from response if JSON parsing fails
-                try:
-                    text_content = response.text.strip()
-                    if text_content:
-                        # Create a new message with the response text
-                        last_message = conversation.messages[-1] if conversation.messages else None
-                        parent_id = last_message.message_id if last_message else None
-                        
-                        # Add a response message to the conversation
-                        conversation.create_text_message(
-                            text=text_content,
-                            role=MessageRole.AGENT,
-                            parent_message_id=parent_id
-                        )
-                        return conversation
-                except:
-                    pass
+                # If we succeed, remember this endpoint
+                self.endpoint_url = endpoint
                 
-                raise A2AResponseError(f"Invalid response from agent: {str(e)}")
-            
-        except requests.RequestException as e:
-            # Create an error message and add it to the conversation
-            error_msg = f"Failed to communicate with agent: {str(e)}"
-            conversation.create_error_message(error_msg)
-            return conversation
+                # Handle HTTP errors
+                try:
+                    response.raise_for_status()
+                except requests.HTTPError:
+                    # Try next endpoint
+                    continue
+                
+                # Parse the response
+                try:
+                    return Conversation.from_dict(response.json())
+                except ValueError:
+                    # Try to extract text content from response if JSON parsing fails
+                    try:
+                        text_content = response.text.strip()
+                        if text_content:
+                            # Create a new message with the response text
+                            last_message = conversation.messages[-1] if conversation.messages else None
+                            parent_id = last_message.message_id if last_message else None
+                            
+                            # Add a response message to the conversation
+                            conversation.create_text_message(
+                                text=text_content,
+                                role=MessageRole.AGENT,
+                                parent_message_id=parent_id
+                            )
+                            return conversation
+                    except:
+                        pass
+                    
+                    # Try next endpoint
+                    continue
+                
+            except requests.RequestException:
+                # Try next endpoint
+                continue
+        
+        # If we get here, all endpoints failed
+        # Create an error message and add it to the conversation
+        error_msg = f"Failed to communicate with agent at {self.endpoint_url}. Tried multiple endpoint variations."
+        conversation.create_error_message(error_msg)
+        return conversation
     
     def ask(self, message_text):
         """
@@ -371,10 +450,17 @@ class A2AClient(BaseA2AClient):
         
         # Extract text from response
         if response and hasattr(response, "content"):
-            if hasattr(response.content, "text"):
+            content_type = getattr(response.content, "type", None)
+            
+            if content_type == "text":
                 return response.content.text
-            elif hasattr(response.content, "message"):
-                return response.content.message
+            elif content_type == "error":
+                return f"Error: {response.content.message}"
+            elif content_type == "function_response":
+                return f"Function '{response.content.name}' returned: {json.dumps(response.content.response, indent=2)}"
+            elif content_type == "function_call":
+                params = {p.name: p.value for p in response.content.parameters}
+                return f"Function call '{response.content.name}' with parameters: {json.dumps(params, indent=2)}"
             elif response.content is not None:
                 return str(response.content)
         
@@ -403,16 +489,20 @@ class A2AClient(BaseA2AClient):
             message=message.to_dict() if isinstance(message, Message) else message
         )
     
-    def _send_task(self, task):
+    def _send_task(self, task, endpoint_override=None):
         """
         Send a task to the agent
         
         Args:
             task: The task to send
+            endpoint_override: Optional override for the endpoint URL
             
         Returns:
             The updated task with the agent's response
         """
+        # Use the override if provided, otherwise use the standard endpoint
+        base_url = endpoint_override if endpoint_override else self.endpoint_url
+        
         # Prepare JSON-RPC request
         request_data = {
             "jsonrpc": "2.0",
@@ -425,8 +515,13 @@ class A2AClient(BaseA2AClient):
             # Try the standard endpoint first
             endpoint_tried = False
             try:
+                endpoint = f"{base_url}/tasks/send"
+                if endpoint.endswith("/tasks/send/tasks/send"):
+                    # Avoid doubled path
+                    endpoint = endpoint.replace("/tasks/send/tasks/send", "/tasks/send")
+                    
                 response = requests.post(
-                    f"{self.endpoint_url}/tasks/send",
+                    endpoint,
                     json=request_data,
                     headers=self.headers,
                     timeout=self.timeout
@@ -452,8 +547,13 @@ class A2AClient(BaseA2AClient):
                     raise e
                 
                 # Try the alternate endpoint
+                endpoint = f"{base_url}/a2a/tasks/send"
+                if endpoint.endswith("/a2a/tasks/send/a2a/tasks/send"):
+                    # Avoid doubled path
+                    endpoint = endpoint.replace("/a2a/tasks/send/a2a/tasks/send", "/a2a/tasks/send")
+                    
                 response = requests.post(
-                    f"{self.endpoint_url}/a2a/tasks/send",
+                    endpoint,
                     json=request_data,
                     headers=self.headers,
                     timeout=self.timeout
@@ -530,132 +630,53 @@ class A2AClient(BaseA2AClient):
             }
         }
         
-        try:
-            # Try the standard endpoint first
-            endpoint_tried = False
+        # Try possible endpoints
+        endpoints = [
+            f"{self.endpoint_url}/tasks/get",
+            f"{self.endpoint_url}/a2a/tasks/get"
+        ]
+        
+        for endpoint in endpoints:
             try:
                 response = requests.post(
-                    f"{self.endpoint_url}/tasks/get",
-                    json=request_data,
-                    headers=self.headers,
-                    timeout=self.timeout
-                )
-                response.raise_for_status()
-                endpoint_tried = True
-                
-                # Check content type and try to parse JSON
-                try:
-                    response_data = response.json()
-                except json.JSONDecodeError:
-                    # If not valid JSON, attempt to handle text response
-                    if response.text:
-                        return Task(
-                            id=task_id,
-                            status=TaskStatus(state=TaskState.COMPLETED),
-                            artifacts=[{
-                                "parts": [{
-                                    "type": "text",
-                                    "text": response.text
-                                }]
-                            }]
-                        )
-                    raise ValueError("Response is not valid JSON")
-                    
-            except Exception as e:
-                if endpoint_tried:
-                    # If we've tried this endpoint and got a response error,
-                    # take a different approach for alternate endpoint
-                    raise e
-                    
-                # Try the alternate endpoint
-                response = requests.post(
-                    f"{self.endpoint_url}/a2a/tasks/get",
+                    endpoint,
                     json=request_data,
                     headers=self.headers,
                     timeout=self.timeout
                 )
                 response.raise_for_status()
                 
-                # Check content type and try to parse JSON
+                # Parse the response
+                response_data = response.json()
+                result = response_data.get("result", {})
+                
+                # Try to convert to Task object
                 try:
-                    response_data = response.json()
-                except json.JSONDecodeError:
-                    # If not valid JSON, attempt to handle text response
-                    if response.text:
-                        return Task(
-                            id=task_id,
-                            status=TaskStatus(state=TaskState.COMPLETED),
-                            artifacts=[{
-                                "parts": [{
-                                    "type": "text",
-                                    "text": response.text
-                                }]
-                            }]
-                        )
-                    raise ValueError("Response is not valid JSON")
-            
-            # Extract result from response data
-            result = response_data.get("result", {})
-            
-            # Handle different response structures
-            if not result and isinstance(response_data, dict):
-                # Check for direct response fields
-                if "text" in response_data:
-                    # Create a simple task with the text content
+                    return Task.from_dict(result)
+                except Exception:
+                    # If conversion fails, create a simple task with the raw result
                     return Task(
                         id=task_id,
                         status=TaskStatus(state=TaskState.COMPLETED),
                         artifacts=[{
                             "parts": [{
                                 "type": "text",
-                                "text": response_data["text"]
+                                "text": str(result or response_data)
                             }]
                         }]
                     )
-                elif "content" in response_data:
-                    # Handle MCP-style content array
-                    content_text = ""
-                    for item in response_data["content"]:
-                        if item.get("type") == "text":
-                            content_text += item.get("text", "")
-                    
-                    if content_text:
-                        return Task(
-                            id=task_id,
-                            status=TaskStatus(state=TaskState.COMPLETED),
-                            artifacts=[{
-                                "parts": [{
-                                    "type": "text",
-                                    "text": content_text
-                                }]
-                            }]
-                        )
-            
-            # Try to convert to Task object
-            try:
-                return Task.from_dict(result)
             except Exception:
-                # If conversion fails, create a simple task with the raw result
-                return Task(
-                    id=task_id,
-                    status=TaskStatus(state=TaskState.COMPLETED),
-                    artifacts=[{
-                        "parts": [{
-                            "type": "text",
-                            "text": str(result or response_data)
-                        }]
-                    }]
-                )
-                
-        except Exception as e:
-            # Create an error task
-            return Task(
-                id=task_id,
-                status=TaskStatus(
-                    state=TaskState.FAILED,
-                    message={"error": str(e)}
-                )
+                # Try next endpoint
+                continue
+        
+        # If we get here, all endpoints failed
+        return Task(
+            id=task_id,
+            status=TaskStatus(
+                state=TaskState.FAILED,
+                message={"error": f"Failed to get task from {self.endpoint_url}"}
             )
+        )
     
     def cancel_task(self, task_id):
         """
@@ -677,129 +698,50 @@ class A2AClient(BaseA2AClient):
             }
         }
         
-        try:
-            # Try the standard endpoint first
-            endpoint_tried = False
+        # Try possible endpoints
+        endpoints = [
+            f"{self.endpoint_url}/tasks/cancel",
+            f"{self.endpoint_url}/a2a/tasks/cancel"
+        ]
+        
+        for endpoint in endpoints:
             try:
                 response = requests.post(
-                    f"{self.endpoint_url}/tasks/cancel",
-                    json=request_data,
-                    headers=self.headers,
-                    timeout=self.timeout
-                )
-                response.raise_for_status()
-                endpoint_tried = True
-                
-                # Try to parse the response as JSON
-                try:
-                    response_data = response.json()
-                except json.JSONDecodeError:
-                    # If not JSON, create a basic canceled task with any text content
-                    if response.text:
-                        return Task(
-                            id=task_id,
-                            status=TaskStatus(state=TaskState.CANCELED),
-                            artifacts=[{
-                                "parts": [{
-                                    "type": "text",
-                                    "text": response.text
-                                }]
-                            }]
-                        )
-                    raise ValueError("Response is not valid JSON")
-                    
-            except Exception as e:
-                if endpoint_tried:
-                    # If we've tried this endpoint and got a response error,
-                    # rethrow for the catch block
-                    raise e
-                    
-                # Try the alternate endpoint
-                response = requests.post(
-                    f"{self.endpoint_url}/a2a/tasks/cancel",
+                    endpoint,
                     json=request_data,
                     headers=self.headers,
                     timeout=self.timeout
                 )
                 response.raise_for_status()
                 
-                # Try to parse the response as JSON
+                # Parse the response
+                response_data = response.json()
+                result = response_data.get("result", {})
+                
+                # Try to convert to Task object
                 try:
-                    response_data = response.json()
-                except json.JSONDecodeError:
-                    # If not JSON, create a basic canceled task with any text content
-                    if response.text:
-                        return Task(
-                            id=task_id,
-                            status=TaskStatus(state=TaskState.CANCELED),
-                            artifacts=[{
-                                "parts": [{
-                                    "type": "text",
-                                    "text": response.text
-                                }]
-                            }]
-                        )
-                    raise ValueError("Response is not valid JSON")
-            
-            # Get the result
-            result = response_data.get("result", {})
-            
-            # Handle different response structures
-            if not result and isinstance(response_data, dict):
-                # Check for direct response fields
-                if "text" in response_data:
-                    # Create a simple task with the text content
+                    return Task.from_dict(result)
+                except Exception:
+                    # If conversion fails, create a simple task with the raw result
                     return Task(
                         id=task_id,
                         status=TaskStatus(state=TaskState.CANCELED),
                         artifacts=[{
                             "parts": [{
                                 "type": "text",
-                                "text": response_data["text"]
+                                "text": str(result or response_data)
                             }]
                         }]
                     )
-                elif "content" in response_data:
-                    # Handle MCP-style content array
-                    content_text = ""
-                    for item in response_data["content"]:
-                        if item.get("type") == "text":
-                            content_text += item.get("text", "")
-                    
-                    if content_text:
-                        return Task(
-                            id=task_id,
-                            status=TaskStatus(state=TaskState.CANCELED),
-                            artifacts=[{
-                                "parts": [{
-                                    "type": "text",
-                                    "text": content_text
-                                }]
-                            }]
-                        )
-            
-            # Try to convert to Task object
-            try:
-                return Task.from_dict(result)
             except Exception:
-                # If conversion fails, create a simple task with the raw result
-                return Task(
-                    id=task_id,
-                    status=TaskStatus(state=TaskState.CANCELED),
-                    artifacts=[{
-                        "parts": [{
-                            "type": "text",
-                            "text": str(result or response_data)
-                        }]
-                    }]
-                )
-            
-        except Exception as e:
-            # Create an error task
-            return Task(
-                id=task_id,
-                status=TaskStatus(
-                    state=TaskState.CANCELED,
-                    message={"error": str(e)}
-                )
+                # Try next endpoint
+                continue
+        
+        # If we get here, all endpoints failed
+        return Task(
+            id=task_id,
+            status=TaskStatus(
+                state=TaskState.CANCELED,
+                message={"error": f"Failed to cancel task on {self.endpoint_url}"}
             )
+        )

@@ -4,20 +4,23 @@ AWS Bedrock-based server implementation for the A2A protocol.
 
 import json
 import asyncio
-from typing import Optional, Dict, Any, List
+import re
+import uuid
+from typing import Optional, Dict, Any, List, Union
 from pathlib import Path
-from ...models.message import Message, MessageRole
-from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent, FunctionParameter
+
 try:
     import boto3
 except ImportError:
     boto3 = None
 
 from ...models.message import Message, MessageRole
-from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent
+from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent, FunctionParameter
 from ...models.conversation import Conversation
+from ...models.task import Task, TaskStatus, TaskState
 from ..base import BaseA2AServer
 from ...exceptions import A2AImportError, A2AConnectionError
+
 
 class BedrockA2AServer(BaseA2AServer):
     """
@@ -29,29 +32,30 @@ class BedrockA2AServer(BaseA2AServer):
 
     def __init__(
         self,
-        model_id: str = "apac.anthropic.claude-3-7-sonnet-20250219-v1:0",
-        aws_access_key_id = None,
-        aws_secret_access_key = None,
-        aws_region = "us-east-1",
+        model_id: str = "anthropic.claude-v2",
+        aws_access_key_id: Optional[str] = None,
+        aws_secret_access_key: Optional[str] = None,
+        aws_region: str = "us-east-1",
         temperature: float = 0.7,
         max_tokens: int = 1000,
         system_prompt: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
-        functions: Optional[List[Dict[str, Any]]] = None,
-        env_path: Optional[str] = None
+        functions: Optional[List[Dict[str, Any]]] = None
     ):
         """
         Initialize the AWS Bedrock A2A server
 
         Args:
-            model_id: Bedrock model ID (default: "anthropic.claude-3-sonnet-20240229-v1:0")
+            model_id: Bedrock model ID (default: "anthropic.claude-v2")
+            aws_access_key_id: AWS access key ID
+            aws_secret_access_key: AWS secret access key
+            aws_region: AWS region (default: "us-east-1")
             temperature: Generation temperature (default: 0.7)
             max_tokens: Maximum number of tokens to generate (default: 1000)
             system_prompt: Optional system prompt to use for all conversations
             tools: Optional list of tool definitions for tool use
             functions: Optional list of function definitions for function calling
                        (alias for tools, for compatibility with OpenAI interface)
-            env_path: Optional path to .env file (default: searches in current directory)
 
         Raises:
             A2AImportError: If the boto3 package is not installed
@@ -67,26 +71,31 @@ class BedrockA2AServer(BaseA2AServer):
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_region = aws_region
 
-        # Verify credentials were loaded
-        if not self.aws_access_key_id or not self.aws_secret_access_key:
-            raise A2AConnectionError(
-                "AWS credentials not found in environment variables. "
-                "Make sure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set in your .env file."
-            )
+        # Verify credentials
+        if not aws_access_key_id or not aws_secret_access_key:
+            # Try to use credentials from environment or IAM role
+            try:
+                session = boto3.Session(region_name=aws_region)
+                credentials = session.get_credentials()
+                if not credentials:
+                    raise ValueError("No AWS credentials found")
+            except Exception as e:
+                raise A2AConnectionError(
+                    f"AWS credentials not found: {str(e)}. "
+                    "Provide credentials or ensure IAM role is properly configured."
+                )
 
         self.model_id = model_id
         self.temperature = temperature
         self.max_tokens = max_tokens
         
-        # Store functions for function calling emulation
+        # Store tools/functions for function calling
+        self.tools = tools
         self.functions = functions if functions is not None else tools
         
-        # Create an enhanced system prompt that includes function definitions
-        if self.functions and system_prompt:
-            self.system_prompt = self._create_function_enhanced_system_prompt(system_prompt)
-        else:
-            self.system_prompt = system_prompt
-
+        # Store system prompt
+        self.system_prompt = system_prompt
+        
         # Initialize the Bedrock runtime client
         self.client = boto3.client(
             service_name='bedrock-runtime',
@@ -94,223 +103,9 @@ class BedrockA2AServer(BaseA2AServer):
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key
         )
-    
-    def _create_function_enhanced_system_prompt(self, original_prompt: str) -> str:
-        """
-        Enhances the system prompt with function definitions to emulate function calling
-
-        Args:
-            original_prompt: The original system prompt
-
-        Returns:
-            Enhanced system prompt with function definitions
-        """
-        # Create a description of available functions
-        functions_description = "\n\nYou have access to the following functions:\n\n"
         
-        for func in self.functions:
-            functions_description += f"Function: {func.get('name', '')}\n"
-            functions_description += f"Description: {func.get('description', '')}\n"
-            
-            # Add parameters information
-            parameters = func.get('parameters', {})
-            if 'properties' in parameters:
-                functions_description += "Parameters:\n"
-                required_params = parameters.get('required', [])
-                for param_name, param_info in parameters.get('properties', {}).items():
-                    required = "required" if param_name in required_params else "optional"
-                    functions_description += f"- {param_name} ({required}): {param_info.get('description', '')}\n"
-            
-            functions_description += "\n"
-        
-        # Add instructions on how to call functions
-        functions_description += "\nWhen you need to call a function, format your response as follows:\n"
-        functions_description += "I need to call a function to answer this. I'll use the function '{function_name}'.\n"
-        functions_description += "Function call: {function_name}({parameter1}={value1}, {parameter2}={value2}, ...)\n\n"
-        
-        # Combine with original prompt
-        enhanced_prompt = original_prompt + functions_description
-        
-        print(f"Enhanced system prompt: {enhanced_prompt}")
-        return enhanced_prompt
-
-    def _call_bedrock(self, bedrock_messages: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Make a call to AWS Bedrock API
-
-        Args:
-            bedrock_messages: List of messages in Bedrock format
-
-        Returns:
-            The response from Bedrock API
-
-        Raises:
-            A2AConnectionError: If connection to Bedrock fails
-        """
-        try:
-            # Determine model type - ARN or normal model ID
-            is_arn = self.model_id.startswith("arn:")
-
-            # Check if this is an Anthropic model
-            is_anthropic = "anthropic" in self.model_id.lower()
-
-            # Prepare request body
-            request_body = {}
-
-            if is_anthropic:
-                # For inference profiles (ARN) and regular Claude models
-                request_body = {
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": self.max_tokens,
-                    "messages": bedrock_messages
-                }
-
-                # Add system prompt if available
-                if self.system_prompt:
-                    request_body["system"] = self.system_prompt
-
-                # Add temperature
-                if self.temperature is not None:
-                    request_body["temperature"] = self.temperature
-            else:
-                # Generic format for other providers
-                request_body = {
-                    "inputText": "\n".join([msg.get("content", "") for msg in bedrock_messages]),
-                    "textGenerationConfig": {
-                        "maxTokenCount": self.max_tokens,
-                        "temperature": self.temperature,
-                    }
-                }
-
-            # Log the entire request payload for debugging
-            print(f"Full request payload: {json.dumps(request_body, indent=2)}")
-
-            # Convert to JSON string
-            request_json = json.dumps(request_body)
-
-            # Call Bedrock synchronously
-            response = self.client.invoke_model(
-                modelId=self.model_id,
-                contentType="application/json",
-                accept="application/json",
-                body=request_json
-            )
-
-            # Parse the response
-            response_body = json.loads(response['body'].read())
-            return response_body
-
-        except Exception as e:
-            # Log details about the error and request for debugging
-            error_msg = f"Failed to communicate with AWS Bedrock: {str(e)}"
-            print(f"Error details: {error_msg}")
-            print(f"Model ID: {self.model_id}")
-            print(f"Request body: {request_body}")
-            raise A2AConnectionError(error_msg)
-    
-    def _parse_function_call_from_text(self, text: str) -> Optional[Dict[str, Any]]:
-        """
-        Parse a function call from text response
-
-        Args:
-            text: The text response from the model
-
-        Returns:
-            Dictionary with function name and parameters, or None if no function call is detected
-        """
-        # Look for common function call patterns
-        import re
-        
-        # Print full text for debugging
-        print(f"Parsing function call from text: {text}")
-        
-        # Pattern 1: Function call: function_name(param1=value1, param2=value2)
-        pattern1 = r"Function call: (\w+)\((.*?)\)"
-        match1 = re.search(pattern1, text)
-        
-        # Pattern 2: I'll use the function 'function_name'
-        pattern2 = r"I'll use the function ['\"]([\w]+)['\"]"
-        match2 = re.search(pattern2, text)
-        
-        # Pattern 3: Direct pattern function_name(param1=value1, param2=value2)
-        pattern3 = r"(\w+)\((.*?)\)"
-        match3 = re.search(pattern3, text)
-        
-        function_name = None
-        parameters = []
-        
-        # Try to extract function name
-        if match1:
-            function_name = match1.group(1)
-            params_str = match1.group(2)
-            
-            # Parse parameters
-            if params_str:
-                param_pairs = params_str.split(',')
-                for pair in param_pairs:
-                    if '=' in pair:
-                        key, value = pair.split('=', 1)
-                        parameters.append({
-                            "name": key.strip(), 
-                            "value": value.strip().strip('"\'')
-                        })
-        
-        elif match2:
-            function_name = match2.group(1)
-            
-            # Look for parameters in Pattern 3
-            for m in re.finditer(pattern3, text):
-                if m.group(1) == function_name:
-                    params_str = m.group(2)
-                    if params_str:
-                        param_pairs = params_str.split(',')
-                        for pair in param_pairs:
-                            if '=' in pair:
-                                key, value = pair.split('=', 1)
-                                parameters.append({
-                                    "name": key.strip(), 
-                                    "value": value.strip().strip('"\'')
-                                })
-                    break
-        
-        # If no match found with patterns 1 or 2, try pattern 3 directly
-        elif match3 and not function_name:
-            # Check if the function name is one of our defined functions
-            potential_name = match3.group(1)
-            
-            # Check if this is a valid function name
-            is_valid = False
-            if self.functions:
-                for func in self.functions:
-                    if func.get('name') == potential_name:
-                        is_valid = True
-                        break
-            
-            if is_valid:
-                function_name = potential_name
-                params_str = match3.group(2)
-                
-                # Parse parameters
-                if params_str:
-                    param_pairs = params_str.split(',')
-                    for pair in param_pairs:
-                        if '=' in pair:
-                            key, value = pair.split('=', 1)
-                            parameters.append({
-                                "name": key.strip(), 
-                                "value": value.strip().strip('"\'')
-                            })
-        
-        # If a function name was found, return the result
-        if function_name:
-            print(f"Detected function call: {function_name}")
-            print(f"Parameters: {parameters}")
-            return {
-                "name": function_name,
-                "parameters": parameters
-            }
-        
-        return None
+        # For tracking conversation state
+        self._conversation_state = {}  # conversation_id -> list of messages
     
     def handle_message(self, message: Message) -> Message:
         """
@@ -326,10 +121,17 @@ class BedrockA2AServer(BaseA2AServer):
             A2AConnectionError: If connection to AWS Bedrock fails
         """
         try:
-            # Create messages array for Bedrock
+            conversation_id = message.conversation_id
+            
+            # Create a generic message list for different model providers
             bedrock_messages = []
             
-            # Add the user message
+            # If this is part of an existing conversation, retrieve history
+            if conversation_id and conversation_id in self._conversation_state:
+                # Use the existing conversation history
+                bedrock_messages = self._conversation_state[conversation_id].copy()
+            
+            # Add the incoming message
             if message.content.type == "text":
                 msg_role = "user" if message.role == MessageRole.USER else "assistant"
                 bedrock_messages.append({
@@ -338,14 +140,48 @@ class BedrockA2AServer(BaseA2AServer):
                 })
             elif message.content.type == "function_call":
                 # Format function call as text
-                params_str = ", ".join(
-                    [f"{p.name}={p.value}" for p in message.content.parameters])
+                params_str = ", ".join([f"{p.name}={p.value}" for p in message.content.parameters])
                 text = f"Call function {message.content.name}({params_str})"
                 bedrock_messages.append({"role": "user", "content": text})
             elif message.content.type == "function_response":
-                # Format function response as text
-                text = f"Function {message.content.name} returned: {message.content.response}"
-                bedrock_messages.append({"role": "user", "content": text})
+                # Format function response based on model provider
+                if "anthropic" in self.model_id.lower():
+                    # For Claude models in Bedrock
+                    bedrock_messages.append({
+                        "role": "user", 
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": message.message_id or str(uuid.uuid4()),
+                                "tool_name": message.content.name,
+                                "content": json.dumps(message.content.response)
+                            }
+                        ]
+                    })
+                elif "amazon" in self.model_id.lower():
+                    # For Amazon Titan models
+                    bedrock_messages.append({
+                        "role": "user",
+                        "content": f"Function {message.content.name} returned: {json.dumps(message.content.response)}"
+                    })
+                elif "ai21" in self.model_id.lower():
+                    # For AI21 models
+                    bedrock_messages.append({
+                        "role": "user",
+                        "content": f"Function {message.content.name} returned: {json.dumps(message.content.response)}"
+                    })
+                elif "cohere" in self.model_id.lower():
+                    # For Cohere models
+                    bedrock_messages.append({
+                        "role": "user",
+                        "content": f"Function {message.content.name} returned: {json.dumps(message.content.response)}"
+                    })
+                else:
+                    # Generic fallback
+                    bedrock_messages.append({
+                        "role": "user",
+                        "content": f"Function {message.content.name} returned: {json.dumps(message.content.response)}"
+                    })
             else:
                 # Handle other message types or errors
                 text = f"Message of type {message.content.type}"
@@ -353,17 +189,14 @@ class BedrockA2AServer(BaseA2AServer):
                     text = message.content.message
                 bedrock_messages.append({"role": "user", "content": text})
             
-            # Determine model type - ARN or normal model ID
-            is_arn = self.model_id.startswith("arn:")
+            # Check if running on a Claude model
+            is_claude = "anthropic" in self.model_id.lower()
             
-            # Check if this is an Anthropic model
-            is_anthropic = "anthropic" in self.model_id.lower()
-            
-            # Prepare request body
+            # Prepare the request body based on the model provider
             request_body = {}
             
-            if is_anthropic:
-                # For inference profiles (ARN) and regular Claude models
+            if is_claude:
+                # For Anthropic Claude models in Bedrock
                 request_body = {
                     "anthropic_version": "bedrock-2023-05-31",
                     "max_tokens": self.max_tokens,
@@ -374,18 +207,31 @@ class BedrockA2AServer(BaseA2AServer):
                 if self.system_prompt:
                     request_body["system"] = self.system_prompt
                 
-                # Add temperature
+                # Add temperature if specified
                 if self.temperature is not None:
                     request_body["temperature"] = self.temperature
+                
+                # Add tools if available
+                if self.tools:
+                    request_body["tools"] = self.tools
             else:
                 # Generic format for other providers
+                # Note: This is simplified and would need to be adapted for 
+                # specific model providers like Amazon Titan, AI21, Cohere, etc.
                 request_body = {
-                    "inputText": "\n".join([msg.get("content", "") for msg in bedrock_messages]),
+                    "inputText": "\n".join([
+                        f"{msg.get('role', 'user')}: {msg.get('content', '')}" 
+                        for msg in bedrock_messages
+                    ]),
                     "textGenerationConfig": {
                         "maxTokenCount": self.max_tokens,
                         "temperature": self.temperature,
                     }
                 }
+                
+                # Add system prompt for models that support it
+                if self.system_prompt:
+                    request_body["systemPrompt"] = self.system_prompt
             
             # Convert to JSON string
             request_json = json.dumps(request_body)
@@ -401,64 +247,385 @@ class BedrockA2AServer(BaseA2AServer):
             # Parse the response
             response_body = json.loads(response['body'].read())
             
-            # Process the response based on the model provider
-            if is_anthropic:
+            # If we have a conversation ID, update the conversation state
+            if conversation_id:
+                if conversation_id not in self._conversation_state:
+                    self._conversation_state[conversation_id] = []
+                
+                # Add the incoming message to state
+                if message.content.type == "text":
+                    msg_role = "user" if message.role == MessageRole.USER else "assistant"
+                    self._conversation_state[conversation_id].append({
+                        "role": msg_role,
+                        "content": message.content.text
+                    })
+                elif message.content.type == "function_response":
+                    if is_claude:
+                        self._conversation_state[conversation_id].append({
+                            "role": "user", 
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": message.message_id or str(uuid.uuid4()),
+                                    "tool_name": message.content.name,
+                                    "content": json.dumps(message.content.response)
+                                }
+                            ]
+                        })
+                    else:
+                        self._conversation_state[conversation_id].append({
+                            "role": "user",
+                            "content": f"Function {message.content.name} returned: {json.dumps(message.content.response)}"
+                        })
+            
+            # Handle response based on model provider
+            if is_claude:
+                # For Claude models
                 # Extract text content
-                content_items = response_body.get("content", [])
-                response_text = ""
+                text_content = ""
                 
-                for content in content_items:
-                    if content.get("type") == "text":
-                        response_text += content.get("text", "")
+                # Check if this is the new Claude response format
+                if "content" in response_body and isinstance(response_body["content"], list):
+                    for content_item in response_body["content"]:
+                        if content_item.get("type") == "text":
+                            text_content += content_item.get("text", "")
+                        elif content_item.get("type") == "tool_use":
+                            # Handle Claude tool use
+                            tool_use = content_item
+                            try:
+                                # Parse tool input as JSON
+                                input_data = json.loads(tool_use.get("input", "{}"))
+                                parameters = [
+                                    FunctionParameter(name=key, value=value)
+                                    for key, value in input_data.items()
+                                ]
+                            except (json.JSONDecodeError, TypeError):
+                                # Handle non-JSON input
+                                parameters = [FunctionParameter(name="input", value=tool_use.get("input", ""))]
+                            
+                            # Add to conversation state if tracking
+                            if conversation_id:
+                                self._conversation_state[conversation_id].append({
+                                    "role": "assistant",
+                                    "content": [
+                                        {
+                                            "type": "tool_use",
+                                            "id": tool_use.get("id", str(uuid.uuid4())),
+                                            "name": tool_use.get("name", ""),
+                                            "input": tool_use.get("input", "")
+                                        }
+                                    ]
+                                })
+                            
+                            # Return function call
+                            return Message(
+                                content=FunctionCallContent(
+                                    name=tool_use.get("name", ""),
+                                    parameters=parameters
+                                ),
+                                role=MessageRole.AGENT,
+                                parent_message_id=message.message_id,
+                                conversation_id=message.conversation_id
+                            )
+                elif "completion" in response_body:
+                    # Handle older Claude response format
+                    text_content = response_body.get("completion", "")
                 
-                # If we didn't get any text from content items but have a completion field
-                if not response_text and "completion" in response_body:
-                    response_text = response_body.get("completion", "")
+                # Add to conversation state if tracking
+                if conversation_id and text_content:
+                    self._conversation_state[conversation_id].append({
+                        "role": "assistant",
+                        "content": text_content
+                    })
                 
-                # Check if the text contains a function call
-                function_call = self._parse_function_call_from_text(response_text)
-                
-                if function_call:
-                    # Extract parameters from the function call
-                    params_dict_list = function_call.get("parameters", [])
-                    
-                    # Convert dictionaries to parameter objects
-                    from ...models.content import FunctionParameter
-                    
-                    parameters = []
-                    for param_dict in params_dict_list:
-                        # Create a FunctionParameter object instead of a dictionary
-                        param = FunctionParameter(name=param_dict['name'], value=param_dict['value'])
-                        parameters.append(param)
-                    
-                    # Create a function call response
+                # Check if the text contains a function/tool call
+                tool_call = self._extract_tool_call_from_text(text_content)
+                if tool_call:
+                    # Return function call
                     return Message(
                         content=FunctionCallContent(
-                            name=function_call.get("name", ""),
-                            parameters=parameters
+                            name=tool_call["name"],
+                            parameters=tool_call["parameters"]
                         ),
                         role=MessageRole.AGENT,
                         parent_message_id=message.message_id,
                         conversation_id=message.conversation_id
                     )
+                
+                # Return text response
+                return Message(
+                    content=TextContent(text=text_content),
+                    role=MessageRole.AGENT,
+                    parent_message_id=message.message_id,
+                    conversation_id=message.conversation_id
+                )
             else:
                 # Generic handling for other model providers
-                response_text = response_body.get("results", [{}])[0].get("outputText", "")
-                if not response_text:
-                    # Fallback to looking for text in other common response formats
-                    response_text = response_body.get("generated_text", "")
-            
-            # Convert response to A2A format
-            return Message(
-                content=TextContent(text=response_text),
-                role=MessageRole.AGENT,
-                parent_message_id=message.message_id,
-                conversation_id=message.conversation_id
-            )
+                # This would need to be customized for each model type
+                output_text = ""
+                
+                # Try to extract text from different response formats
+                if "results" in response_body and len(response_body["results"]) > 0:
+                    output_text = response_body["results"][0].get("outputText", "")
+                elif "generated_text" in response_body:
+                    output_text = response_body["generated_text"]
+                elif "generations" in response_body and len(response_body["generations"]) > 0:
+                    output_text = response_body["generations"][0].get("text", "")
+                elif "output" in response_body:
+                    output_text = response_body["output"]
+                else:
+                    # Fallback to JSON string
+                    output_text = json.dumps(response_body)
+                
+                # Add to conversation state if tracking
+                if conversation_id:
+                    self._conversation_state[conversation_id].append({
+                        "role": "assistant",
+                        "content": output_text
+                    })
+                
+                # Return text response
+                return Message(
+                    content=TextContent(text=output_text),
+                    role=MessageRole.AGENT,
+                    parent_message_id=message.message_id,
+                    conversation_id=message.conversation_id
+                )
         
         except Exception as e:
             raise A2AConnectionError(f"Failed to communicate with AWS Bedrock: {str(e)}")
-
+    
+    def handle_task(self, task: Task) -> Task:
+        """
+        Process an incoming A2A task using AWS Bedrock's API
+        
+        Args:
+            task: The incoming A2A task
+            
+        Returns:
+            The updated task with the response
+        """
+        try:
+            # Extract the message from the task
+            message_data = task.message or {}
+            
+            # Convert to Message object if it's a dict
+            if isinstance(message_data, dict):
+                from ...models import Message
+                message = Message.from_dict(message_data)
+            else:
+                message = message_data
+                
+            # Process the message using handle_message
+            response = self.handle_message(message)
+            
+            # Create artifact based on response content type
+            if hasattr(response, "content"):
+                content_type = getattr(response.content, "type", None)
+                
+                if content_type == "text":
+                    # Handle TextContent
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "text", 
+                            "text": response.content.text
+                        }]
+                    }]
+                elif content_type == "function_response":
+                    # Handle FunctionResponseContent
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "function_response",
+                            "name": response.content.name,
+                            "response": response.content.response
+                        }]
+                    }]
+                elif content_type == "function_call":
+                    # Handle FunctionCallContent
+                    params = []
+                    for param in response.content.parameters:
+                        params.append({
+                            "name": param.name,
+                            "value": param.value
+                        })
+                    
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "function_call",
+                            "name": response.content.name,
+                            "parameters": params
+                        }]
+                    }]
+                elif content_type == "error":
+                    # Handle ErrorContent
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "error",
+                            "message": response.content.message
+                        }]
+                    }]
+                else:
+                    # Handle other content types
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "text", 
+                            "text": str(response.content)
+                        }]
+                    }]
+            else:
+                # Handle responses without content
+                task.artifacts = [{
+                    "parts": [{
+                        "type": "text", 
+                        "text": str(response)
+                    }]
+                }]
+            
+            # Mark as completed
+            task.status = TaskStatus(state=TaskState.COMPLETED)
+            return task
+        except Exception as e:
+            # Handle errors
+            task.artifacts = [{
+                "parts": [{
+                    "type": "error", 
+                    "message": f"Error in Bedrock server: {str(e)}"
+                }]
+            }]
+            task.status = TaskStatus(state=TaskState.FAILED)
+            return task
+    
+    def _extract_tool_call_from_text(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract tool/function call information from Claude's text response
+        
+        Args:
+            text: Text response to analyze
+            
+        Returns:
+            Dictionary with tool name and parameters or None if no tool call detected
+        """
+        # Look for tool use format with <tool></tool> tags
+        tool_match = re.search(r'<tool>(.*?)</tool>', text, re.DOTALL)
+        if tool_match:
+            tool_content = tool_match.group(1)
+            
+            # Look for the name
+            name_match = re.search(r'<n>(.*?)</n>', tool_content, re.DOTALL)
+            if not name_match:
+                name_match = re.search(r'<n>(.*?)</n>', tool_content, re.DOTALL)
+                if not name_match:
+                    return None
+                
+            tool_name = name_match.group(1).strip()
+            
+            # Look for parameters
+            params = []
+            input_match = re.search(r'<input>(.*?)</input>', tool_content, re.DOTALL)
+            if input_match:
+                try:
+                    # Try to parse as JSON
+                    input_json = json.loads(input_match.group(1).strip())
+                    for key, value in input_json.items():
+                        params.append(FunctionParameter(name=key, value=value))
+                except json.JSONDecodeError:
+                    # If not valid JSON, extract key-value pairs using regex
+                    param_matches = re.findall(r'"([^"]+)"\s*:\s*("[^"]*"|[\d.]+|true|false|null|\{.*?\}|\[.*?\])', 
+                                             input_match.group(1))
+                    for key, value in param_matches:
+                        # Process the value
+                        if value.startswith('"') and value.endswith('"'):
+                            # String value, remove quotes
+                            value = value[1:-1]
+                        elif value.lower() == "true":
+                            value = True
+                        elif value.lower() == "false":
+                            value = False
+                        elif value.lower() == "null":
+                            value = None
+                        elif value.isdigit():
+                            value = int(value)
+                        elif re.match(r'^-?\d+(\.\d+)?$', value):
+                            value = float(value)
+                            
+                        params.append(FunctionParameter(name=key, value=value))
+            
+            return {
+                "name": tool_name,
+                "parameters": params
+            }
+        
+        # Alternative pattern: check for "I'll use the tool/function" format
+        function_intent_match = re.search(r"I('ll| will) use the (tool|function) ['\"]([^'\"]+)['\"]", text)
+        if function_intent_match:
+            func_name = function_intent_match.group(3)
+            
+            # Look for parameters in a structured format
+            params = []
+            param_section = text.split(function_intent_match.group(0), 1)[1]
+            
+            # Look for JSON-like parameter section
+            param_match = re.search(r'\{(.*?)\}', param_section, re.DOTALL)
+            if param_match:
+                try:
+                    # Try to parse as JSON
+                    param_json = json.loads("{" + param_match.group(1) + "}")
+                    for key, value in param_json.items():
+                        params.append(FunctionParameter(name=key, value=value))
+                except json.JSONDecodeError:
+                    # If not valid JSON, extract key-value pairs using regex
+                    param_matches = re.findall(r'"([^"]+)"\s*:\s*("[^"]*"|[\d.]+|true|false|null)', 
+                                             param_match.group(1))
+                    for key, value in param_matches:
+                        # Process the value
+                        if value.startswith('"') and value.endswith('"'):
+                            # String value, remove quotes
+                            value = value[1:-1]
+                        elif value.lower() == "true":
+                            value = True
+                        elif value.lower() == "false":
+                            value = False
+                        elif value.lower() == "null":
+                            value = None
+                        elif value.isdigit():
+                            value = int(value)
+                        elif re.match(r'^-?\d+(\.\d+)?$', value):
+                            value = float(value)
+                            
+                        params.append(FunctionParameter(name=key, value=value))
+            
+            # If no JSON-like section, look for parameter assignments
+            if not params:
+                param_matches = re.findall(r'([a-zA-Z0-9_]+)\s*=\s*([^,\n]+)', param_section)
+                for key, value in param_matches:
+                    # Process the value
+                    value = value.strip()
+                    if value.startswith('"') and value.endswith('"'):
+                        # String value, remove quotes
+                        value = value[1:-1]
+                    elif value.startswith("'") and value.endswith("'"):
+                        # String value, remove quotes
+                        value = value[1:-1]
+                    elif value.lower() == "true":
+                        value = True
+                    elif value.lower() == "false":
+                        value = False
+                    elif value.lower() == "none" or value.lower() == "null":
+                        value = None
+                    elif value.isdigit():
+                        value = int(value)
+                    elif re.match(r'^-?\d+(\.\d+)?$', value):
+                        value = float(value)
+                        
+                    params.append(FunctionParameter(name=key, value=value))
+            
+            return {
+                "name": func_name,
+                "parameters": params
+            }
+        
+        return None
+    
     def handle_conversation(self, conversation: Conversation) -> Conversation:
         """
         Process an incoming A2A conversation using AWS Bedrock's API
@@ -478,143 +645,63 @@ class BedrockA2AServer(BaseA2AServer):
             return conversation
         
         try:
-            # Create messages array for Bedrock
-            bedrock_messages = []
+            # Store conversation in state
+            conversation_id = conversation.conversation_id
+            self._conversation_state[conversation_id] = []
             
-            # Add all messages from the conversation
+            # Check if running on a Claude model
+            is_claude = "anthropic" in self.model_id.lower()
+            
+            # Convert each message to the appropriate format based on model provider
             for msg in conversation.messages:
-                role = "user" if msg.role == MessageRole.USER else "assistant"
-                
                 if msg.content.type == "text":
-                    bedrock_messages.append({
-                        "role": role,
+                    msg_role = "user" if msg.role == MessageRole.USER else "assistant"
+                    self._conversation_state[conversation_id].append({
+                        "role": msg_role,
                         "content": msg.content.text
                     })
                 elif msg.content.type == "function_call":
                     # Format function call as text
-                    params_str = ", ".join(
-                        [f"{p.name}={p.value}" for p in msg.content.parameters])
+                    params_str = ", ".join([f"{p.name}={p.value}" for p in msg.content.parameters])
                     text = f"Call function {msg.content.name}({params_str})"
-                    bedrock_messages.append({"role": role, "content": text})
+                    
+                    msg_role = "user" if msg.role == MessageRole.USER else "assistant"
+                    self._conversation_state[conversation_id].append({
+                        "role": msg_role,
+                        "content": text
+                    })
                 elif msg.content.type == "function_response":
-                    # Format function response as text
-                    text = f"Function {msg.content.name} returned: {msg.content.response}"
-                    bedrock_messages.append({"role": role, "content": text})
-                else:
-                    # Handle other message types or errors
-                    text = f"Message of type {msg.content.type}"
-                    if hasattr(msg.content, "message"):
-                        text = msg.content.message
-                    bedrock_messages.append({"role": role, "content": text})
+                    # Format function response based on model provider
+                    if is_claude:
+                        # For Claude models in Bedrock
+                        self._conversation_state[conversation_id].append({
+                            "role": "user", 
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": msg.message_id or str(uuid.uuid4()),
+                                    "tool_name": msg.content.name,
+                                    "content": json.dumps(msg.content.response)
+                                }
+                            ]
+                        })
+                    else:
+                        # For other models
+                        self._conversation_state[conversation_id].append({
+                            "role": "user",
+                            "content": f"Function {msg.content.name} returned: {json.dumps(msg.content.response)}"
+                        })
             
-            # Determine model type and prepare request
-            is_anthropic = "anthropic" in self.model_id.lower()
+            # Get the last message to process
+            last_message = conversation.messages[-1]
             
-            # Prepare request body
-            request_body = {}
+            # Call the handle_message method to process the last message
+            a2a_response = self.handle_message(last_message)
             
-            if is_anthropic:
-                # For Anthropic Claude models
-                request_body = {
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": self.max_tokens,
-                    "messages": bedrock_messages
-                }
-                
-                # Add system prompt if available
-                if self.system_prompt:
-                    request_body["system"] = self.system_prompt
-                
-                # Add temperature
-                if self.temperature is not None:
-                    request_body["temperature"] = self.temperature
-            else:
-                # Generic format for other providers
-                request_body = {
-                    "inputText": "\n".join([msg.get("content", "") for msg in bedrock_messages]),
-                    "textGenerationConfig": {
-                        "maxTokenCount": self.max_tokens,
-                        "temperature": self.temperature,
-                    }
-                }
-            
-            # Convert to JSON string
-            request_json = json.dumps(request_body)
-            
-            # Call Bedrock synchronously
-            response = self.client.invoke_model(
-                modelId=self.model_id,
-                contentType="application/json",
-                accept="application/json",
-                body=request_json
-            )
-            
-            # Parse the response
-            response_body = json.loads(response['body'].read())
-            
-            # Get the last message ID to use as parent
-            parent_id = conversation.messages[-1].message_id
-            
-            # Process the response based on the model provider
-            if is_anthropic:
-                # Extract text content
-                content_items = response_body.get("content", [])
-                response_text = ""
-                
-                for content in content_items:
-                    if content.get("type") == "text":
-                        response_text += content.get("text", "")
-                
-                # If we didn't get any text from content items but have a completion field
-                if not response_text and "completion" in response_body:
-                    response_text = response_body.get("completion", "")
-                
-                # Check if the text contains a function call
-                function_call = self._parse_function_call_from_text(response_text)
-                
-                if function_call:
-                    # Extract parameters from the function call
-                    params_dict_list = function_call.get("parameters", [])
-                    
-                    from ...models.content import FunctionParameter
-                    
-                    parameters = []
-                    for param_dict in params_dict_list:
-                        # Create a FunctionParameter object
-                        param = FunctionParameter(name=param_dict['name'], value=param_dict['value'])
-                        parameters.append(param)
-                    
-                    # Create a function call response
-                    a2a_response = Message(
-                        content=FunctionCallContent(
-                            name=function_call.get("name", ""),
-                            parameters=parameters
-                        ),
-                        role=MessageRole.AGENT,
-                        parent_message_id=parent_id,
-                        conversation_id=conversation.conversation_id
-                    )
-                    
-                    conversation.add_message(a2a_response)
-                    return conversation
-            else:
-                # Generic handling for other model providers
-                response_text = response_body.get("results", [{}])[0].get("outputText", "")
-                if not response_text:
-                    # Fallback to looking for text in other common response formats
-                    response_text = response_body.get("generated_text", "")
-            
-            # Convert response to A2A format and add to conversation
-            a2a_response = Message(
-                content=TextContent(text=response_text),
-                role=MessageRole.AGENT,
-                parent_message_id=parent_id,
-                conversation_id=conversation.conversation_id
-            )
-            
+            # Add the response to the conversation
             conversation.add_message(a2a_response)
             return conversation
-        
+            
         except Exception as e:
             # Add an error message to the conversation
             error_msg = f"Failed to communicate with AWS Bedrock: {str(e)}"
@@ -625,7 +712,7 @@ class BedrockA2AServer(BaseA2AServer):
     def get_metadata(self) -> Dict[str, Any]:
         """
         Get metadata about this agent server
-
+        
         Returns:
             A dictionary of metadata about this agent
         """
@@ -635,9 +722,12 @@ class BedrockA2AServer(BaseA2AServer):
             "model": self.model_id,
             "capabilities": ["text"]
         })
-
-        if self.functions:
+        
+        if self.functions or self.tools:
             metadata["capabilities"].append("function_calling")
-            metadata["functions"] = [f["name"] for f in self.functions if "name" in f]
-
+            if self.functions:
+                metadata["functions"] = [f["name"] for f in self.functions if "name" in f]
+            elif self.tools:
+                metadata["tools"] = [t["name"] for t in self.tools if "name" in t]
+        
         return metadata

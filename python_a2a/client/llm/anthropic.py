@@ -1,11 +1,10 @@
 """
-Anthropic client implementation for the A2A protocol.
+Anthropic-based client implementation for the A2A protocol.
 """
 
-import uuid
 import json
 import re
-from typing import List, Dict, Any, Optional, Union
+from typing import Optional, Dict, Any, List, Union
 
 try:
     import anthropic
@@ -15,20 +14,22 @@ except ImportError:
 from ...models.message import Message, MessageRole
 from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, FunctionParameter
 from ...models.conversation import Conversation
-from ...models.agent import AgentCard, AgentSkill
 from ..base import BaseA2AClient
 from ...exceptions import A2AImportError, A2AConnectionError
 
 
 class AnthropicA2AClient(BaseA2AClient):
-    """
-    A2A client that uses Anthropic's Claude API to process messages.
+    """A2A client that uses Anthropic's Claude API to process messages."""
     
-    This client converts A2A messages to Anthropic's format, sends them to the Anthropic API,
-    and converts the responses back to A2A format.
-    """
-    
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229", temperature: float = 0.7, max_tokens: int = 1000):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "claude-3-opus-20240229",
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None
+    ):
         """
         Initialize the Anthropic A2A client
         
@@ -36,7 +37,9 @@ class AnthropicA2AClient(BaseA2AClient):
             api_key: Anthropic API key
             model: Anthropic model to use (default: "claude-3-opus-20240229")
             temperature: Generation temperature (default: 0.7)
-            max_tokens: Maximum number of tokens to generate (default: 1000)
+            max_tokens: Maximum tokens to generate (default: 1000)
+            system_prompt: Optional system prompt for all conversations
+            tools: Optional list of tool definitions for tool use
         
         Raises:
             A2AImportError: If the anthropic package is not installed
@@ -51,53 +54,18 @@ class AnthropicA2AClient(BaseA2AClient):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.system_prompt = system_prompt or "You are a helpful assistant."
+        self.tools = tools
+        
+        # Initialize Anthropic client
         self.client = anthropic.Anthropic(api_key=api_key)
         
-        # Create model name for display
-        model_display_name = model.replace("-", " ").title()
-        # Extract version from model ID if present
-        model_version = re.search(r"[0-9]{8}", model)
-        if model_version:
-            version_date = model_version.group(0)
-            # Format as YYYY-MM-DD
-            formatted_date = f"{version_date[:4]}-{version_date[4:6]}-{version_date[6:8]}"
-            version = f"{model.split('-')[0].title()} {formatted_date}"
-        else:
-            version = "1.0.0"
-        
-        # Create a default agent card
-        self.agent_card = AgentCard(
-            name=f"Claude {model_display_name}",
-            description=f"Anthropic's {model_display_name} model accessible via A2A",
-            url="https://api.anthropic.com",
-            version=version,
-            capabilities={
-                "streaming": True,
-                "pushNotifications": False,
-                "stateTransitionHistory": False
-            },
-            skills=[
-                AgentSkill(
-                    name="Text Generation",
-                    description=f"Generate text using the Claude {model_display_name} model",
-                    tags=["anthropic", "claude", "language-model", "text-generation"]
-                ),
-                AgentSkill(
-                    name="Reasoning",
-                    description="Perform complex reasoning tasks",
-                    tags=["anthropic", "claude", "reasoning"]
-                ),
-                AgentSkill(
-                    name="Tool Use",
-                    description="Use tools through structured responses",
-                    tags=["anthropic", "claude", "tool-use"]
-                )
-            ]
-        )
-        
+        # Store message history for conversations
+        self._conversation_histories = {}
+    
     def send_message(self, message: Message) -> Message:
         """
-        Send a message to Anthropic and convert the response to A2A format
+        Send a message to Anthropic's API and return the response as an A2A message
         
         Args:
             message: The A2A message to send
@@ -109,67 +77,390 @@ class AnthropicA2AClient(BaseA2AClient):
             A2AConnectionError: If connection to Anthropic fails
         """
         try:
-            # Convert A2A message to Anthropic format
+            # Create Anthropic message format
+            anthropic_messages = []
+            
+            # If this is part of a conversation, retrieve history
+            conversation_id = message.conversation_id
+            if conversation_id and conversation_id in self._conversation_histories:
+                anthropic_messages = self._conversation_histories[conversation_id].copy()
+            
+            # Add the current message
             if message.content.type == "text":
-                # For text messages, use the text directly
-                user_message = message.content.text
+                anthropic_messages.append({
+                    "role": "user" if message.role == MessageRole.USER else "assistant",
+                    "content": message.content.text
+                })
             elif message.content.type == "function_call":
-                # For function calls, format as text
+                # Convert function call to string representation
                 params_str = ", ".join([f"{p.name}={p.value}" for p in message.content.parameters])
-                user_message = f"Call function {message.content.name}({params_str})"
+                text = f"Call function {message.content.name}({params_str})"
+                anthropic_messages.append({"role": "user", "content": text})
             elif message.content.type == "function_response":
-                # For function responses, format as text
-                user_message = f"Function {message.content.name} returned: {message.content.response}"
+                # Format function response as tool result for Claude
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": message.message_id or "tool_call_id",
+                            "tool_name": message.content.name,
+                            "content": json.dumps(message.content.response)
+                        }
+                    ]
+                })
+            elif message.content.type == "error":
+                # Convert error to text
+                anthropic_messages.append({
+                    "role": "user", 
+                    "content": f"Error: {message.content.message}"
+                })
             else:
-                # For error messages or unknown types
-                user_message = f"Error: {getattr(message.content, 'message', 'Unknown message type')}"
+                # Default case for unknown content types
+                anthropic_messages.append({
+                    "role": "user", 
+                    "content": str(message.content)
+                })
+            
+            # Prepare API call parameters
+            kwargs = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": anthropic_messages
+            }
+            
+            # Add system prompt if provided
+            if self.system_prompt:
+                kwargs["system"] = self.system_prompt
+            
+            # Add tools if provided
+            if self.tools:
+                kwargs["tools"] = self.tools
             
             # Call Anthropic API
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                messages=[
-                    {"role": "user", "content": user_message}
-                ]
-            )
+            response = self.client.messages.create(**kwargs)
             
-            # Extract text from response
+            # Update conversation history if we have a conversation ID
+            if conversation_id:
+                if conversation_id not in self._conversation_histories:
+                    # Initialize history
+                    self._conversation_histories[conversation_id] = []
+                
+                # Add the user message to history
+                if message.content.type == "text":
+                    self._conversation_histories[conversation_id].append({
+                        "role": "user" if message.role == MessageRole.USER else "assistant",
+                        "content": message.content.text
+                    })
+                elif message.content.type == "function_response":
+                    self._conversation_histories[conversation_id].append({
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": message.message_id or "tool_call_id",
+                                "tool_name": message.content.name,
+                                "content": json.dumps(message.content.response)
+                            }
+                        ]
+                    })
+            
+            # Process the response
+            # Check for tool use first
+            for content_item in response.content:
+                if content_item.type == "tool_use":
+                    # It's a tool call
+                    tool_use = content_item
+                    
+                    # Add to conversation history if tracking
+                    if conversation_id:
+                        self._conversation_histories[conversation_id].append({
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": tool_use.id,
+                                    "name": tool_use.name,
+                                    "input": tool_use.input
+                                }
+                            ]
+                        })
+                    
+                    try:
+                        # Parse input as JSON
+                        input_data = json.loads(tool_use.input)
+                        parameters = [
+                            FunctionParameter(name=key, value=value)
+                            for key, value in input_data.items()
+                        ]
+                    except (json.JSONDecodeError, TypeError):
+                        # Fallback for non-JSON input
+                        parameters = [
+                            FunctionParameter(name="input", value=tool_use.input)
+                        ]
+                    
+                    # Create function call message
+                    return Message(
+                        content=FunctionCallContent(
+                            name=tool_use.name,
+                            parameters=parameters
+                        ),
+                        role=MessageRole.AGENT,
+                        parent_message_id=message.message_id,
+                        conversation_id=message.conversation_id
+                    )
+            
+            # If no tool use, get text content
             text_content = ""
             for content_item in response.content:
                 if content_item.type == "text":
                     text_content += content_item.text
             
-            # Check if the text appears to be a function/tool call
+            # Add to conversation history
+            if conversation_id:
+                self._conversation_histories[conversation_id].append({
+                    "role": "assistant",
+                    "content": text_content
+                })
+            
+            # Check for tool use in the text content (for older Claude versions)
             tool_call = self._extract_tool_call_from_text(text_content)
             if tool_call:
-                # Create a function call message
                 return Message(
                     content=FunctionCallContent(
                         name=tool_call["name"],
                         parameters=tool_call["parameters"]
                     ),
                     role=MessageRole.AGENT,
-                    message_id=str(uuid.uuid4()),
                     parent_message_id=message.message_id,
                     conversation_id=message.conversation_id
                 )
             
-            # Convert response back to A2A format
+            # Standard text response
             return Message(
                 content=TextContent(text=text_content),
                 role=MessageRole.AGENT,
-                message_id=str(uuid.uuid4()),
                 parent_message_id=message.message_id,
                 conversation_id=message.conversation_id
             )
-        
+            
         except Exception as e:
-            raise A2AConnectionError(f"Failed to communicate with Anthropic: {str(e)}")
+            # Create error message
+            return Message(
+                content=TextContent(text=f"Error from Anthropic API: {str(e)}"),
+                role=MessageRole.AGENT,
+                parent_message_id=message.message_id,
+                conversation_id=message.conversation_id
+            )
+    
+    def send_conversation(self, conversation: Conversation) -> Conversation:
+        """
+        Send a full conversation to Anthropic's API and get an updated conversation
+        
+        Args:
+            conversation: The A2A conversation to send
+            
+        Returns:
+            The updated conversation with the response
+            
+        Raises:
+            A2AConnectionError: If connection to Anthropic fails
+        """
+        if not conversation.messages:
+            # Empty conversation, return as is
+            return conversation
+        
+        try:
+            # Initialize Anthropic message format
+            anthropic_messages = []
+            
+            # Add all messages from the conversation
+            for msg in conversation.messages:
+                if msg.content.type == "text":
+                    anthropic_messages.append({
+                        "role": "user" if msg.role == MessageRole.USER else "assistant",
+                        "content": msg.content.text
+                    })
+                elif msg.content.type == "function_call":
+                    # Convert function call to string
+                    params_str = ", ".join([f"{p.name}={p.value}" for p in msg.content.parameters])
+                    text = f"Call function {msg.content.name}({params_str})"
+                    
+                    role = "user" if msg.role == MessageRole.USER else "assistant"
+                    anthropic_messages.append({"role": role, "content": text})
+                elif msg.content.type == "function_response":
+                    # Format function response as tool result for Claude
+                    anthropic_messages.append({
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg.message_id or "tool_call_id",
+                                "tool_name": msg.content.name,
+                                "content": json.dumps(msg.content.response)
+                            }
+                        ]
+                    })
+            
+            # Get conversation ID for tracking history
+            conversation_id = conversation.conversation_id
+            
+            # Store the conversation in history
+            if conversation_id:
+                self._conversation_histories[conversation_id] = anthropic_messages.copy()
+            
+            # Prepare API call parameters
+            kwargs = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": anthropic_messages
+            }
+            
+            # Add system prompt if provided
+            if self.system_prompt:
+                kwargs["system"] = self.system_prompt
+            
+            # Add tools if provided
+            if self.tools:
+                kwargs["tools"] = self.tools
+            
+            # Call Anthropic API
+            response = self.client.messages.create(**kwargs)
+            
+            # Get the last message in the conversation as parent
+            last_message = conversation.messages[-1]
+            
+            # Process the response
+            # Check for tool use first
+            for content_item in response.content:
+                if content_item.type == "tool_use":
+                    # It's a tool call
+                    tool_use = content_item
+                    
+                    # Add to conversation history if tracking
+                    if conversation_id:
+                        self._conversation_histories[conversation_id].append({
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": tool_use.id,
+                                    "name": tool_use.name,
+                                    "input": tool_use.input
+                                }
+                            ]
+                        })
+                    
+                    try:
+                        # Parse input as JSON
+                        input_data = json.loads(tool_use.input)
+                        parameters = [
+                            FunctionParameter(name=key, value=value)
+                            for key, value in input_data.items()
+                        ]
+                    except (json.JSONDecodeError, TypeError):
+                        # Fallback for non-JSON input
+                        parameters = [
+                            FunctionParameter(name="input", value=tool_use.input)
+                        ]
+                    
+                    # Add function call message to conversation
+                    a2a_message = Message(
+                        content=FunctionCallContent(
+                            name=tool_use.name,
+                            parameters=parameters
+                        ),
+                        role=MessageRole.AGENT,
+                        parent_message_id=last_message.message_id,
+                        conversation_id=conversation_id
+                    )
+                    conversation.add_message(a2a_message)
+                    return conversation
+            
+            # If no tool use, get text content
+            text_content = ""
+            for content_item in response.content:
+                if content_item.type == "text":
+                    text_content += content_item.text
+            
+            # Add to conversation history
+            if conversation_id:
+                self._conversation_histories[conversation_id].append({
+                    "role": "assistant",
+                    "content": text_content
+                })
+            
+            # Check for tool use in the text content (for older Claude versions)
+            tool_call = self._extract_tool_call_from_text(text_content)
+            if tool_call:
+                a2a_message = Message(
+                    content=FunctionCallContent(
+                        name=tool_call["name"],
+                        parameters=tool_call["parameters"]
+                    ),
+                    role=MessageRole.AGENT,
+                    parent_message_id=last_message.message_id,
+                    conversation_id=conversation_id
+                )
+                conversation.add_message(a2a_message)
+                return conversation
+            
+            # Add text response to conversation
+            a2a_message = Message(
+                content=TextContent(text=text_content),
+                role=MessageRole.AGENT,
+                parent_message_id=last_message.message_id,
+                conversation_id=conversation_id
+            )
+            conversation.add_message(a2a_message)
+            
+            return conversation
+            
+        except Exception as e:
+            # Add error message to conversation
+            error_msg = f"Error from Anthropic API: {str(e)}"
+            
+            # Use the last message as parent if available
+            parent_id = conversation.messages[-1].message_id if conversation.messages else None
+            
+            conversation.create_error_message(error_msg, parent_message_id=parent_id)
+            return conversation
+    
+    def ask(self, query: str) -> str:
+        """
+        Simple helper for text-based queries
+        
+        Args:
+            query: Text query to send
+            
+        Returns:
+            Text response from the model
+        """
+        # Create message
+        message = Message(
+            content=TextContent(text=query),
+            role=MessageRole.USER
+        )
+        
+        # Send message and get response
+        response = self.send_message(message)
+        
+        # Extract text from response
+        if response.content.type == "text":
+            return response.content.text
+        elif response.content.type == "function_call":
+            # Format function call as text
+            params_str = ", ".join([f"{p.name}={p.value}" for p in response.content.parameters])
+            return f"Function call: {response.content.name}({params_str})"
+        else:
+            # Default case for other content types
+            return str(response.content)
     
     def _extract_tool_call_from_text(self, text: str) -> Optional[Dict[str, Any]]:
         """
-        Extract tool/function call information from text response
+        Extract tool call information from text response
         
         Claude often formats tool calls in a structured way that can be parsed
         
@@ -185,7 +476,7 @@ class AnthropicA2AClient(BaseA2AClient):
             tool_content = tool_match.group(1)
             
             # Look for the name
-            name_match = re.search(r'<name>(.*?)</name>', tool_content, re.DOTALL)
+            name_match = re.search(r'<n>(.*?)</n>', tool_content, re.DOTALL)
             if not name_match:
                 return None
                 
@@ -201,24 +492,21 @@ class AnthropicA2AClient(BaseA2AClient):
                     for key, value in input_json.items():
                         params.append(FunctionParameter(name=key, value=value))
                 except json.JSONDecodeError:
-                    # If not valid JSON, extract key-value pairs using regex
-                    param_matches = re.findall(r'"([^"]+)"\s*:\s*("[^"]*"|[\d.]+|true|false|null|\{.*?\}|\[.*?\])', 
+                    # If not valid JSON, try to extract parameters as key-value pairs
+                    param_matches = re.findall(r'"([^"]+)"\s*:\s*("[^"]*"|[\d.]+|true|false|null)', 
                                              input_match.group(1))
                     for key, value in param_matches:
-                        # Process the value
+                        # Process value based on type
                         if value.startswith('"') and value.endswith('"'):
-                            # String value, remove quotes
-                            value = value[1:-1]
+                            value = value[1:-1]  # Remove quotes
                         elif value.lower() == "true":
                             value = True
                         elif value.lower() == "false":
                             value = False
                         elif value.lower() == "null":
                             value = None
-                        elif value.isdigit():
-                            value = int(value)
-                        elif re.match(r'^-?\d+(\.\d+)?$', value):
-                            value = float(value)
+                        elif value.replace('.', '', 1).isdigit():
+                            value = float(value) if '.' in value else int(value)
                             
                         params.append(FunctionParameter(name=key, value=value))
             
@@ -232,7 +520,7 @@ class AnthropicA2AClient(BaseA2AClient):
         if function_intent_match:
             func_name = function_intent_match.group(3)
             
-            # Look for parameters in a structured format
+            # Look for parameters
             params = []
             param_section = text.split(function_intent_match.group(0), 1)[1]
             
@@ -245,24 +533,21 @@ class AnthropicA2AClient(BaseA2AClient):
                     for key, value in param_json.items():
                         params.append(FunctionParameter(name=key, value=value))
                 except json.JSONDecodeError:
-                    # If not valid JSON, extract key-value pairs using regex
+                    # If not valid JSON, try to extract parameters manually
                     param_matches = re.findall(r'"([^"]+)"\s*:\s*("[^"]*"|[\d.]+|true|false|null)', 
                                              param_match.group(1))
                     for key, value in param_matches:
-                        # Process the value
+                        # Process value based on type
                         if value.startswith('"') and value.endswith('"'):
-                            # String value, remove quotes
-                            value = value[1:-1]
+                            value = value[1:-1]  # Remove quotes
                         elif value.lower() == "true":
                             value = True
                         elif value.lower() == "false":
                             value = False
                         elif value.lower() == "null":
                             value = None
-                        elif value.isdigit():
-                            value = int(value)
-                        elif re.match(r'^-?\d+(\.\d+)?$', value):
-                            value = float(value)
+                        elif value.replace('.', '', 1).isdigit():
+                            value = float(value) if '.' in value else int(value)
                             
                         params.append(FunctionParameter(name=key, value=value))
             
@@ -273,21 +558,17 @@ class AnthropicA2AClient(BaseA2AClient):
                     # Process the value
                     value = value.strip()
                     if value.startswith('"') and value.endswith('"'):
-                        # String value, remove quotes
-                        value = value[1:-1]
+                        value = value[1:-1]  # Remove quotes
                     elif value.startswith("'") and value.endswith("'"):
-                        # String value, remove quotes
-                        value = value[1:-1]
+                        value = value[1:-1]  # Remove quotes
                     elif value.lower() == "true":
                         value = True
                     elif value.lower() == "false":
                         value = False
-                    elif value.lower() == "none" or value.lower() == "null":
+                    elif value.lower() in ("none", "null"):
                         value = None
-                    elif value.isdigit():
-                        value = int(value)
-                    elif re.match(r'^-?\d+(\.\d+)?$', value):
-                        value = float(value)
+                    elif value.replace('.', '', 1).isdigit():
+                        value = float(value) if '.' in value else int(value)
                         
                     params.append(FunctionParameter(name=key, value=value))
             
@@ -298,129 +579,17 @@ class AnthropicA2AClient(BaseA2AClient):
         
         return None
     
-    def send_conversation(self, conversation: Conversation) -> Conversation:
+    def clear_conversation_history(self, conversation_id: str = None):
         """
-        Send a conversation to Anthropic and update with the response
+        Clear conversation history for a specific conversation or all conversations
         
         Args:
-            conversation: The A2A conversation to send
-            
-        Returns:
-            The updated conversation with Anthropic's response
-        
-        Raises:
-            A2AConnectionError: If connection to Anthropic fails
+            conversation_id: ID of conversation to clear, or None to clear all
         """
-        if not conversation.messages:
-            return conversation
-        
-        try:
-            # Convert A2A conversation to Anthropic messages
-            anthropic_messages = []
-            
-            for msg in conversation.messages:
-                # Map A2A roles to Anthropic roles
-                if msg.role == MessageRole.USER:
-                    role = "user"
-                elif msg.role == MessageRole.AGENT:
-                    role = "assistant"
-                elif msg.role == MessageRole.SYSTEM:
-                    role = "user"  # Anthropic doesn't have system role, use user
-                else:
-                    role = "user"  # Default to user
-                
-                # Convert content to text
-                if msg.content.type == "text":
-                    content = msg.content.text
-                elif msg.content.type == "function_call":
-                    params_str = ", ".join([f"{p.name}={p.value}" for p in msg.content.parameters])
-                    content = f"Call function {msg.content.name}({params_str})"
-                elif msg.content.type == "function_response":
-                    content = f"Function {msg.content.name} returned: {msg.content.response}"
-                else:
-                    content = f"Error: {getattr(msg.content, 'message', 'Unknown message type')}"
-                
-                anthropic_messages.append({"role": role, "content": content})
-            
-            # Call Anthropic API
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                messages=anthropic_messages
-            )
-            
-            # Get the last message ID to use as parent
-            parent_id = conversation.messages[-1].message_id
-            
-            # Extract text from response
-            text_content = ""
-            for content_item in response.content:
-                if content_item.type == "text":
-                    text_content += content_item.text
-            
-            # Check if the text appears to be a function/tool call
-            tool_call = self._extract_tool_call_from_text(text_content)
-            if tool_call:
-                # Create a function call message
-                a2a_response = Message(
-                    content=FunctionCallContent(
-                        name=tool_call["name"],
-                        parameters=tool_call["parameters"]
-                    ),
-                    role=MessageRole.AGENT,
-                    message_id=str(uuid.uuid4()),
-                    parent_message_id=parent_id,
-                    conversation_id=conversation.conversation_id
-                )
-            else:
-                # Convert response to A2A format
-                a2a_response = Message(
-                    content=TextContent(text=text_content),
-                    role=MessageRole.AGENT,
-                    message_id=str(uuid.uuid4()),
-                    parent_message_id=parent_id,
-                    conversation_id=conversation.conversation_id
-                )
-            
-            conversation.add_message(a2a_response)
-            return conversation
-        
-        except Exception as e:
-            # Add an error message to the conversation
-            error_msg = f"Failed to communicate with Anthropic: {str(e)}"
-            conversation.create_error_message(error_msg)
-            return conversation
-    
-    def ask(self, message_text):
-        """
-        Simple helper for text-based queries
-        
-        Args:
-            message_text: Text message to send
-            
-        Returns:
-            Text response from the agent
-        """
-        # Check if message is already a Message object
-        if isinstance(message_text, str):
-            message = Message(
-                content=TextContent(text=message_text),
-                role=MessageRole.USER
-            )
+        if conversation_id:
+            if conversation_id in self._conversation_histories:
+                # Reset history for the specific conversation
+                self._conversation_histories[conversation_id] = []
         else:
-            message = message_text
-        
-        # Send message
-        response = self.send_message(message)
-        
-        # Extract text from response
-        if response and hasattr(response, "content"):
-            if hasattr(response.content, "text"):
-                return response.content.text
-            elif hasattr(response.content, "message"):
-                return response.content.message
-            elif response.content is not None:
-                return str(response.content)
-        
-        return "No text response"
+            # Clear all conversation histories
+            self._conversation_histories = {}

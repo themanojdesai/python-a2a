@@ -3,6 +3,7 @@ OpenAI-based server implementation for the A2A protocol.
 """
 
 import uuid
+import json
 from typing import Optional, Dict, Any, List, Union
 
 try:
@@ -13,6 +14,7 @@ except ImportError:
 from ...models.message import Message, MessageRole
 from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent
 from ...models.conversation import Conversation
+from ...models.task import Task, TaskStatus, TaskState
 from ..base import BaseA2AServer
 from ...exceptions import A2AImportError, A2AConnectionError
 
@@ -57,7 +59,24 @@ class OpenAIA2AServer(BaseA2AServer):
         self.temperature = temperature
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
         self.functions = functions
+        self.tools = self._convert_functions_to_tools() if functions else None
         self.client = OpenAI(api_key=api_key)
+        
+        # For tracking conversation state
+        self._conversation_state = {}  # conversation_id -> list of messages
+        
+    def _convert_functions_to_tools(self):
+        """Convert functions to the tools format used by newer OpenAI models"""
+        if not self.functions:
+            return None
+            
+        tools = []
+        for func in self.functions:
+            tools.append({
+                "type": "function",
+                "function": func
+            })
+        return tools
     
     def handle_message(self, message: Message) -> Message:
         """
@@ -75,6 +94,12 @@ class OpenAIA2AServer(BaseA2AServer):
         try:
             # Prepare the OpenAI messages
             openai_messages = [{"role": "system", "content": self.system_prompt}]
+            conversation_id = message.conversation_id
+            
+            # If this is part of an existing conversation, retrieve history
+            if conversation_id and conversation_id in self._conversation_state:
+                # Use the existing conversation history
+                openai_messages = self._conversation_state[conversation_id].copy()
             
             # Add the user message
             if message.content.type == "text":
@@ -87,6 +112,14 @@ class OpenAIA2AServer(BaseA2AServer):
                 params_str = ", ".join([f"{p.name}={p.value}" for p in message.content.parameters])
                 text = f"Call function {message.content.name}({params_str})"
                 openai_messages.append({"role": "user", "content": text})
+            elif message.content.type == "function_response":
+                # Format function response in OpenAI's expected format
+                # This is critical for function calling to work properly
+                openai_messages.append({
+                    "role": "function",
+                    "name": message.content.name,
+                    "content": json.dumps(message.content.response)
+                })
             else:
                 # Handle other message types or errors
                 text = f"Message of type {message.content.type}"
@@ -94,15 +127,20 @@ class OpenAIA2AServer(BaseA2AServer):
                     text = message.content.message
                 openai_messages.append({"role": "user", "content": text})
             
-            # Call OpenAI API
+            # Call OpenAI API with appropriate parameters
             kwargs = {
                 "model": self.model,
                 "messages": openai_messages,
                 "temperature": self.temperature,
             }
             
-            # Add functions if provided
-            if self.functions:
+            # Add tools or functions based on model and availability
+            if self.tools:
+                # Newer models use tools
+                kwargs["tools"] = self.tools
+                kwargs["tool_choice"] = "auto"
+            elif self.functions:
+                # Older models use functions
                 kwargs["functions"] = self.functions
                 kwargs["function_call"] = "auto"
             
@@ -110,22 +148,101 @@ class OpenAIA2AServer(BaseA2AServer):
             
             # Process the response
             choice = response.choices[0]
-            message_obj = choice.message
+            response_message = choice.message
             
-            # Check if it's a function call or a regular message
-            if hasattr(message_obj, "function_call") and message_obj.function_call:
-                # Convert function call to A2A format
-                function_call = message_obj.function_call
+            # If we have a conversation ID, update the conversation state
+            if conversation_id:
+                if conversation_id not in self._conversation_state:
+                    self._conversation_state[conversation_id] = [{"role": "system", "content": self.system_prompt}]
+                
+                # Add the original user message to state
+                if message.content.type == "text":
+                    self._conversation_state[conversation_id].append({
+                        "role": "user" if message.role == MessageRole.USER else "assistant",
+                        "content": message.content.text
+                    })
+                elif message.content.type == "function_response":
+                    self._conversation_state[conversation_id].append({
+                        "role": "function",
+                        "name": message.content.name,
+                        "content": json.dumps(message.content.response)
+                    })
+                
+                # Add the assistant's response to state
+                if hasattr(response_message, "content") and response_message.content:
+                    self._conversation_state[conversation_id].append({
+                        "role": "assistant",
+                        "content": response_message.content
+                    })
+                
+                # If it's a tool/function call, add that to state too
+                tool_calls = getattr(response_message, "tool_calls", None)
+                if tool_calls:
+                    for tool_call in tool_calls:
+                        if tool_call.type == "function":
+                            self._conversation_state[conversation_id].append({
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "id": tool_call.id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": tool_call.function.name,
+                                            "arguments": tool_call.function.arguments
+                                        }
+                                    }
+                                ]
+                            })
+                            break
+                elif hasattr(response_message, "function_call") and response_message.function_call:
+                    func_call = response_message.function_call
+                    self._conversation_state[conversation_id].append({
+                        "role": "assistant",
+                        "function_call": {
+                            "name": func_call.name,
+                            "arguments": func_call.arguments
+                        }
+                    })
+            
+            # Convert the response to A2A format
+            # Check for function calls via newer tool_calls interface first
+            tool_calls = getattr(response_message, "tool_calls", None)
+            if tool_calls:
+                for tool_call in tool_calls:
+                    if tool_call.type == "function":
+                        # Process function call
+                        try:
+                            # Parse arguments as JSON
+                            args = json.loads(tool_call.function.arguments)
+                            parameters = [
+                                {"name": name, "value": value}
+                                for name, value in args.items()
+                            ]
+                        except:
+                            # Fallback parsing for non-JSON arguments
+                            parameters = [{"name": "arguments", "value": tool_call.function.arguments}]
+                        
+                        return Message(
+                            content=FunctionCallContent(
+                                name=tool_call.function.name,
+                                parameters=parameters
+                            ),
+                            role=MessageRole.AGENT,
+                            parent_message_id=message.message_id,
+                            conversation_id=message.conversation_id
+                        )
+            # Then check older function_call interface
+            elif hasattr(response_message, "function_call") and response_message.function_call:
+                function_call = response_message.function_call
                 try:
                     # Parse arguments as JSON
-                    import json
                     args = json.loads(function_call.arguments)
                     parameters = [
                         {"name": name, "value": value}
                         for name, value in args.items()
                     ]
                 except:
-                    # Fallback: parse arguments as simple string
+                    # Fallback parsing for non-JSON arguments
                     parameters = [{"name": "arguments", "value": function_call.arguments}]
                 
                 return Message(
@@ -137,17 +254,117 @@ class OpenAIA2AServer(BaseA2AServer):
                     parent_message_id=message.message_id,
                     conversation_id=message.conversation_id
                 )
-            else:
-                # Regular text response
-                return Message(
-                    content=TextContent(text=message_obj.content),
-                    role=MessageRole.AGENT,
-                    parent_message_id=message.message_id,
-                    conversation_id=message.conversation_id
-                )
+            
+            # Regular text response
+            return Message(
+                content=TextContent(text=response_message.content or ""),
+                role=MessageRole.AGENT,
+                parent_message_id=message.message_id,
+                conversation_id=message.conversation_id
+            )
         
         except Exception as e:
             raise A2AConnectionError(f"Failed to communicate with OpenAI: {str(e)}")
+    
+    def handle_task(self, task: Task) -> Task:
+        """
+        Process an incoming A2A task using OpenAI's API
+        
+        Args:
+            task: The incoming A2A task
+            
+        Returns:
+            The updated task with the response
+        """
+        try:
+            # Extract the message from the task
+            message_data = task.message or {}
+            
+            # Convert to Message object if it's a dict
+            if isinstance(message_data, dict):
+                from ...models import Message
+                message = Message.from_dict(message_data)
+            else:
+                message = message_data
+                
+            # Process the message
+            response = self.handle_message(message)
+            
+            # Create artifact based on response content type
+            if hasattr(response, "content"):
+                content_type = getattr(response.content, "type", None)
+                
+                if content_type == "text":
+                    # Handle TextContent
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "text", 
+                            "text": response.content.text
+                        }]
+                    }]
+                elif content_type == "function_response":
+                    # Handle FunctionResponseContent
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "function_response",
+                            "name": response.content.name,
+                            "response": response.content.response
+                        }]
+                    }]
+                elif content_type == "function_call":
+                    # Handle FunctionCallContent
+                    params = []
+                    for param in response.content.parameters:
+                        params.append({
+                            "name": param.name,
+                            "value": param.value
+                        })
+                    
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "function_call",
+                            "name": response.content.name,
+                            "parameters": params
+                        }]
+                    }]
+                elif content_type == "error":
+                    # Handle ErrorContent
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "error",
+                            "message": response.content.message
+                        }]
+                    }]
+                else:
+                    # Handle other content types
+                    task.artifacts = [{
+                        "parts": [{
+                            "type": "text", 
+                            "text": str(response.content)
+                        }]
+                    }]
+            else:
+                # Handle responses without content
+                task.artifacts = [{
+                    "parts": [{
+                        "type": "text", 
+                        "text": str(response)
+                    }]
+                }]
+            
+            # Mark as completed
+            task.status = TaskStatus(state=TaskState.COMPLETED)
+            return task
+        except Exception as e:
+            # Handle errors
+            task.artifacts = [{
+                "parts": [{
+                    "type": "error", 
+                    "message": f"Error in OpenAI server: {str(e)}"
+                }]
+            }]
+            task.status = TaskStatus(state=TaskState.FAILED)
+            return task
     
     def handle_conversation(self, conversation: Conversation) -> Conversation:
         """
@@ -168,88 +385,38 @@ class OpenAIA2AServer(BaseA2AServer):
             return conversation
         
         try:
-            # Prepare the OpenAI messages
-            openai_messages = [{"role": "system", "content": self.system_prompt}]
+            # Store conversation in state
+            conversation_id = conversation.conversation_id
+            self._conversation_state[conversation_id] = [{"role": "system", "content": self.system_prompt}]
             
-            # Add all messages from the conversation
+            # Convert all messages to OpenAI format
             for msg in conversation.messages:
-                role = "user" if msg.role == MessageRole.USER else "assistant"
-                
                 if msg.content.type == "text":
-                    openai_messages.append({
-                        "role": role,
+                    self._conversation_state[conversation_id].append({
+                        "role": "user" if msg.role == MessageRole.USER else "assistant",
                         "content": msg.content.text
                     })
                 elif msg.content.type == "function_call":
-                    # Format function call as text
+                    # Format function call for OpenAI
                     params_str = ", ".join([f"{p.name}={p.value}" for p in msg.content.parameters])
                     text = f"Call function {msg.content.name}({params_str})"
-                    openai_messages.append({"role": role, "content": text})
+                    self._conversation_state[conversation_id].append({
+                        "role": "user" if msg.role == MessageRole.USER else "assistant", 
+                        "content": text
+                    })
                 elif msg.content.type == "function_response":
-                    # Format function response as text
-                    text = f"Function {msg.content.name} returned: {msg.content.response}"
-                    openai_messages.append({"role": role, "content": text})
-                else:
-                    # Handle other message types or errors
-                    text = f"Message of type {msg.content.type}"
-                    if hasattr(msg.content, "message"):
-                        text = msg.content.message
-                    openai_messages.append({"role": role, "content": text})
+                    # Format function response for OpenAI
+                    self._conversation_state[conversation_id].append({
+                        "role": "function",
+                        "name": msg.content.name,
+                        "content": json.dumps(msg.content.response)
+                    })
             
-            # Call OpenAI API
-            kwargs = {
-                "model": self.model,
-                "messages": openai_messages,
-                "temperature": self.temperature,
-            }
+            # Get the last message to process
+            last_message = conversation.messages[-1]
             
-            # Add functions if provided
-            if self.functions:
-                kwargs["functions"] = self.functions
-                kwargs["function_call"] = "auto"
-            
-            response = self.client.chat.completions.create(**kwargs)
-            
-            # Process the response
-            choice = response.choices[0]
-            message_obj = choice.message
-            
-            # Get the last message ID to use as parent
-            parent_id = conversation.messages[-1].message_id
-            
-            # Check if it's a function call or a regular message
-            if hasattr(message_obj, "function_call") and message_obj.function_call:
-                # Convert function call to A2A format
-                function_call = message_obj.function_call
-                try:
-                    # Parse arguments as JSON
-                    import json
-                    args = json.loads(function_call.arguments)
-                    parameters = [
-                        {"name": name, "value": value}
-                        for name, value in args.items()
-                    ]
-                except:
-                    # Fallback: parse arguments as simple string
-                    parameters = [{"name": "arguments", "value": function_call.arguments}]
-                
-                a2a_response = Message(
-                    content=FunctionCallContent(
-                        name=function_call.name,
-                        parameters=parameters
-                    ),
-                    role=MessageRole.AGENT,
-                    parent_message_id=parent_id,
-                    conversation_id=conversation.conversation_id
-                )
-            else:
-                # Regular text response
-                a2a_response = Message(
-                    content=TextContent(text=message_obj.content),
-                    role=MessageRole.AGENT,
-                    parent_message_id=parent_id,
-                    conversation_id=conversation.conversation_id
-                )
+            # Call the handle_message method to process the last message
+            a2a_response = self.handle_message(last_message)
             
             # Add the response to the conversation
             conversation.add_message(a2a_response)
