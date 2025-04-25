@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.4.6"
+__version__ = "0.5.0"
 
 # Setup feature flags
 import sys
@@ -115,6 +115,23 @@ from .mcp.integration import (
 from .mcp.proxy import create_proxy_server
 from .mcp.transport import create_fastapi_app
 
+# LangChain integration - Always import the core functions regardless of LangChain availability
+from .langchain import (
+    to_a2a_server,
+    to_langchain_agent,
+    to_mcp_server,
+    to_langchain_tool
+)
+from .langchain.exceptions import (
+    LangChainIntegrationError,
+    LangChainNotInstalledError,
+    LangChainToolConversionError,
+    MCPToolConversionError,
+    LangChainAgentConversionError,
+    A2AAgentConversionError
+)
+HAS_LANGCHAIN = importlib.util.find_spec("langchain") is not None or importlib.util.find_spec("langchain_core") is not None
+
 # Optional integration with LLM providers
 # These might not be available if the specific provider packages are not installed
 try:
@@ -152,6 +169,7 @@ HAS_UTILS = True
 HAS_DECORATORS = True
 HAS_WORKFLOW = True
 HAS_MCP = True
+HAS_LANGCHAIN_INTEGRATION = True  # Always True since we provide the interface
 
 # Define __all__ for explicit exports
 __all__ = [
@@ -248,6 +266,18 @@ __all__ = [
     'A2AMCPAgent',
     'create_proxy_server',
     'create_fastapi_app',
+    
+    # LangChain Integration (always included)
+    'to_a2a_server',
+    'to_langchain_agent',
+    'to_mcp_server',
+    'to_langchain_tool',
+    'LangChainIntegrationError',
+    'LangChainNotInstalledError',
+    'LangChainToolConversionError',
+    'MCPToolConversionError',
+    'LangChainAgentConversionError',
+    'A2AAgentConversionError',
 ]
 
 # Conditionally add LLM clients/servers

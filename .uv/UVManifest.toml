@@ -2,11 +2,11 @@
 # This file enables reproducible builds with UV
 
 [manifest]
-version = "0.4.6"  # UVManifest version
+version = "0.5.0"  # UVManifest version
 
 [project]
 name = "python-a2a"
-version = "0.4.6"  # Updated version
+version = "0.5.0"  # Updated version
 
 [python]
 # List of Python versions supported by the project
@@ -15,6 +15,29 @@ python-versions = ["3.9", "3.10", "3.11"]
 [dependencies]
 # Core dependencies
 requests = ">=2.25.0"
+
+# Server dependencies
+flask = ">=2.0.0"
+aiohttp = ">=3.8.0"
+
+# OpenAI dependencies
+openai = ">=1.0.0"
+
+# Anthropic dependencies
+anthropic = ">=0.3.0"
+
+# AWS Bedrock dependencies
+boto3 = ">=1.26.0"
+botocore = ">=1.29.0"
+
+# MCP dependencies
+httpx = ">=0.23.0"
+fastapi = ">=0.95.0"
+uvicorn = ">=0.21.0"
+pydantic = ">=1.10.7"
+
+# LangChain dependencies
+langchain = ">=0.1.0"
 
 # Optional dependency groups
 [dependencies.server]
@@ -35,6 +58,9 @@ httpx = ">=0.23.0"
 fastapi = ">=0.95.0"
 uvicorn = ">=0.21.0"
 pydantic = ">=1.10.7"
+
+[dependencies.langchain]
+langchain = ">=0.1.0"
 
 [dependencies.dev]
 pytest = ">=6.0.0"

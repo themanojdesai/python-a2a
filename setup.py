@@ -15,7 +15,7 @@ except:
 
 setup(
     name="python-a2a",
-    version="0.4.6",
+    version="0.5.0",
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
@@ -43,7 +43,7 @@ setup(
         "Topic :: Software Development :: Libraries",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface, mcp, model-context-protocol, aws-bedrock",
+    keywords="a2a, agent, ai, llm, interoperability, google, protocol, chatbot, openai, anthropic, claude, huggingface, mcp, model-context-protocol, aws-bedrock, langchain",
     python_requires=">=3.9",
     # Include all dependencies by default
     # In setup.py
@@ -70,6 +70,9 @@ setup(
         "fastapi>=0.95.0",
         "uvicorn>=0.21.0",
         "pydantic>=1.10.7",
+        
+        # LangChain integration
+        "langchain>=0.1.0",
     ],
     # Keep extras for backward compatibility
     extras_require={
@@ -112,6 +115,7 @@ setup(
             "uvicorn>=0.21.0",
             "pydantic>=1.10.7",
             "aiohttp>=3.8.0",
+            "langchain>=0.1.0",
         ],
     },
     entry_points={

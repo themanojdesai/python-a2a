@@ -238,6 +238,7 @@ class MCPClient:
                 if stream and callback:
                     return await self._stream_tool_call(tool_name, callback, **params)
                 
+                # FIXED: Changed URL pattern from /tool/{tool_name} to /tools/{tool_name} (plural)
                 response = await self.client.post(
                     f"{self.server_url}/tools/{tool_name}",
                     json=params
@@ -319,6 +320,7 @@ class MCPClient:
         """
         full_response = []
         
+        # FIXED: Changed URL pattern from /tool/{tool_name} to /tools/{tool_name} (plural)
         async with self.client.stream(
             "POST",
             f"{self.server_url}/tools/{tool_name}",
@@ -332,6 +334,36 @@ class MCPClient:
                 callback(chunk_str)
                 
         return "".join(full_response)
+    
+    def call_tool_sync(self, tool_name: str, **params) -> Any:
+        """
+        Call a tool synchronously
+        
+        Args:
+            tool_name: Name of the tool to call
+            **params: Parameters to pass to the tool
+            
+        Returns:
+            Result from the tool
+            
+        Raises:
+            MCPError: For any errors
+        """
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.call_tool(tool_name, **params))
+    
+    def get_tools_sync(self) -> List[Dict[str, Any]]:
+        """
+        Get available tools synchronously
+        
+        Returns:
+            List of available tools with their metadata
+            
+        Raises:
+            MCPError: For any errors
+        """
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.get_tools())
             
     def get_function_specs(self) -> List[Dict[str, Any]]:
         """

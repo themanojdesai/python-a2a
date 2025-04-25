@@ -9,3 +9,4 @@ This section provides detailed guides on using Python A2A.
    basics
    advanced
    mcp
+   langchain

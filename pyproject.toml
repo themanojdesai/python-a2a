@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-a2a"
-version = "0.4.6"
+version = "0.5.0"
 description = "A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["a2a", "agent", "ai", "llm", "interoperability", "google", "protocol", "chatbot", "openai", "anthropic", "claude", "huggingface", "mcp", "model-context-protocol", "aws-bedrock"]
+keywords = ["a2a", "agent", "ai", "llm", "interoperability", "google", "protocol", "chatbot", "openai", "anthropic", "claude", "huggingface", "mcp", "model-context-protocol", "aws-bedrock", "langchain"]
 
 # Include all dependencies by default
 dependencies = [
@@ -50,6 +50,9 @@ dependencies = [
     "fastapi>=0.95.0",
     "uvicorn>=0.21.0",
     "pydantic>=1.10.7",
+    
+    # LangChain dependencies
+    "langchain>=0.1.0",
 ]
 
 [project.urls]
@@ -88,6 +91,9 @@ mcp = [
     "uvicorn>=0.21.0",
     "pydantic>=1.10.7",
 ]
+langchain = [
+    "langchain>=0.1.0",
+]
 all = [
     "flask>=2.0.0",
     "openai>=1.0.0",
@@ -99,6 +105,7 @@ all = [
     "uvicorn>=0.21.0",
     "pydantic>=1.10.7",
     "aiohttp>=3.8.0",
+    "langchain>=0.1.0",
 ]
 
 [project.scripts]
@@ -119,7 +126,7 @@ line_length = 88
 multi_line_output = 3
 
 [tool.mypy]
-python_version = "0.4.6"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
