@@ -23,7 +23,8 @@ from ..exceptions import A2AConnectionError, A2AResponseError
 class A2AClient(BaseA2AClient):
     """Client for interacting with HTTP-based A2A-compatible agents"""
     
-    def __init__(self, endpoint_url: str, headers: Optional[Dict[str, str]] = None, timeout: int = 30):
+    def __init__(self, endpoint_url: str, headers: Optional[Dict[str, str]] = None, 
+                 timeout: int = 30, google_a2a_compatible: bool = False):
         """
         Initialize a client with an agent endpoint URL
         
@@ -31,10 +32,13 @@ class A2AClient(BaseA2AClient):
             endpoint_url: The URL of the A2A-compatible agent
             headers: Optional HTTP headers to include in requests
             timeout: Request timeout in seconds
+            google_a2a_compatible: Whether to use Google A2A format by default (not normally needed)
         """
         self.endpoint_url = endpoint_url.rstrip("/")
         self.headers = headers or {}
         self.timeout = timeout
+        self._use_google_a2a = google_a2a_compatible
+        self._protocol_detected = False  # True after we've detected the protocol type
         
         # Always include content type for JSON
         if "Content-Type" not in self.headers:
@@ -43,6 +47,16 @@ class A2AClient(BaseA2AClient):
         # Try to fetch the agent card for A2A protocol support
         try:
             self.agent_card = self._fetch_agent_card()
+            
+            # Check for protocol hints in the agent card
+            if hasattr(self.agent_card, 'capabilities'):
+                capabilities = getattr(self.agent_card, 'capabilities', {})
+                if isinstance(capabilities, dict) and (
+                    capabilities.get("google_a2a_compatible") or 
+                    capabilities.get("parts_array_format")
+                ):
+                    self._use_google_a2a = True
+                    self._protocol_detected = True
         except Exception as e:
             # Create a default agent card
             self.agent_card = AgentCard(
@@ -165,6 +179,16 @@ class A2AClient(BaseA2AClient):
                     f"Failed to fetch agent card: {str(e)}"
                 ) from e
         
+        # Check for protocol hints in the agent card
+        if "capabilities" in card_data:
+            capabilities = card_data.get("capabilities", {})
+            if isinstance(capabilities, dict) and (
+                capabilities.get("google_a2a_compatible") or 
+                capabilities.get("parts_array_format")
+            ):
+                self._use_google_a2a = True
+                self._protocol_detected = True
+        
         # Create AgentSkill objects from data
         skills = []
         for skill_data in card_data.get("skills", []):
@@ -188,6 +212,40 @@ class A2AClient(BaseA2AClient):
             provider=card_data.get("provider"),
             documentation_url=card_data.get("documentationUrl")
         )
+    
+    def _detect_protocol_version(self, response_error=None):
+        """
+        Detect protocol version based on the error or endpoint probing
+        
+        Args:
+            response_error: Optional error from a failed request
+            
+        Returns:
+            True if Google A2A format should be used, False otherwise
+        """
+        # Already detected or explicitly set
+        if self._protocol_detected:
+            return self._use_google_a2a
+        
+        # Check if error contains clues about missing 'parts' field (Google A2A)
+        if response_error:
+            error_str = str(response_error).lower()
+            # Be very specific with error detection to avoid false positives
+            if "parts" in error_str and any(term in error_str for term in 
+                                        ["required", "missing", "validation", "schema"]):
+                self._use_google_a2a = True
+                self._protocol_detected = True
+                return True
+            
+            # Special handling for specific common Google A2A errors with strict pattern
+            if ("tagged-union" in error_str and "parts" in error_str and 
+                "missing" in error_str):
+                self._use_google_a2a = True
+                self._protocol_detected = True
+                return True
+        
+        # No clear indication, use the current setting
+        return self._use_google_a2a
     
     def send_message(self, message: Message) -> Message:
         """
@@ -230,53 +288,56 @@ class A2AClient(BaseA2AClient):
                 
                 # Convert the task result back to a message
                 if result.artifacts and len(result.artifacts) > 0:
-                    for part in result.artifacts[0].get("parts", []):
-                        if part.get("type") == "text":
-                            task_response = Message(
-                                content=TextContent(text=part.get("text", "")),
-                                role=MessageRole.AGENT,
-                                parent_message_id=message.message_id,
-                                conversation_id=message.conversation_id
-                            )
-                            break
-                        elif part.get("type") == "function_response":
-                            task_response = Message(
-                                content=FunctionResponseContent(
-                                    name=part.get("name", ""),
-                                    response=part.get("response", {})
-                                ),
-                                role=MessageRole.AGENT,
-                                parent_message_id=message.message_id,
-                                conversation_id=message.conversation_id
-                            )
-                            break
-                        elif part.get("type") == "function_call":
-                            # Convert parameters to FunctionParameter objects
-                            params = []
-                            for param in part.get("parameters", []):
-                                params.append(FunctionParameter(
-                                    name=param.get("name", ""),
-                                    value=param.get("value", "")
-                                ))
-                            
-                            task_response = Message(
-                                content=FunctionCallContent(
-                                    name=part.get("name", ""),
-                                    parameters=params
-                                ),
-                                role=MessageRole.AGENT,
-                                parent_message_id=message.message_id,
-                                conversation_id=message.conversation_id
-                            )
-                            break
-                        elif part.get("type") == "error":
-                            task_response = Message(
-                                content=ErrorContent(message=part.get("message", "")),
-                                role=MessageRole.AGENT,
-                                parent_message_id=message.message_id,
-                                conversation_id=message.conversation_id
-                            )
-                            break
+                    for artifact in result.artifacts:
+                        if "parts" in artifact:
+                            parts = artifact["parts"]
+                            for part in parts:
+                                if part.get("type") == "text":
+                                    task_response = Message(
+                                        content=TextContent(text=part.get("text", "")),
+                                        role=MessageRole.AGENT,
+                                        parent_message_id=message.message_id,
+                                        conversation_id=message.conversation_id
+                                    )
+                                    break
+                                elif part.get("type") == "function_response":
+                                    task_response = Message(
+                                        content=FunctionResponseContent(
+                                            name=part.get("name", ""),
+                                            response=part.get("response", {})
+                                        ),
+                                        role=MessageRole.AGENT,
+                                        parent_message_id=message.message_id,
+                                        conversation_id=message.conversation_id
+                                    )
+                                    break
+                                elif part.get("type") == "function_call":
+                                    # Convert parameters to FunctionParameter objects
+                                    params = []
+                                    for param in part.get("parameters", []):
+                                        params.append(FunctionParameter(
+                                            name=param.get("name", ""),
+                                            value=param.get("value", "")
+                                        ))
+                                    
+                                    task_response = Message(
+                                        content=FunctionCallContent(
+                                            name=part.get("name", ""),
+                                            parameters=params
+                                        ),
+                                        role=MessageRole.AGENT,
+                                        parent_message_id=message.message_id,
+                                        conversation_id=message.conversation_id
+                                    )
+                                    break
+                                elif part.get("type") == "error":
+                                    task_response = Message(
+                                        content=ErrorContent(message=part.get("message", "")),
+                                        role=MessageRole.AGENT,
+                                        parent_message_id=message.message_id,
+                                        conversation_id=message.conversation_id
+                                    )
+                                    break
                         
                 # If we got a response, return it
                 if task_response is not None:
@@ -287,57 +348,135 @@ class A2AClient(BaseA2AClient):
                 continue
         
         # If we get here, all task endpoints failed, try legacy behavior - direct message posting
-        for endpoint in endpoints_to_try:
-            try:
-                response = requests.post(
-                    endpoint,
-                    json=message.to_dict(),
-                    headers=self.headers,
-                    timeout=self.timeout
-                )
-                
-                # If we succeed, remember this endpoint
-                self.endpoint_url = endpoint
-                
-                # Handle HTTP errors
+        # First try standard python_a2a format
+        if not self._use_google_a2a:
+            for endpoint in endpoints_to_try:
                 try:
-                    response.raise_for_status()
-                except requests.HTTPError as e:
-                    # Try to extract error message from JSON response if possible
-                    error_msg = str(e)
-                    try:
-                        error_data = response.json()
-                        if "error" in error_data:
-                            error_msg = f"{error_msg}: {error_data['error']}"
-                    except:
-                        pass
+                    # Standard python_a2a format
+                    response = requests.post(
+                        endpoint,
+                        json=message.to_dict(),
+                        headers=self.headers,
+                        timeout=self.timeout
+                    )
                     
-                    # Try next endpoint instead of raising immediately
-                    continue
-                
-                # Parse the response
-                try:
-                    return Message.from_dict(response.json())
-                except ValueError as e:
-                    # Try to get plain text if JSON parsing fails
+                    # If we succeed, remember this endpoint
+                    self.endpoint_url = endpoint
+                    
+                    # Check for HTTP error
                     try:
-                        text_content = response.text.strip()
-                        if text_content:
-                            return Message(
-                                content=TextContent(text=text_content),
-                                role=MessageRole.AGENT,
-                                parent_message_id=message.message_id,
-                                conversation_id=message.conversation_id
-                            )
-                    except:
-                        pass
+                        response.raise_for_status()
+                    except requests.HTTPError as e:
+                        # Try to extract error details for protocol detection
+                        try:
+                            error_data = response.json()
+                            error_str = json.dumps(error_data)
+                        except:
+                            error_str = str(e)
                         
+                        # Update protocol detection based on error
+                        should_retry_with_google = self._detect_protocol_version(error_str)
+                        
+                        # If we detected Google A2A format, break to try Google format
+                        if should_retry_with_google:
+                            break
+                        
+                        # Otherwise try next endpoint
+                        continue
+                    
+                    # Process successful response
+                    try:
+                        # Check if response has clear Google A2A format indicators
+                        response_data = response.json()
+                        
+                        # Check for clear Google A2A format markers
+                        if ("parts" in response_data and isinstance(response_data.get("parts"), list) and
+                            "role" in response_data and not "content" in response_data):
+                            # Response is in Google A2A format
+                            self._use_google_a2a = True
+                            self._protocol_detected = True
+                            return Message.from_google_a2a(response_data)
+                        else:
+                            # Standard format
+                            return Message.from_dict(response_data)
+                    except ValueError as e:
+                        # Try to get plain text if JSON parsing fails
+                        try:
+                            text_content = response.text.strip()
+                            if text_content:
+                                return Message(
+                                    content=TextContent(text=text_content),
+                                    role=MessageRole.AGENT,
+                                    parent_message_id=message.message_id,
+                                    conversation_id=message.conversation_id
+                                )
+                        except:
+                            pass
+                            
+                        # Try next endpoint
+                        continue
+                        
+                except requests.RequestException:
                     # Try next endpoint
                     continue
+        
+        # Try with Google A2A format if needed
+        if self._use_google_a2a or self._protocol_detected:
+            for endpoint in endpoints_to_try:
+                try:
+                    # Google A2A format
+                    response = requests.post(
+                        endpoint,
+                        json=message.to_google_a2a(),
+                        headers=self.headers,
+                        timeout=self.timeout
+                    )
                     
-            except requests.RequestException:
-                # Try next endpoint
-                continue
+                    # If we succeed, remember this endpoint
+                    self.endpoint_url = endpoint
+                    
+                    # Handle HTTP errors
+                    try:
+                        response.raise_for_status()
+                    except requests.HTTPError:
+                        # Try next endpoint
+                        continue
+                    
+                    # Process successful response
+                    try:
+                        response_data = response.json()
+                        
+                        # Check for Google A2A format response
+                        if ("parts" in response_data and 
+                            isinstance(response_data.get("parts"), list) and 
+                            "role" in response_data):
+                            # Google A2A format response
+                            self._use_google_a2a = True
+                            self._protocol_detected = True
+                            return Message.from_google_a2a(response_data)
+                        else:
+                            # Standard format response
+                            return Message.from_dict(response_data)
+                    except Exception:
+                        # Try to handle plain text response
+                        try:
+                            text = response.text.strip()
+                            if text:
+                                return Message(
+                                    content=TextContent(text=text),
+                                    role=MessageRole.AGENT,
+                                    parent_message_id=message.message_id,
+                                    conversation_id=message.conversation_id
+                                )
+                        except:
+                            pass
+                        
+                        # Try next endpoint
+                        continue
+                    
+                except requests.RequestException:
+                    # Try next endpoint
+                    continue
         
         # If we get here, all endpoints failed
         return Message(
@@ -371,54 +510,146 @@ class A2AClient(BaseA2AClient):
         # Deduplicate endpoints
         endpoints_to_try = list(dict.fromkeys(endpoints_to_try))
         
-        # Try each endpoint
-        for endpoint in endpoints_to_try:
-            try:
-                response = requests.post(
-                    endpoint,
-                    json=conversation.to_dict(),
-                    headers=self.headers,
-                    timeout=self.timeout
-                )
-                
-                # If we succeed, remember this endpoint
-                self.endpoint_url = endpoint
-                
-                # Handle HTTP errors
+        # First try standard python_a2a format
+        if not self._use_google_a2a:
+            for endpoint in endpoints_to_try:
                 try:
-                    response.raise_for_status()
-                except requests.HTTPError:
-                    # Try next endpoint
-                    continue
-                
-                # Parse the response
-                try:
-                    return Conversation.from_dict(response.json())
-                except ValueError:
-                    # Try to extract text content from response if JSON parsing fails
-                    try:
-                        text_content = response.text.strip()
-                        if text_content:
-                            # Create a new message with the response text
-                            last_message = conversation.messages[-1] if conversation.messages else None
-                            parent_id = last_message.message_id if last_message else None
-                            
-                            # Add a response message to the conversation
-                            conversation.create_text_message(
-                                text=text_content,
-                                role=MessageRole.AGENT,
-                                parent_message_id=parent_id
-                            )
-                            return conversation
-                    except:
-                        pass
+                    response = requests.post(
+                        endpoint,
+                        json=conversation.to_dict(),
+                        headers=self.headers,
+                        timeout=self.timeout
+                    )
                     
+                    # If we succeed, remember this endpoint
+                    self.endpoint_url = endpoint
+                    
+                    # Handle HTTP errors
+                    try:
+                        response.raise_for_status()
+                    except requests.HTTPError as e:
+                        # Try to extract error details for protocol detection
+                        try:
+                            error_data = response.json()
+                            error_str = json.dumps(error_data)
+                        except:
+                            error_str = str(e)
+                        
+                        # Update protocol detection based on error
+                        should_retry_with_google = self._detect_protocol_version(error_str)
+                        
+                        # If we detected Google A2A format, break to try Google format
+                        if should_retry_with_google:
+                            break
+                        
+                        # Otherwise try next endpoint
+                        continue
+                    
+                    # Process successful response
+                    try:
+                        response_data = response.json()
+                        
+                        # Check if the response is in Google A2A format
+                        if "messages" in response_data and isinstance(response_data["messages"], list):
+                            if (response_data["messages"] and 
+                                "parts" in response_data["messages"][0] and 
+                                isinstance(response_data["messages"][0].get("parts"), list)):
+                                # Response is in Google A2A format
+                                self._use_google_a2a = True
+                                self._protocol_detected = True
+                                return Conversation.from_google_a2a(response_data)
+                        
+                        # Standard format
+                        return Conversation.from_dict(response_data)
+                    except Exception:
+                        # Try to extract text content if JSON parsing fails
+                        try:
+                            text_content = response.text.strip()
+                            if text_content:
+                                # Create a new message with the response text
+                                last_message = conversation.messages[-1] if conversation.messages else None
+                                parent_id = last_message.message_id if last_message else None
+                                
+                                # Add a response message to the conversation
+                                conversation.create_text_message(
+                                    text=text_content,
+                                    role=MessageRole.AGENT,
+                                    parent_message_id=parent_id
+                                )
+                                return conversation
+                        except:
+                            pass
+                        
+                        # Try next endpoint
+                        continue
+                
+                except requests.RequestException:
                     # Try next endpoint
                     continue
+        
+        # Try with Google A2A format if needed
+        if self._use_google_a2a or self._protocol_detected:
+            for endpoint in endpoints_to_try:
+                try:
+                    # Google A2A format
+                    response = requests.post(
+                        endpoint,
+                        json=conversation.to_google_a2a(),
+                        headers=self.headers,
+                        timeout=self.timeout
+                    )
+                    
+                    # If we succeed, remember this endpoint
+                    self.endpoint_url = endpoint
+                    
+                    # Handle HTTP errors
+                    try:
+                        response.raise_for_status()
+                    except requests.HTTPError:
+                        # Try next endpoint
+                        continue
+                    
+                    # Process successful response
+                    try:
+                        response_data = response.json()
+                        
+                        # Check if the response is in Google A2A format
+                        if "messages" in response_data and isinstance(response_data["messages"], list):
+                            if (response_data["messages"] and 
+                                "parts" in response_data["messages"][0] and 
+                                isinstance(response_data["messages"][0].get("parts"), list)):
+                                # Response is in Google A2A format
+                                self._use_google_a2a = True
+                                self._protocol_detected = True
+                                return Conversation.from_google_a2a(response_data)
+                        
+                        # Standard format
+                        return Conversation.from_dict(response_data)
+                    except Exception:
+                        # Try to extract text content if JSON parsing fails
+                        try:
+                            text_content = response.text.strip()
+                            if text_content:
+                                # Create a new message with the response text
+                                last_message = conversation.messages[-1] if conversation.messages else None
+                                parent_id = last_message.message_id if last_message else None
+                                
+                                # Add a response message to the conversation
+                                conversation.create_text_message(
+                                    text=text_content,
+                                    role=MessageRole.AGENT,
+                                    parent_message_id=parent_id
+                                )
+                                return conversation
+                        except:
+                            pass
+                        
+                        # Try next endpoint
+                        continue
                 
-            except requests.RequestException:
-                # Try next endpoint
-                continue
+                except requests.RequestException:
+                    # Try next endpoint
+                    continue
         
         # If we get here, all endpoints failed
         # Create an error message and add it to the conversation
@@ -463,6 +694,18 @@ class A2AClient(BaseA2AClient):
                 return f"Function call '{response.content.name}' with parameters: {json.dumps(params, indent=2)}"
             elif response.content is not None:
                 return str(response.content)
+        
+        # If text extraction from standard format failed, check for Google A2A format
+        if response:
+            try:
+                # Try to access parts directly
+                google_format = response.to_google_a2a()
+                if "parts" in google_format:
+                    for part in google_format["parts"]:
+                        if part.get("type") == "text" and "text" in part:
+                            return part["text"]
+            except:
+                pass
         
         return "No text response"
     
@@ -588,7 +831,23 @@ class A2AClient(BaseA2AClient):
             
             # Convert to Task object or use raw result if parsing fails
             try:
-                return Task.from_dict(result)
+                result_task = Task.from_dict(result)
+                
+                # Check if this might be Google A2A format
+                if result and isinstance(result, dict):
+                    try:
+                        for artifact in result.get("artifacts", []):
+                            if "parts" in artifact and isinstance(artifact["parts"], list):
+                                for part in artifact["parts"]:
+                                    if part.get("type") == "text" and "text" in part:
+                                        # This looks like Google A2A format
+                                        self._use_google_a2a = True
+                                        self._protocol_detected = True
+                                        break
+                    except:
+                        pass
+                        
+                return result_task
             except Exception:
                 # Create a simple task with the raw result
                 task.artifacts = [{
@@ -652,6 +911,18 @@ class A2AClient(BaseA2AClient):
                 
                 # Try to convert to Task object
                 try:
+                    # Check for Google A2A format
+                    if result and isinstance(result, dict):
+                        for artifact in result.get("artifacts", []):
+                            if "parts" in artifact and isinstance(artifact["parts"], list):
+                                for part in artifact["parts"]:
+                                    if part.get("type") == "text" and "text" in part:
+                                        # This looks like Google A2A format
+                                        self._use_google_a2a = True
+                                        self._protocol_detected = True
+                                        return Task.from_google_a2a(result)
+                            
+                    # Standard format
                     return Task.from_dict(result)
                 except Exception:
                     # If conversion fails, create a simple task with the raw result
@@ -720,6 +991,18 @@ class A2AClient(BaseA2AClient):
                 
                 # Try to convert to Task object
                 try:
+                    # Check for Google A2A format
+                    if result and isinstance(result, dict):
+                        for artifact in result.get("artifacts", []):
+                            if "parts" in artifact and isinstance(artifact["parts"], list):
+                                for part in artifact["parts"]:
+                                    if part.get("type") == "text" and "text" in part:
+                                        # This looks like Google A2A format
+                                        self._use_google_a2a = True
+                                        self._protocol_detected = True
+                                        return Task.from_google_a2a(result)
+                        
+                    # Standard format
                     return Task.from_dict(result)
                 except Exception:
                     # If conversion fails, create a simple task with the raw result
@@ -745,3 +1028,24 @@ class A2AClient(BaseA2AClient):
                 message={"error": f"Failed to cancel task on {self.endpoint_url}"}
             )
         )
+    
+    def use_google_a2a_format(self, use_google_format: bool = True) -> None:
+        """
+        Set whether to use Google A2A format for requests
+        
+        This method is not typically needed as format is automatically detected.
+        
+        Args:
+            use_google_format: Whether to use Google A2A format
+        """
+        self._use_google_a2a = use_google_format
+        self._protocol_detected = True
+        
+    def is_using_google_a2a_format(self) -> bool:
+        """
+        Check if using Google A2A format
+        
+        Returns:
+            True if using Google A2A format, False otherwise
+        """
+        return self._use_google_a2a

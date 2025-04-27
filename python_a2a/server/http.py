@@ -85,11 +85,22 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
             'application/json' in accept_header and 
             not any(browser in user_agent.lower() for browser in ['mozilla', 'chrome', 'safari', 'edge'])
         ):
+            # Include Google A2A compatibility flag if available
+            capabilities = {}
+            if hasattr(agent, 'agent_card') and hasattr(agent.agent_card, 'capabilities'):
+                capabilities = agent.agent_card.capabilities
+            elif hasattr(agent, '_use_google_a2a'):
+                capabilities = {
+                    "google_a2a_compatible": getattr(agent, '_use_google_a2a', False),
+                    "parts_array_format": getattr(agent, '_use_google_a2a', False)
+                }
+                
             return jsonify({
                 "name": agent.agent_card.name if hasattr(agent, 'agent_card') else "A2A Agent",
                 "description": agent.agent_card.description if hasattr(agent, 'agent_card') else "",
                 "agent_card_url": "/a2a/agent.json",
-                "protocol": "a2a"
+                "protocol": "a2a",
+                "capabilities": capabilities
             })
         
         # Otherwise serve HTML by default
@@ -116,6 +127,13 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
         """Agent card JSON with beautiful UI"""
         # Get agent data
         agent_data = get_agent_data()
+        
+        # Add Google A2A compatibility flag if available
+        if hasattr(agent, '_use_google_a2a'):
+            if "capabilities" not in agent_data:
+                agent_data["capabilities"] = {}
+            agent_data["capabilities"]["google_a2a_compatible"] = getattr(agent, '_use_google_a2a', False)
+            agent_data["capabilities"]["parts_array_format"] = getattr(agent, '_use_google_a2a', False)
         
         # Check request format preferences
         user_agent = request.headers.get('User-Agent', '')
@@ -156,33 +174,99 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
         try:
             data = request.json
             
+            # Detect if this is Google A2A format
+            is_google_format = False
+            if "parts" in data and "role" in data and not "content" in data:
+                is_google_format = True
+            elif "messages" in data and data["messages"] and "parts" in data["messages"][0] and "role" in data["messages"][0]:
+                is_google_format = True
+            
             # Check if this is a single message or a conversation
             if "messages" in data:
                 # This is a conversation
-                conversation = Conversation.from_dict(data)
+                if is_google_format:
+                    conversation = Conversation.from_google_a2a(data)
+                else:
+                    conversation = Conversation.from_dict(data)
+                
                 response = agent.handle_conversation(conversation)
-                return jsonify(response.to_dict())
+                
+                # Format response based on request format or agent preference
+                use_google_format = is_google_format
+                if hasattr(agent, '_use_google_a2a'):
+                    use_google_format = use_google_format or agent._use_google_a2a
+                
+                if use_google_format:
+                    return jsonify(response.to_google_a2a())
+                else:
+                    return jsonify(response.to_dict())
             else:
                 # This is a single message
-                message = Message.from_dict(data)
+                if is_google_format:
+                    message = Message.from_google_a2a(data)
+                else:
+                    message = Message.from_dict(data)
+                
                 response = agent.handle_message(message)
-                return jsonify(response.to_dict())
+                
+                # Format response based on request format or agent preference
+                use_google_format = is_google_format
+                if hasattr(agent, '_use_google_a2a'):
+                    use_google_format = use_google_format or agent._use_google_a2a
+                
+                if use_google_format:
+                    return jsonify(response.to_google_a2a())
+                else:
+                    return jsonify(response.to_dict())
                 
         except Exception as e:
-            # Return an error response for any exceptions
-            error_dict = {
-                "content": {
-                    "type": "error",
-                    "message": f"Error processing request: {str(e)}"
-                },
-                "role": "system"
-            }
-            return jsonify(error_dict), 500
+            # Determine response format based on request
+            is_google_format = False
+            if 'data' in locals():
+                if isinstance(data, dict):
+                    if "parts" in data and "role" in data and not "content" in data:
+                        is_google_format = True
+                    elif "messages" in data and data["messages"] and "parts" in data["messages"][0] and "role" in data["messages"][0]:
+                        is_google_format = True
+            
+            # Also consider agent preference
+            if hasattr(agent, '_use_google_a2a'):
+                is_google_format = is_google_format or agent._use_google_a2a
+            
+            # Return error in appropriate format
+            error_msg = f"Error processing request: {str(e)}"
+            if is_google_format:
+                # Google A2A format
+                return jsonify({
+                    "role": "agent",
+                    "parts": [
+                        {
+                            "type": "data",
+                            "data": {"error": error_msg}
+                        }
+                    ]
+                }), 500
+            else:
+                # python_a2a format
+                return jsonify({
+                    "content": {
+                        "type": "error",
+                        "message": error_msg
+                    },
+                    "role": "system"
+                }), 500
     
     @app.route("/a2a/metadata", methods=["GET"])
     def get_agent_metadata() -> Response:
         """Return metadata about the agent"""
-        return jsonify(agent.get_metadata())
+        metadata = agent.get_metadata()
+        
+        # Add Google A2A compatibility flag if available
+        if hasattr(agent, '_use_google_a2a'):
+            metadata["google_a2a_compatible"] = getattr(agent, '_use_google_a2a', False)
+            metadata["parts_array_format"] = getattr(agent, '_use_google_a2a', False)
+            
+        return jsonify(metadata)
     
     @app.route("/a2a/health", methods=["GET"])
     def health_check() -> Response:
@@ -220,4 +304,10 @@ def run_server(
     """
     app = create_flask_app(agent)
     print(f"Starting A2A server on http://{host}:{port}/a2a")
+    
+    # Add info about Google A2A compatibility if available
+    if hasattr(agent, '_use_google_a2a'):
+        google_compat = getattr(agent, '_use_google_a2a', False)
+        print(f"Google A2A compatibility: {'Enabled' if google_compat else 'Disabled'}")
+        
     app.run(host=host, port=port, debug=debug)
