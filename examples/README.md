@@ -9,6 +9,7 @@ If you're new to Python A2A, start with these examples:
 1. [**Hello A2A**](getting_started/hello_a2a.py) - Create your first A2A messages in just a few lines of code
 2. [**Simple Client**](getting_started/simple_client.py) - Connect to any A2A-compatible agent
 3. [**Simple Server**](getting_started/simple_server.py) - Create your own basic A2A server
+4. [**Basic Streaming**](streaming/01_basic_streaming.py) - Implement real-time streaming responses
 
 ## 🗺️ Example Categories
 
@@ -22,6 +23,19 @@ These examples provide a gentle introduction to A2A concepts:
 | [Simple Client](getting_started/simple_client.py) | Connect to any A2A agent | Sending requests and handling responses |
 | [Simple Server](getting_started/simple_server.py) | Build a basic A2A server | Creating your first agent |
 | [Function Calling](getting_started/function_calling.py) | Add function calling capabilities | Executing functions through A2A |
+
+### Streaming (Real-time Responses)
+
+These examples demonstrate how to implement streaming responses:
+
+| Example | Description | Key Learning |
+|---------|-------------|--------------|
+| [Basic Streaming](streaming/01_basic_streaming.py) | Simple streaming implementation | Creating and consuming streams |
+| [Advanced Streaming](streaming/02_advanced_streaming.py) | Advanced streaming techniques | Metrics tracking and chunking strategies |
+| [LLM Integration](streaming/03_streaming_llm_integration.py) | Stream from LLM providers | Connecting provider APIs with A2A streaming |
+| [Task-Based Streaming](streaming/04_task_based_streaming.py) | Structured streaming with tasks | Progress tracking and artifacts |
+| [UI Integration](streaming/05_streaming_ui_integration.py) | Stream to user interfaces | CLI and web-based streaming visualization |
+| [Distributed Streaming](streaming/06_distributed_streaming.py) | Multi-node streaming | Load balancing and fault tolerance |
 
 ### Building Blocks (Core Concepts)
 
@@ -100,6 +114,9 @@ Tools to enhance your development workflow:
 - **I want to call an existing AI agent**: [Simple Client](getting_started/simple_client.py)
 - **I need to build my own agent**: [Simple Server](getting_started/simple_server.py) or [Agent Skills](building_blocks/agent_skills.py)
 - **I want to use OpenAI with A2A**: [OpenAI Agent](ai_powered_agents/openai_agent.py)
+- **I need to implement streaming responses**: [Basic Streaming](streaming/01_basic_streaming.py)
+- **I want to integrate streaming with LLMs**: [LLM Integration](streaming/03_streaming_llm_integration.py)
+- **I need to build a streaming UI**: [UI Integration](streaming/05_streaming_ui_integration.py)
 - **I need to route queries to specialized agents**: [Smart Routing](agent_network/smart_routing.py)
 - **I want to execute tasks concurrently**: [Parallel Workflow](agent_network/parallel_workflow.py)
 - **I need to create agent workflows**: [Basic Workflow](agent_network/basic_workflow.py)
@@ -143,14 +160,90 @@ For a structured learning experience, we recommend following this sequence:
 1. **Start with the basics**: Run through the Getting Started examples
 2. **Understand core concepts**: Explore the Building Blocks examples
 3. **Add AI capabilities**: Try the AI-Powered Agents examples
-4. **Learn agent networking**: Experiment with the Agent Network examples
-5. **Extend with tools**: Experiment with the MCP examples
-6. **Build complete applications**: Study the Applications examples
-7. **Improve your workflow**: Use the Developer Tools examples
+4. **Implement streaming**: Explore the Streaming examples for real-time responses
+5. **Learn agent networking**: Experiment with the Agent Network examples
+6. **Extend with tools**: Experiment with the MCP examples
+7. **Build complete applications**: Study the Applications examples
+8. **Improve your workflow**: Use the Developer Tools examples
 
 ## 🤝 Contributing
 
 Have an idea for a new example? We welcome contributions! Please check the [CONTRIBUTING.md](../CONTRIBUTING.md) file for guidelines.
+
+## 🧪 Validating Examples
+
+The python-a2a project includes a comprehensive validation system to ensure all examples work correctly. This is especially valuable before releases or after making significant changes.
+
+### Running Validation
+
+```bash
+# Validate all examples
+python validate_all_examples.py
+
+# Validate a specific category
+python validate_all_examples.py --category streaming
+
+# Skip slow examples for faster validation
+python validate_all_examples.py --skip-slow
+
+# Run examples concurrently for faster validation (be careful with server examples)
+python validate_all_examples.py --concurrent 3
+
+# Show detailed output for debugging
+python validate_all_examples.py --verbose
+```
+
+### Validation Output
+
+The validation script provides detailed output including:
+
+- Overall success/failure statistics
+- Category-by-category results
+- Detailed error messages for failing examples
+- Skipped examples (due to missing dependencies or API keys)
+
+Example output:
+```
+===============================================================================
+VALIDATION SUMMARY
+===============================================================================
+
+Overall Results:
+Total examples: 42
+Passed: 39
+Failed: 2
+Skipped: 1
+
+Category Results:
+getting_started: [All 4 passed]
+building_blocks: [All 4 passed]
+streaming: [6/7 passed, 1 failed]
+ai_powered_agents: [3/4 passed, 1 failed]
+applications: [All 2 passed]
+agent_network: [All 3 passed]
+workflows: [All 3 passed]
+mcp: [All 3 passed]
+langchain: [All 4 passed]
+developer_tools: [All 3 passed]
+
+Failed Examples:
+• streaming/06_distributed_streaming.py: Example timed out after 30 seconds
+• ai_powered_agents/openai_agent.py: Missing API key environment variable: OPENAI_API_KEY
+
+Skipped Examples:
+• applications/openai_travel_planner.py: Skipped (missing API key: OPENAI_API_KEY)
+
+--------------------------------------------------------------------------------
+✗ Validation found 2 failing examples.
+--------------------------------------------------------------------------------
+```
+
+### Using Validation in Development
+
+- Run validation before submitting pull requests
+- Run validation after making significant changes
+- Include validation in CI/CD pipelines
+- Use `--category` to focus on specific areas you're working on
 
 ## 📄 License
 

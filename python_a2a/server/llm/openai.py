@@ -4,19 +4,22 @@ OpenAI-based server implementation for the A2A protocol.
 
 import uuid
 import json
-from typing import Optional, Dict, Any, List, Union
+import asyncio
+from typing import Optional, Dict, Any, List, Union, AsyncGenerator
 
 try:
     from openai import OpenAI
+    from openai import AsyncOpenAI
 except ImportError:
     OpenAI = None
+    AsyncOpenAI = None
 
 from ...models.message import Message, MessageRole
 from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent
 from ...models.conversation import Conversation
 from ...models.task import Task, TaskStatus, TaskState
 from ..base import BaseA2AServer
-from ...exceptions import A2AImportError, A2AConnectionError
+from ...exceptions import A2AImportError, A2AConnectionError, A2AStreamingError
 
 
 class OpenAIA2AServer(BaseA2AServer):
@@ -62,6 +65,12 @@ class OpenAIA2AServer(BaseA2AServer):
         self.tools = self._convert_functions_to_tools() if functions else None
         self.client = OpenAI(api_key=api_key)
         
+        # Create an async client for streaming
+        if AsyncOpenAI is not None:
+            self.async_client = AsyncOpenAI(api_key=api_key)
+        else:
+            self.async_client = None
+            
         # For tracking conversation state
         self._conversation_state = {}  # conversation_id -> list of messages
         
@@ -428,6 +437,107 @@ class OpenAIA2AServer(BaseA2AServer):
             conversation.create_error_message(error_msg, parent_message_id=conversation.messages[-1].message_id)
             return conversation
     
+    async def stream_response(self, message: Message) -> AsyncGenerator[str, None]:
+        """
+        Stream a response from OpenAI for the given message.
+        
+        Args:
+            message: The A2A message to respond to
+            
+        Yields:
+            Chunks of the response as they arrive
+            
+        Raises:
+            A2AStreamingError: If streaming is not supported or fails
+            A2AConnectionError: If connection to OpenAI fails
+        """
+        # Check if streaming is supported
+        if self.async_client is None:
+            raise A2AStreamingError(
+                "AsyncOpenAI is not available. Ensure you have the latest "
+                "openai package installed with 'pip install -U openai'."
+            )
+            
+        try:
+            # Extract message content
+            query = ""
+            if hasattr(message.content, "type") and message.content.type == "text":
+                query = message.content.text
+            elif hasattr(message.content, "text"):
+                query = message.content.text
+            
+            # Prepare message history (similar logic to handle_message)
+            openai_messages = [{"role": "system", "content": self.system_prompt}]
+            conversation_id = message.conversation_id
+            
+            # If this is part of an existing conversation, retrieve history
+            if conversation_id and conversation_id in self._conversation_state:
+                # Use the existing conversation history
+                openai_messages = self._conversation_state[conversation_id].copy()
+            
+            # Add the user message if not already in the history
+            if not any(msg.get("role") == "user" and msg.get("content") == query 
+                    for msg in openai_messages if "role" in msg and "content" in msg):
+                openai_messages.append({
+                    "role": "user" if message.role == MessageRole.USER else "assistant",
+                    "content": query
+                })
+            
+            # Prepare request arguments
+            kwargs = {
+                "model": self.model,
+                "messages": openai_messages,
+                "temperature": self.temperature,
+                "stream": True  # Enable streaming
+            }
+            
+            # Add tools or functions based on model and availability
+            if self.tools:
+                # Newer models use tools
+                kwargs["tools"] = self.tools
+                kwargs["tool_choice"] = "auto"
+            elif self.functions:
+                # Older models use functions
+                kwargs["functions"] = self.functions
+                kwargs["function_call"] = "auto"
+            
+            # Call OpenAI API with streaming
+            async for chunk in await self.async_client.chat.completions.create(**kwargs):
+                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                
+                # Handle function/tool calls in streaming (if needed in the future)
+                # This is a placeholder for future implementation
+                # if hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
+                #     # Process tool calls here if needed
+                #     pass
+            
+            # Update conversation state after streaming is complete
+            if conversation_id:
+                if conversation_id not in self._conversation_state:
+                    self._conversation_state[conversation_id] = [{"role": "system", "content": self.system_prompt}]
+                
+                # Add the user message
+                if not any(msg.get("role") == "user" and msg.get("content") == query 
+                        for msg in self._conversation_state[conversation_id] if "role" in msg and "content" in msg):
+                    self._conversation_state[conversation_id].append({
+                        "role": "user",
+                        "content": query
+                    })
+                
+                # Add the assistant's response (aggregate from streaming)
+                # Future enhancement: This could be improved to capture the full streamed response
+                self._conversation_state[conversation_id].append({
+                    "role": "assistant",
+                    "content": "[Streamed response]"  # Placeholder for now
+                })
+                
+        except Exception as e:
+            # Convert exceptions to A2A-specific exceptions
+            if isinstance(e, A2AStreamingError):
+                raise
+            raise A2AConnectionError(f"Failed to stream from OpenAI: {str(e)}")
+            
     def get_metadata(self) -> Dict[str, Any]:
         """
         Get metadata about this agent server
@@ -439,11 +549,14 @@ class OpenAIA2AServer(BaseA2AServer):
         metadata.update({
             "agent_type": "OpenAIA2AServer",
             "model": self.model,
-            "capabilities": ["text"]
         })
         
         if self.functions:
             metadata["capabilities"].append("function_calling")
             metadata["functions"] = [f["name"] for f in self.functions]
+        
+        # Mark streaming capability based on AsyncOpenAI availability
+        if self.async_client is not None:
+            metadata["capabilities"].append("streaming")
         
         return metadata

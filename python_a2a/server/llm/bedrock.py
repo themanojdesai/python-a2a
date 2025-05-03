@@ -6,20 +6,22 @@ import json
 import asyncio
 import re
 import uuid
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, AsyncGenerator
 from pathlib import Path
 
 try:
     import boto3
+    import aioboto3
 except ImportError:
     boto3 = None
+    aioboto3 = None
 
 from ...models.message import Message, MessageRole
 from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent, FunctionParameter
 from ...models.conversation import Conversation
 from ...models.task import Task, TaskStatus, TaskState
 from ..base import BaseA2AServer
-from ...exceptions import A2AImportError, A2AConnectionError
+from ...exceptions import A2AImportError, A2AConnectionError, A2AStreamingError
 
 
 class BedrockA2AServer(BaseA2AServer):
@@ -103,6 +105,18 @@ class BedrockA2AServer(BaseA2AServer):
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key
         )
+        
+        # Initialize async client if available
+        if aioboto3 is not None:
+            self.async_session = aioboto3.Session(
+                region_name=self.aws_region,
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_secret_access_key
+            )
+            self.async_client = None  # Will be created when needed
+        else:
+            self.async_session = None
+            self.async_client = None
         
         # For tracking conversation state
         self._conversation_state = {}  # conversation_id -> list of messages
@@ -709,6 +723,222 @@ class BedrockA2AServer(BaseA2AServer):
                 error_msg, parent_message_id=conversation.messages[-1].message_id)
             return conversation
     
+    async def stream_response(self, message: Message) -> AsyncGenerator[str, None]:
+        """
+        Stream a response from AWS Bedrock for the given message.
+        
+        Args:
+            message: The A2A message to respond to
+            
+        Yields:
+            Chunks of the response as they arrive
+            
+        Raises:
+            A2AStreamingError: If streaming is not supported or fails
+            A2AConnectionError: If connection to AWS Bedrock fails
+        """
+        # Check if streaming is supported
+        if aioboto3 is None:
+            raise A2AStreamingError(
+                "aioboto3 is not available. Install it with 'pip install aioboto3'."
+            )
+        
+        try:
+            # Create async client if needed
+            if self.async_client is None:
+                self.async_client = self.async_session.client('bedrock-runtime')
+            
+            # Extract message content
+            query = ""
+            if hasattr(message.content, "type") and message.content.type == "text":
+                query = message.content.text
+            elif hasattr(message.content, "text"):
+                query = message.content.text
+            
+            # Prepare messages based on model provider
+            # Check if running on a Claude model
+            is_claude = "anthropic" in self.model_id.lower()
+            
+            # Prepare message history
+            bedrock_messages = []
+            conversation_id = message.conversation_id
+            
+            # If this is part of an existing conversation, retrieve history
+            if conversation_id and conversation_id in self._conversation_state:
+                # Use the existing conversation history
+                bedrock_messages = self._conversation_state[conversation_id].copy()
+            
+            # Add the user message if not already in the history
+            if is_claude:
+                msg_role = "user" if message.role == MessageRole.USER else "assistant"
+                if not bedrock_messages or not any(msg.get("role") == msg_role and msg.get("content") == query 
+                       for msg in bedrock_messages if isinstance(msg, dict) and "role" in msg and "content" in msg):
+                    bedrock_messages.append({
+                        "role": msg_role,
+                        "content": query
+                    })
+            else:
+                # For non-Claude models, prepare a simple concatenated message
+                bedrock_messages.append({
+                    "role": "user" if message.role == MessageRole.USER else "assistant",
+                    "content": query
+                })
+            
+            # Prepare request body based on the model provider
+            if is_claude:
+                # For Anthropic Claude models
+                request_body = {
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": self.max_tokens,
+                    "messages": bedrock_messages,
+                    "stream": True  # Enable streaming
+                }
+                
+                # Add system prompt if available
+                if self.system_prompt:
+                    request_body["system"] = self.system_prompt
+                
+                # Add temperature if specified
+                if self.temperature is not None:
+                    request_body["temperature"] = self.temperature
+                
+                # Add tools if available
+                if self.tools:
+                    request_body["tools"] = self.tools
+            else:
+                # Generic format for other providers
+                input_text = "\n".join([
+                    f"{msg.get('role', 'user')}: {msg.get('content', '')}" 
+                    for msg in bedrock_messages
+                ])
+                
+                # Customize for specific providers
+                if "amazon" in self.model_id.lower():
+                    # For Amazon Titan models
+                    request_body = {
+                        "inputText": input_text,
+                        "textGenerationConfig": {
+                            "maxTokenCount": self.max_tokens,
+                            "temperature": self.temperature,
+                        }
+                    }
+                elif "ai21" in self.model_id.lower():
+                    # For AI21 models
+                    request_body = {
+                        "prompt": input_text,
+                        "maxTokens": self.max_tokens,
+                        "temperature": self.temperature,
+                    }
+                elif "cohere" in self.model_id.lower():
+                    # For Cohere models
+                    request_body = {
+                        "prompt": input_text,
+                        "max_tokens": self.max_tokens,
+                        "temperature": self.temperature,
+                    }
+                else:
+                    # Default format - may not work for all models
+                    request_body = {
+                        "prompt": input_text,
+                        "max_tokens": self.max_tokens,
+                        "temperature": self.temperature,
+                    }
+                    
+                # Add system prompt for models that support it
+                if self.system_prompt:
+                    request_body["systemPrompt"] = self.system_prompt
+            
+            # Convert to JSON string
+            request_json = json.dumps(request_body)
+            
+            # Create streaming response
+            async with self.async_client as client:
+                response = await client.invoke_model_with_response_stream(
+                    modelId=self.model_id,
+                    contentType="application/json",
+                    accept="application/json",
+                    body=request_json
+                )
+                
+                # Process the streaming response
+                stream = response.get('body')
+                
+                if is_claude:
+                    # Claude streaming response handling
+                    async for event in stream:
+                        chunk = event.get('chunk')
+                        if not chunk:
+                            continue
+                        
+                        # Parse chunk data
+                        chunk_data = json.loads(chunk.get('bytes').decode('utf-8'))
+                        
+                        # Extract text content from various Claude response formats
+                        if 'completion' in chunk_data:
+                            # Claude v1/v2 format
+                            yield chunk_data['completion']
+                        elif 'type' in chunk_data and chunk_data['type'] == 'content_block_delta':
+                            # Claude 3 format - content_block_delta
+                            if chunk_data.get('delta', {}).get('type') == 'text':
+                                yield chunk_data['delta']['text']
+                        elif 'type' in chunk_data and chunk_data['type'] == 'message_delta':
+                            # Claude 3 format - message_delta
+                            if 'delta' in chunk_data and 'content' in chunk_data['delta']:
+                                for content_item in chunk_data['delta']['content']:
+                                    if content_item.get('type') == 'text':
+                                        yield content_item.get('text', '')
+                else:
+                    # Generic streaming response handling
+                    async for event in stream:
+                        chunk = event.get('chunk')
+                        if not chunk:
+                            continue
+                        
+                        # Parse chunk data
+                        chunk_data = json.loads(chunk.get('bytes').decode('utf-8'))
+                        
+                        # Different models have different response formats
+                        if 'completion' in chunk_data:
+                            yield chunk_data['completion']
+                        elif 'outputText' in chunk_data:
+                            yield chunk_data['outputText']
+                        elif 'generated_text' in chunk_data:
+                            yield chunk_data['generated_text']
+                        elif 'text' in chunk_data:
+                            yield chunk_data['text']
+                        elif 'results' in chunk_data and len(chunk_data['results']) > 0:
+                            output = chunk_data['results'][0].get('outputText', '')
+                            yield output
+                        elif 'generations' in chunk_data and len(chunk_data['generations']) > 0:
+                            output = chunk_data['generations'][0].get('text', '')
+                            yield output
+            
+            # Update conversation state after streaming is complete
+            if conversation_id:
+                if conversation_id not in self._conversation_state:
+                    self._conversation_state[conversation_id] = []
+                
+                # Add the user message if not already there
+                msg_role = "user" if message.role == MessageRole.USER else "assistant"
+                if not any(msg.get("role") == msg_role and msg.get("content") == query 
+                       for msg in self._conversation_state[conversation_id] if "role" in msg and "content" in msg):
+                    self._conversation_state[conversation_id].append({
+                        "role": msg_role,
+                        "content": query
+                    })
+                
+                # Add placeholder for the assistant's response
+                self._conversation_state[conversation_id].append({
+                    "role": "assistant",
+                    "content": "[Streamed response]"  # Placeholder for now
+                })
+                
+        except Exception as e:
+            # Convert exceptions to A2A-specific exceptions
+            if isinstance(e, A2AStreamingError):
+                raise
+            raise A2AConnectionError(f"Failed to stream from AWS Bedrock: {str(e)}")
+    
     def get_metadata(self) -> Dict[str, Any]:
         """
         Get metadata about this agent server
@@ -720,7 +950,6 @@ class BedrockA2AServer(BaseA2AServer):
         metadata.update({
             "agent_type": "BedrockA2AServer",
             "model": self.model_id,
-            "capabilities": ["text"]
         })
         
         if self.functions or self.tools:
@@ -730,4 +959,8 @@ class BedrockA2AServer(BaseA2AServer):
             elif self.tools:
                 metadata["tools"] = [t["name"] for t in self.tools if "name" in t]
         
+        # Mark streaming capability based on aioboto3 availability
+        if self.async_session is not None:
+            metadata["capabilities"].append("streaming")
+            
         return metadata

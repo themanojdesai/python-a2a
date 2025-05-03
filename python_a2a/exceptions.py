@@ -40,3 +40,8 @@ class A2AAuthenticationError(A2AError):
 class A2AConfigurationError(A2AError):
     """Raised when configuration is invalid"""
     pass
+
+
+class A2AStreamingError(A2AError):
+    """Raised when a streaming operation fails"""
+    pass

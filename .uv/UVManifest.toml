@@ -2,11 +2,11 @@
 # This file enables reproducible builds with UV
 
 [manifest]
-version = "0.5.1"  # UVManifest version
+version = "0.5.2"  # UVManifest version
 
 [project]
 name = "python-a2a"
-version = "0.5.1"  # Updated version
+version = "0.5.2"  # Updated version
 
 [python]
 # List of Python versions supported by the project

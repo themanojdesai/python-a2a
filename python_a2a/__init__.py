@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 # Setup feature flags
 import sys
@@ -20,7 +20,8 @@ from .exceptions import (
     A2ARequestError,
     A2AValidationError,
     A2AAuthenticationError,
-    A2AConfigurationError
+    A2AConfigurationError,
+    A2AStreamingError
 )
 
 # All core models - these should be available with basic install
@@ -185,6 +186,7 @@ __all__ = [
     'A2AValidationError',
     'A2AAuthenticationError',
     'A2AConfigurationError',
+    'A2AStreamingError',
     
     # Models
     'BaseModel',

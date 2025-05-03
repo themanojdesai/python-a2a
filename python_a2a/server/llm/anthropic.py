@@ -5,19 +5,22 @@ Anthropic-based server implementation for the A2A protocol.
 import uuid
 import json
 import re
-from typing import Optional, Dict, Any, List, Union
+import asyncio
+from typing import Optional, Dict, Any, List, Union, AsyncGenerator
 
 try:
     import anthropic
+    from anthropic import AsyncAnthropic
 except ImportError:
     anthropic = None
+    AsyncAnthropic = None
 
 from ...models.message import Message, MessageRole
 from ...models.content import TextContent, FunctionCallContent, FunctionResponseContent, ErrorContent, FunctionParameter
 from ...models.conversation import Conversation
 from ...models.task import Task, TaskStatus, TaskState
 from ..base import BaseA2AServer
-from ...exceptions import A2AImportError, A2AConnectionError
+from ...exceptions import A2AImportError, A2AConnectionError, A2AStreamingError
 
 
 class AnthropicA2AServer(BaseA2AServer):
@@ -64,6 +67,12 @@ class AnthropicA2AServer(BaseA2AServer):
         self.system_prompt = system_prompt
         self.tools = tools
         self.client = anthropic.Anthropic(api_key=api_key)
+        
+        # Create an async client for streaming
+        if AsyncAnthropic is not None:
+            self.async_client = AsyncAnthropic(api_key=api_key)
+        else:
+            self.async_client = None
         
         # For tracking conversation state
         self._conversation_state = {}  # conversation_id -> list of messages
@@ -547,6 +556,109 @@ class AnthropicA2AServer(BaseA2AServer):
             conversation.create_error_message(error_msg)
             return conversation
     
+    async def stream_response(self, message: Message) -> AsyncGenerator[str, None]:
+        """
+        Stream a response from Anthropic's Claude for the given message.
+        
+        Args:
+            message: The A2A message to respond to
+            
+        Yields:
+            Chunks of the response as they arrive
+            
+        Raises:
+            A2AStreamingError: If streaming is not supported or fails
+            A2AConnectionError: If connection to Anthropic fails
+        """
+        # Check if streaming is supported
+        if self.async_client is None:
+            raise A2AStreamingError(
+                "AsyncAnthropic is not available. Ensure you have the latest "
+                "anthropic package installed with 'pip install -U anthropic'."
+            )
+            
+        try:
+            # Extract message content
+            query = ""
+            if hasattr(message.content, "type") and message.content.type == "text":
+                query = message.content.text
+            elif hasattr(message.content, "text"):
+                query = message.content.text
+            
+            # Prepare message history
+            anthropic_messages = []
+            conversation_id = message.conversation_id
+            
+            # If this is part of an existing conversation, retrieve history
+            if conversation_id and conversation_id in self._conversation_state:
+                # Use the existing conversation history
+                anthropic_messages = self._conversation_state[conversation_id].copy()
+            
+            # Add the user message if not in history
+            msg_role = "user" if message.role == MessageRole.USER else "assistant"
+            if not anthropic_messages or not any(msg.get("role") == msg_role and msg.get("content") == query 
+                   for msg in anthropic_messages if isinstance(msg, dict) and "role" in msg and "content" in msg):
+                anthropic_messages.append({
+                    "role": msg_role,
+                    "content": query
+                })
+            
+            # Prepare request parameters
+            kwargs = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": anthropic_messages,
+                "stream": True  # Enable streaming
+            }
+            
+            # Add system prompt if provided
+            if self.system_prompt:
+                kwargs["system"] = self.system_prompt
+                
+            # Add tools if provided
+            if self.tools:
+                kwargs["tools"] = self.tools
+            
+            # Create streaming request
+            stream = await self.async_client.messages.create(**kwargs)
+            
+            # Process the streaming response
+            async with stream as response:
+                async for chunk in response:
+                    # Extract text content from the chunk
+                    if chunk.type == "content_block_delta" and chunk.delta.type == "text":
+                        yield chunk.delta.text
+                    elif chunk.type == "message_delta" and hasattr(chunk.delta, "content") and chunk.delta.content:
+                        for content_item in chunk.delta.content:
+                            if content_item.type == "text":
+                                yield content_item.text
+            
+            # Update conversation state after streaming is complete
+            if conversation_id:
+                if conversation_id not in self._conversation_state:
+                    self._conversation_state[conversation_id] = []
+                
+                # Add the user message if not already there
+                if not any(msg.get("role") == msg_role and msg.get("content") == query 
+                       for msg in self._conversation_state[conversation_id] if "role" in msg and "content" in msg):
+                    self._conversation_state[conversation_id].append({
+                        "role": msg_role,
+                        "content": query
+                    })
+                
+                # Add placeholder for the assistant's response
+                self._conversation_state[conversation_id].append({
+                    "role": "assistant",
+                    "content": "[Streamed response]"  # Placeholder for now
+                })
+                
+        except Exception as e:
+            # Convert exceptions to A2A-specific exceptions
+            if isinstance(e, A2AStreamingError):
+                raise
+            raise A2AConnectionError(f"Failed to stream from Anthropic: {str(e)}")
+    
     def get_metadata(self) -> Dict[str, Any]:
         """
         Get metadata about this agent server
@@ -558,9 +670,14 @@ class AnthropicA2AServer(BaseA2AServer):
         metadata.update({
             "agent_type": "AnthropicA2AServer",
             "model": self.model,
-            "capabilities": ["text"]
         })
+        
         if self.tools:
             metadata["capabilities"].append("tool_use")
             metadata["tools"] = [t["name"] for t in self.tools if "name" in t]
+            
+        # Mark streaming capability based on AsyncAnthropic availability
+        if self.async_client is not None:
+            metadata["capabilities"].append("streaming")
+            
         return metadata

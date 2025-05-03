@@ -8,15 +8,86 @@ the streaming API, with fallbacks for those that don't.
 import logging
 import asyncio
 import json
-from typing import Dict, List, Any, Optional, Union, AsyncGenerator, Callable
 import time
+import re
+from typing import Dict, List, Any, Optional, Union, AsyncGenerator, Callable, Tuple
 
 from .base import BaseA2AClient
+from .http import A2AClient
 from ..models import Message, TextContent, MessageRole
 from ..models import Task, TaskStatus, TaskState
-from ..exceptions import A2AConnectionError, A2AResponseError
+from ..models import Conversation
+from ..exceptions import A2AConnectionError, A2AResponseError, A2AStreamingError
 
 logger = logging.getLogger(__name__)
+
+
+class StreamingChunk:
+    """
+    A structured representation of a streaming chunk from an A2A agent.
+    
+    Attributes:
+        content: The content of the chunk
+        is_last: Whether this is the last chunk
+        append: Whether this chunk should be appended to previous chunks
+        index: The sequence index of this chunk (if provided)
+        event_type: The type of event (default: 'chunk')
+    """
+    
+    def __init__(
+        self, 
+        content: Any,
+        is_last: bool = False,
+        append: bool = True,
+        index: Optional[int] = None,
+        event_type: str = 'chunk'
+    ):
+        """
+        Initialize a streaming chunk.
+        
+        Args:
+            content: The content of the chunk
+            is_last: Whether this is the last chunk
+            append: Whether this chunk should be appended to previous chunks
+            index: The sequence index of this chunk (if provided)
+            event_type: The type of event (default: 'chunk')
+        """
+        self.content = content
+        self.is_last = is_last
+        self.append = append
+        self.index = index
+        self.event_type = event_type
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'StreamingChunk':
+        """
+        Create a StreamingChunk from a dictionary.
+        
+        Args:
+            data: Dictionary representation of a streaming chunk
+            
+        Returns:
+            A StreamingChunk object
+        """
+        content = data.get('content', '')
+        
+        # Look for text content in different formats
+        if isinstance(content, dict) and 'text' in content:
+            content = content['text']
+        elif isinstance(content, dict) and 'parts' in content and isinstance(content['parts'], list):
+            # Extract text from parts array format
+            for part in content['parts']:
+                if isinstance(part, dict) and part.get('type') == 'text' and 'text' in part:
+                    content = part['text']
+                    break
+        
+        return cls(
+            content=content,
+            is_last=data.get('lastChunk', False),
+            append=data.get('append', True),
+            index=data.get('index'),
+            event_type=data.get('event', 'chunk')
+        )
 
 
 class StreamingClient(BaseA2AClient):
@@ -85,9 +156,29 @@ class StreamingClient(BaseA2AClient):
             
             # Try to load agent card
             async with self._create_session() as session:
-                async with session.get(f"{self.url}/agent.json") as response:
+                # Create headers specifically for JSON content negotiation
+                json_headers = {"Accept": "application/json"}
+                
+                # First attempt with primary endpoint
+                async with session.get(
+                    f"{self.url}/agent.json", 
+                    headers=json_headers
+                ) as response:
                     if response.status == 200:
-                        data = await response.json()
+                        # Check content type to ensure we got JSON
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' in content_type:
+                            # Parse JSON directly
+                            data = await response.json()
+                        else:
+                            # Attempt to extract JSON from non-JSON response
+                            try:
+                                text = await response.text()
+                                data = self._extract_json_from_response(text)
+                            except Exception as e:
+                                logger.warning(f"Failed to extract JSON from response: {e}")
+                                data = {}
+                        
                         # Check capabilities
                         self._supports_streaming = (
                             isinstance(data, dict) and
@@ -97,9 +188,25 @@ class StreamingClient(BaseA2AClient):
                     else:
                         # Try alternate endpoint
                         alternate_url = f"{self.url}/a2a/agent.json"
-                        async with session.get(alternate_url) as alt_response:
+                        async with session.get(
+                            alternate_url, 
+                            headers=json_headers
+                        ) as alt_response:
                             if alt_response.status == 200:
-                                data = await alt_response.json()
+                                # Check content type to ensure we got JSON
+                                content_type = alt_response.headers.get('Content-Type', '')
+                                if 'application/json' in content_type:
+                                    # Parse JSON directly
+                                    data = await alt_response.json()
+                                else:
+                                    # Attempt to extract JSON from non-JSON response
+                                    try:
+                                        text = await alt_response.text()
+                                        data = self._extract_json_from_response(text)
+                                    except Exception as e:
+                                        logger.warning(f"Failed to extract JSON from response: {e}")
+                                        data = {}
+                                
                                 # Check capabilities
                                 self._supports_streaming = (
                                     isinstance(data, dict) and
@@ -151,6 +258,54 @@ class StreamingClient(BaseA2AClient):
             asyncio.set_event_loop(loop)
         
         return loop.run_until_complete(self.send_message_async(message))
+        
+    def send_conversation(self, conversation: Conversation) -> Conversation:
+        """
+        Send a conversation to an A2A-compatible agent (synchronous).
+        
+        This method overrides the BaseA2AClient.send_conversation method
+        to provide backward compatibility.
+        
+        Args:
+            conversation: The conversation to send
+            
+        Returns:
+            The updated conversation with the agent's response
+        """
+        # Create a synchronous version using asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # No event loop in this thread, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        return loop.run_until_complete(self.send_conversation_async(conversation))
+        
+    async def send_conversation_async(self, conversation: Conversation) -> Conversation:
+        """
+        Send a conversation to an A2A-compatible agent (asynchronous).
+        
+        Args:
+            conversation: The conversation to send
+            
+        Returns:
+            The updated conversation with the agent's response
+        """
+        # For simplicity, extract the last message and send it
+        if not conversation.messages:
+            raise ValueError("Cannot send an empty conversation")
+        
+        # Get last message (typically from the user)
+        last_message = conversation.messages[-1]
+        
+        # Send the message
+        response = await self.send_message_async(last_message)
+        
+        # Add the response to the conversation
+        conversation.add_message(response)
+        
+        return conversation
     
     async def send_message_async(self, message: Message) -> Message:
         """
@@ -214,8 +369,8 @@ class StreamingClient(BaseA2AClient):
     async def stream_response(
         self, 
         message: Message,
-        chunk_callback: Optional[Callable[[str], None]] = None
-    ) -> AsyncGenerator[str, None]:
+        chunk_callback: Optional[Callable[[Union[str, Dict]], None]] = None
+    ) -> AsyncGenerator[Union[str, Dict], None]:
         """
         Stream a response from an A2A-compatible agent.
         
@@ -286,38 +441,8 @@ class StreamingClient(BaseA2AClient):
                         )
                     
                     # Process the streaming response
-                    buffer = ""
-                    async for chunk in response.content.iter_chunks():
-                        if not chunk:
-                            continue
-                            
-                        # Decode chunk
-                        chunk_text = chunk[0].decode('utf-8')
-                        buffer += chunk_text
-                        
-                        # Process complete events (separated by double newlines)
-                        while "\n\n" in buffer:
-                            event, buffer = buffer.split("\n\n", 1)
-                            
-                            # Extract data fields from event
-                            for line in event.split("\n"):
-                                if line.startswith("data:"):
-                                    data = line[5:].strip()
-                                    
-                                    # Try to parse as JSON
-                                    try:
-                                        data_obj = json.loads(data)
-                                        # Extract text content
-                                        text = self._extract_text_from_chunk(data_obj)
-                                        if text:
-                                            if chunk_callback:
-                                                chunk_callback(text)
-                                            yield text
-                                    except json.JSONDecodeError:
-                                        # Not JSON, yield raw data
-                                        if chunk_callback:
-                                            chunk_callback(data)
-                                        yield data
+                    async for chunk in self._process_stream(response, chunk_callback):
+                        yield chunk
         
         except Exception as e:
             if isinstance(e, (A2AConnectionError, A2AResponseError)):
@@ -474,6 +599,405 @@ class StreamingClient(BaseA2AClient):
             )
             return task
     
+    async def tasks_send_subscribe(self, task: Task) -> AsyncGenerator[Task, None]:
+        """
+        Send a task and subscribe to streaming updates using tasks/sendSubscribe.
+        
+        Args:
+            task: The task to send and subscribe to
+            
+        Yields:
+            Task updates as they arrive
+            
+        Raises:
+            A2AConnectionError: If connection to the agent fails
+            A2AResponseError: If the agent returns an invalid response
+            A2AStreamingError: If streaming is not supported by the agent
+        """
+        if not self._has_aiohttp:
+            raise A2AStreamingError(
+                "aiohttp is required for tasks_send_subscribe. "
+                "Install it with 'pip install aiohttp'."
+            )
+        
+        # Check if streaming is supported
+        supports_streaming = await self.check_streaming_support()
+        if not supports_streaming:
+            # For backward compatibility, fall back to send_task
+            task_result = await self.send_task(task)
+            yield task_result
+            return
+        
+        # Real streaming implementation with aiohttp
+        try:
+            # Set up streaming request
+            async with self._create_session() as session:
+                headers = dict(self.headers)
+                # Add headers to request server-sent events
+                headers['Accept'] = 'text/event-stream'
+                
+                # Use the direct task instead of JsonRPC format for better compatibility
+                request_data = task.to_dict()
+                
+                # Add debug logging
+                logger.debug(f"Sending task streaming request with task ID: {task.id}")
+                
+                # Store the endpoint URLs to try
+                endpoints_to_try = []
+                
+                # If a custom stream_task_url is set, use it first
+                if hasattr(self, '_stream_task_url') and self._stream_task_url:
+                    logger.debug(f"Using custom task streaming URL: {self._stream_task_url}")
+                    endpoints_to_try.append(self._stream_task_url)
+                
+                # Then try standard endpoints
+                endpoints_to_try.extend([
+                    f"{self.url}/a2a/tasks/stream",  # Try A2A-specific endpoint first
+                    f"{self.url}/tasks/stream",      # Then standard tasks endpoint
+                    f"{self.url}/stream"             # Finally fallback to regular stream endpoint
+                ])
+                
+                response = None
+                last_error = None
+                
+                # Try each endpoint in order
+                for endpoint_url in endpoints_to_try:
+                    try:
+                        logger.debug(f"Trying task streaming endpoint: {endpoint_url}")
+                        
+                        # Close previous response if we had one
+                        if response:
+                            await response.release()
+                            
+                        # Send the request to this endpoint
+                        response = await session.post(
+                            endpoint_url,
+                            json=request_data,
+                            headers=headers
+                        )
+                        
+                        # Check for success
+                        if response.status < 400:
+                            logger.debug(f"Successfully connected to endpoint: {endpoint_url}")
+                            break
+                            
+                        # Store error for retry
+                        error_text = await response.text()
+                        last_error = A2AConnectionError(f"HTTP error {response.status}: {error_text}")
+                        
+                    except Exception as req_error:
+                        # Log the error and continue to next endpoint
+                        logger.debug(f"Error with endpoint {endpoint_url}: {req_error}")
+                        last_error = req_error
+                
+                # If we didn't get a successful response, raise the last error
+                if not response or response.status >= 400:
+                    if last_error:
+                        raise last_error
+                    else:
+                        raise A2AConnectionError("All task streaming endpoints failed")
+                
+                try:
+                    # Process the streaming response
+                    buffer = ""
+                    current_task = task
+                    
+                    async for chunk in response.content.iter_chunks():
+                        if not chunk:
+                            continue
+                            
+                        # Decode chunk
+                        chunk_text = chunk[0].decode('utf-8')
+                        buffer += chunk_text
+                        
+                        # Process complete events (separated by double newlines)
+                        while "\n\n" in buffer:
+                            event, buffer = buffer.split("\n\n", 1)
+                            
+                            # Extract data fields and event type from event
+                            event_type = "update"  # Default event type
+                            event_data = None
+                            event_id = None
+                            
+                            for line in event.split("\n"):
+                                if line.startswith("event:"):
+                                    event_type = line[6:].strip()
+                                elif line.startswith("data:"):
+                                    event_data = line[5:].strip()
+                                elif line.startswith("id:"):
+                                    event_id = line[3:].strip()
+                            
+                            # Skip if no data
+                            if not event_data:
+                                continue
+                                
+                            # Try to parse the data as JSON
+                            try:
+                                data_obj = json.loads(event_data)
+                                
+                                # Handle task updates
+                                if event_type == "update" or event_type == "complete":
+                                    if isinstance(data_obj, dict):
+                                        # Parse as a Task
+                                        current_task = Task.from_dict(data_obj)
+                                        yield current_task
+                                        
+                                        # If this is a complete event, we're done
+                                        if event_type == "complete" or current_task.status.state in [
+                                            TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELED
+                                        ]:
+                                            return
+                                
+                                # Handle other event types
+                                elif event_type == "error":
+                                    error_msg = data_obj.get("error", "Unknown error")
+                                    raise A2AStreamingError(f"Stream error: {error_msg}")
+                                    
+                                # Handle raw data (artifact updates, etc.)
+                                else:
+                                    # Update the current task with the new data
+                                    # This is a simplification; real updates should merge properly
+                                    if "artifacts" in data_obj:
+                                        current_task.artifacts = data_obj["artifacts"]
+                                    
+                                    if "status" in data_obj:
+                                        current_task.status = TaskStatus.from_dict(data_obj["status"])
+                                    
+                                    yield current_task
+                                    
+                            except json.JSONDecodeError:
+                                # Not JSON, create a text update
+                                logger.warning(f"Received non-JSON data in stream: {event_data[:50]}...")
+                                # Create a text artifact for backward compatibility
+                                current_task.artifacts.append({
+                                    "parts": [{"type": "text", "text": event_data}]
+                                })
+                                yield current_task
+                
+                finally:
+                    # Ensure we close the response
+                    if response:
+                        await response.release()
+        
+        except Exception as e:
+            if isinstance(e, (A2AConnectionError, A2AResponseError, A2AStreamingError)):
+                raise
+            
+            # For any other error, yield a complete task with the error
+            task.status = TaskStatus(
+                state=TaskState.FAILED,
+                message={"error": str(e)}
+            )
+            yield task
+    
+    async def tasks_resubscribe(self, task_id: str, session_id: Optional[str] = None) -> AsyncGenerator[Task, None]:
+        """
+        Resubscribe to an existing task's updates.
+        
+        Args:
+            task_id: The ID of the task to resubscribe to
+            session_id: Optional session ID (if known)
+            
+        Yields:
+            Task updates as they arrive
+            
+        Raises:
+            A2AConnectionError: If connection to the agent fails
+            A2AResponseError: If the agent returns an invalid response
+            A2AStreamingError: If streaming is not supported by the agent
+        """
+        if not self._has_aiohttp:
+            raise A2AStreamingError(
+                "aiohttp is required for tasks_resubscribe. "
+                "Install it with 'pip install aiohttp'."
+            )
+        
+        # Check if streaming is supported
+        supports_streaming = await self.check_streaming_support()
+        if not supports_streaming:
+            raise A2AStreamingError("Agent does not support streaming")
+        
+        # Real streaming implementation with aiohttp
+        try:
+            # Set up streaming request
+            async with self._create_session() as session:
+                headers = dict(self.headers)
+                # Add headers to request server-sent events
+                headers['Accept'] = 'text/event-stream'
+                
+                # Create JsonRPC request
+                request_data = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tasks/resubscribe",
+                    "params": {
+                        "id": task_id
+                    }
+                }
+                
+                # Add session_id if provided
+                if session_id:
+                    request_data["params"]["sessionId"] = session_id
+                
+                # Try primary endpoint first
+                endpoint_url = f"{self.url}/tasks/stream"
+                response = None
+                try:
+                    response = await session.post(
+                        endpoint_url,
+                        json=request_data,
+                        headers=headers
+                    )
+                    
+                    # Check for HTTP errors
+                    if response.status >= 400:
+                        # Try alternate endpoint
+                        logger.debug(f"Primary endpoint failed with status {response.status}, trying alternate")
+                        if response:
+                            await response.release()
+                        endpoint_url = f"{self.url}/a2a/tasks/stream"
+                        response = await session.post(
+                            endpoint_url,
+                            json=request_data,
+                            headers=headers
+                        )
+                        
+                        # Check for HTTP errors again
+                        if response.status >= 400:
+                            error_text = await response.text()
+                            raise A2AConnectionError(
+                                f"HTTP error {response.status}: {error_text}"
+                            )
+                except Exception as req_error:
+                    # Try alternate endpoint if first fails
+                    logger.debug(f"Primary endpoint failed: {req_error}, trying alternate")
+                    if response:
+                        await response.release()
+                    endpoint_url = f"{self.url}/a2a/tasks/stream"
+                    response = await session.post(
+                        endpoint_url,
+                        json=request_data,
+                        headers=headers
+                    )
+                    
+                    # Check for HTTP errors
+                    if response.status >= 400:
+                        error_text = await response.text()
+                        raise A2AConnectionError(
+                            f"HTTP error {response.status}: {error_text}"
+                        )
+                
+                try:
+                    # Process the streaming response
+                    buffer = ""
+                    current_task = None
+                    
+                    async for chunk in response.content.iter_chunks():
+                        if not chunk:
+                            continue
+                            
+                        # Decode chunk
+                        chunk_text = chunk[0].decode('utf-8')
+                        buffer += chunk_text
+                        
+                        # Process complete events (separated by double newlines)
+                        while "\n\n" in buffer:
+                            event, buffer = buffer.split("\n\n", 1)
+                            
+                            # Extract data fields and event type from event
+                            event_type = "update"  # Default event type
+                            event_data = None
+                            event_id = None
+                            
+                            for line in event.split("\n"):
+                                if line.startswith("event:"):
+                                    event_type = line[6:].strip()
+                                elif line.startswith("data:"):
+                                    event_data = line[5:].strip()
+                                elif line.startswith("id:"):
+                                    event_id = line[3:].strip()
+                            
+                            # Skip if no data
+                            if not event_data:
+                                continue
+                                
+                            # Try to parse the data as JSON
+                            try:
+                                data_obj = json.loads(event_data)
+                                
+                                # Handle task updates
+                                if event_type == "update" or event_type == "complete":
+                                    if isinstance(data_obj, dict):
+                                        # Parse as a Task
+                                        current_task = Task.from_dict(data_obj)
+                                        yield current_task
+                                        
+                                        # If this is a complete event, we're done
+                                        if event_type == "complete" or (current_task and current_task.status.state in [
+                                            TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELED
+                                        ]):
+                                            return
+                                
+                                # Handle other event types
+                                elif event_type == "error":
+                                    error_msg = data_obj.get("error", "Unknown error")
+                                    raise A2AStreamingError(f"Stream error: {error_msg}")
+                                    
+                                # Handle raw data (artifact updates, etc.)
+                                else:
+                                    # Initialize a task if we don't have one yet
+                                    if not current_task:
+                                        current_task = Task(
+                                            id=task_id,
+                                            session_id=session_id
+                                        )
+                                    
+                                    # Update the current task with the new data
+                                    if "artifacts" in data_obj:
+                                        current_task.artifacts = data_obj["artifacts"]
+                                    
+                                    if "status" in data_obj:
+                                        current_task.status = TaskStatus.from_dict(data_obj["status"])
+                                    
+                                    yield current_task
+                                    
+                            except json.JSONDecodeError:
+                                # Not JSON, create a text update
+                                logger.warning(f"Received non-JSON data in stream: {event_data[:50]}...")
+                                
+                                # Initialize a task if we don't have one yet
+                                if not current_task:
+                                    current_task = Task(
+                                        id=task_id,
+                                        session_id=session_id
+                                    )
+                                
+                                # Create a text artifact for backward compatibility
+                                current_task.artifacts.append({
+                                    "parts": [{"type": "text", "text": event_data}]
+                                })
+                                yield current_task
+                
+                finally:
+                    # Ensure we close the response
+                    if response:
+                        await response.release()
+        
+        except Exception as e:
+            if isinstance(e, (A2AConnectionError, A2AResponseError, A2AStreamingError)):
+                raise
+            
+            # For any other error, yield a task with the error
+            error_task = Task(
+                id=task_id,
+                session_id=session_id,
+                status=TaskStatus(
+                    state=TaskState.FAILED,
+                    message={"error": str(e)}
+                )
+            )
+            yield error_task
+    
     async def stream_task(
         self, 
         task: Task,
@@ -493,6 +1017,34 @@ class StreamingClient(BaseA2AClient):
             A2AConnectionError: If connection to the agent fails
             A2AResponseError: If the agent returns an invalid response
         """
+        # For backward compatibility, first try the enhanced tasks_send_subscribe method
+        try:
+            async for task_update in self.tasks_send_subscribe(task):
+                # Extract status and artifacts for backward compatibility
+                chunk = {
+                    "status": task_update.status.state.value,
+                    "artifacts": task_update.artifacts
+                }
+                
+                # Call the callback if provided
+                if chunk_callback:
+                    chunk_callback(chunk)
+                
+                yield chunk
+                
+                # If the task is complete, we're done
+                if task_update.status.state in [TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELED]:
+                    return
+            
+            # If we reach here, we've completed the task
+            return
+            
+        except (A2AStreamingError, ImportError) as e:
+            # Fall back to legacy implementation
+            logger.debug(f"Enhanced streaming not supported or failed: {e}. Falling back to legacy implementation.")
+            pass
+        
+        # Legacy implementation starts here
         # Check if streaming is supported
         supports_streaming = await self.check_streaming_support()
         
@@ -502,7 +1054,7 @@ class StreamingClient(BaseA2AClient):
             
             # Create a single chunk with the complete result
             chunk = {
-                "status": result.status.state,
+                "status": result.status.state.value,
                 "artifacts": result.artifacts
             }
                 
@@ -518,7 +1070,7 @@ class StreamingClient(BaseA2AClient):
             
             # Create a single chunk with the complete result
             chunk = {
-                "status": result.status.state,
+                "status": result.status.state.value,
                 "artifacts": result.artifacts
             }
                 
@@ -591,7 +1143,7 @@ class StreamingClient(BaseA2AClient):
             
             # Create a single chunk with the complete result
             chunk = {
-                "status": result.status.state,
+                "status": result.status.state.value,
                 "artifacts": result.artifacts
             }
                 
@@ -600,38 +1152,195 @@ class StreamingClient(BaseA2AClient):
                 chunk_callback(chunk)
             yield chunk
     
-    async def _process_stream(self, response, chunk_callback):
-        """Process a streaming response."""
-        buffer = ""
-        async for chunk in response.content.iter_chunks():
-            if not chunk:
-                continue
-                
-            # Decode chunk
-            chunk_text = chunk[0].decode('utf-8')
-            buffer += chunk_text
+    async def _process_stream(self, response, chunk_callback=None):
+        """Process a streaming response using enhanced parsing."""
+        try:
+            buffer = ""
+            last_event_type = None
+            chunks_received = 0
+            bytes_received = 0
             
-            # Process complete events (separated by double newlines)
-            while "\n\n" in buffer:
-                event, buffer = buffer.split("\n\n", 1)
+            # Debug logging
+            logger.debug(f"Starting to process streaming response")
+            logger.debug(f"Response headers: {response.headers}")
+            
+            async for chunk in response.content.iter_chunks():
+                if not chunk:
+                    continue
                 
-                # Extract data fields from event
-                for line in event.split("\n"):
-                    if line.startswith("data:"):
-                        data = line[5:].strip()
+                # Update metrics
+                chunks_received += 1
+                bytes_received += len(chunk[0])
+                
+                # Decode chunk
+                chunk_text = chunk[0].decode('utf-8')
+                buffer += chunk_text
+                
+                # Debug every 10 chunks
+                if chunks_received % 10 == 0:
+                    logger.debug(f"Processed {chunks_received} chunks, {bytes_received} bytes")
+                    
+                # Detailed debug for first few chunks
+                if chunks_received <= 3:
+                    logger.debug(f"Raw chunk {chunks_received}: {chunk_text}")
+                
+                # Process complete events (separated by double newlines)
+                while "\n\n" in buffer:
+                    event, buffer = buffer.split("\n\n", 1)
+                    
+                    # Skip comments (lines starting with colon)
+                    if event.startswith(':'):
+                        logger.debug(f"Skipping SSE comment: {event}")
+                        continue
+                    
+                    # Extract fields from the event
+                    event_type = None
+                    event_data = None
+                    event_id = None
+                    retry_time = None
+                    
+                    for line in event.split("\n"):
+                        line = line.strip()
+                        if not line:
+                            continue
+                            
+                        if line.startswith("event:"):
+                            event_type = line[6:].strip()
+                            logger.debug(f"Found event type: {event_type}")
+                        elif line.startswith("data:"):
+                            event_data = line[5:].strip()
+                            logger.debug(f"Found event data: {event_data[:50]}...")
+                        elif line.startswith("id:"):
+                            event_id = line[3:].strip()
+                            logger.debug(f"Found event ID: {event_id}")
+                        elif line.startswith("retry:"):
+                            try:
+                                retry_time = int(line[6:].strip())
+                                logger.debug(f"Found retry time: {retry_time}")
+                            except ValueError:
+                                pass
+                    
+                    # Default to "message" event type if none provided
+                    if not event_type:
+                        event_type = last_event_type or "message"
+                    
+                    last_event_type = event_type
+                    
+                    # Handle connected event
+                    if event_type == "connected":
+                        logger.info("Received connected event from server")
+                        continue
+                    
+                    # Handle error events
+                    if event_type == "error":
+                        if event_data:
+                            try:
+                                error_data = json.loads(event_data)
+                                logger.error(f"Received error event: {error_data}")
+                                # Raise exception to be caught by the outer handler
+                                raise A2AStreamingError(error_data.get("error", "Unknown streaming error"))
+                            except json.JSONDecodeError:
+                                # Bad JSON in error, use raw text
+                                logger.error(f"Received malformed error event: {event_data}")
+                                raise A2AStreamingError(f"Stream error: {event_data}")
+                        continue
+                    
+                    # Skip if no data
+                    if not event_data:
+                        logger.warning("Empty event data, skipping")
+                        continue
+                    
+                    # Try to parse as JSON
+                    try:
+                        data_obj = json.loads(event_data)
+                        logger.debug(f"Successfully parsed JSON data: {str(data_obj)[:50]}...")
                         
-                        # Try to parse as JSON
-                        try:
-                            data_obj = json.loads(data)
+                        # Handle structured events with the new StreamingChunk class
+                        if isinstance(data_obj, dict):
+                            streaming_chunk = StreamingChunk.from_dict(data_obj)
+                            
+                            # If lastChunk is set, this is the final chunk
+                            is_last = streaming_chunk.is_last
+                            
+                            # Process with callback if provided
+                            if chunk_callback:
+                                chunk_callback(data_obj)
+                            
+                            # Yield the chunk
+                            yield data_obj
+                            
+                            # If this is the last chunk, we're done
+                            if is_last:
+                                logger.info("Received last chunk, ending stream")
+                                return
+                        else:
+                            # Non-dict JSON, pass through
+                            logger.debug(f"Non-dict JSON data: {str(data_obj)[:50]}...")
                             if chunk_callback:
                                 chunk_callback(data_obj)
                             yield data_obj
-                        except json.JSONDecodeError:
-                            # Not JSON, yield raw data as text chunk
-                            text_chunk = {"type": "text", "text": data}
-                            if chunk_callback:
-                                chunk_callback(text_chunk)
-                            yield text_chunk
+                    except json.JSONDecodeError:
+                        # Not JSON, create a text chunk
+                        logger.warning(f"Failed to parse JSON, treating as text: {event_data[:50]}...")
+                        text_chunk = {"type": "text", "text": event_data}
+                        if chunk_callback:
+                            chunk_callback(text_chunk)
+                        yield text_chunk
+            
+            # Log completion
+            logger.info(f"Stream completed, processed {chunks_received} raw chunks")
+        
+        except Exception as e:
+            logger.error(f"Error processing streaming response: {e}")
+            # Include stack trace for debugging
+            logger.debug(traceback.format_exc())
+            raise
+    
+    def _extract_json_from_response(self, text):
+        """
+        Extract JSON data from a response that might be HTML or contain embedded JSON.
+        
+        Args:
+            text: The response text to parse
+            
+        Returns:
+            Extracted JSON data as dictionary
+        """
+        # Check if the text is pure JSON first
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+        
+        # Try to extract JSON from HTML (look for JSON in a <pre> tag or <script> tag)
+        import re
+        
+        # Pattern 1: Look for content in <pre> tags (common in HTML API responses)
+        pre_match = re.search(r'<pre[^>]*>(.*?)</pre>', text, re.DOTALL)
+        if pre_match:
+            try:
+                return json.loads(pre_match.group(1))
+            except json.JSONDecodeError:
+                pass
+                
+        # Pattern 2: Look for a JSON object with capabilities field
+        json_match = re.search(r'({[^{}]*"capabilities"[^{}]*})', text)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+                
+        # Pattern 3: Look for application/json content
+        json_content_match = re.search(r'<div[^>]*>({\s*"[^"]*"\s*:.*?})</div>', text, re.DOTALL)
+        if json_content_match:
+            try:
+                return json.loads(json_content_match.group(1))
+            except json.JSONDecodeError:
+                pass
+        
+        # Fallback: Return empty dict if we couldn't extract valid JSON
+        return {}
     
     def _extract_text_from_chunk(self, chunk):
         """Extract text content from a response chunk."""
@@ -639,16 +1348,25 @@ class StreamingClient(BaseA2AClient):
         if isinstance(chunk, str):
             return chunk
         elif isinstance(chunk, dict):
-            # Check for standard patterns
+            # First check for the new structure
+            if "content" in chunk:
+                # Content might be a string or object
+                content = chunk["content"]
+                if isinstance(content, str):
+                    return content
+                elif isinstance(content, dict) and "text" in content:
+                    return content["text"]
+                elif isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            return item.get("text", "")
+            
+            # Check for direct text field
             if "text" in chunk:
                 return chunk["text"]
-            elif "content" in chunk and isinstance(chunk["content"], dict) and "text" in chunk["content"]:
-                return chunk["content"]["text"]
-            elif "content" in chunk and isinstance(chunk["content"], list):
-                for item in chunk["content"]:
-                    if isinstance(item, dict) and item.get("type") == "text":
-                        return item.get("text", "")
-            elif "artifacts" in chunk and isinstance(chunk["artifacts"], list):
+            
+            # Check for artifacts which might contain text
+            if "artifacts" in chunk and isinstance(chunk["artifacts"], list):
                 for artifact in chunk["artifacts"]:
                     if isinstance(artifact, dict) and "parts" in artifact:
                         for part in artifact["parts"]:
