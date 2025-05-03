@@ -3,7 +3,7 @@ Base server for implementing A2A-compatible agents.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, AsyncGenerator, Union
+from typing import Optional, Dict, Any, AsyncGenerator, Union, Callable, Any
 
 from ..models.message import Message
 from ..models.conversation import Conversation
@@ -22,6 +22,7 @@ class BaseA2AServer(ABC):
     default implementation that processes the last message in the conversation.
     
     Servers that support streaming should also implement the `stream_response` method.
+    Servers that need to define custom HTTP routes should implement `setup_routes`.
     """
     
     @abstractmethod
@@ -94,6 +95,20 @@ class BaseA2AServer(ABC):
             A2AStreamingError: If the server doesn't support streaming
         """
         raise A2AStreamingError("This server does not support streaming")
+    
+    def setup_routes(self, app) -> None:
+        """
+        Set up custom HTTP routes for this server.
+        
+        This method should be implemented by servers that need to define
+        custom routes beyond the standard A2A protocol routes. 
+        
+        The default implementation does nothing.
+        
+        Args:
+            app: The Flask application to add routes to
+        """
+        pass
         
     def get_metadata(self) -> Dict[str, Any]:
         """

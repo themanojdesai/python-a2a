@@ -24,6 +24,7 @@ The A2A protocol establishes a standard communication format that enables AI age
 
 ## 📋 What's New in v0.5.X
 
+- **Agent Discovery**: Built-in support for agent registry and discovery with full Google A2A protocol compatibility
 - **LangChain Integration**: Seamless integration with LangChain's tools and agents
 - **Expanded Tool Ecosystem**: Use tools from both LangChain and MCP in any agent
 - **Enhanced Agent Interoperability**: Convert between A2A agents and LangChain agents 
@@ -47,6 +48,7 @@ The A2A protocol establishes a standard communication format that enables AI age
 ## ✨ Why Choose Python A2A?
 
 - **Complete Implementation**: Fully implements the official A2A specification with zero compromises
+- **Agent Discovery**: Built-in agent registry and discovery for building agent ecosystems
 - **MCP Integration**: First-class support for Model Context Protocol for powerful tool-using agents
 - **Enterprise Ready**: Built for production environments with robust error handling and validation
 - **Framework Agnostic**: Works with any Python framework (Flask, FastAPI, Django, etc.)
@@ -626,6 +628,66 @@ agent = network.get_agent("diagnosis")
 response = agent.ask("What are the symptoms of the flu?")
 ```
 
+### 7. Agent Discovery and Registry
+
+```python
+from python_a2a import AgentCard, A2AServer, run_server
+from python_a2a.discovery import AgentRegistry, run_registry, enable_discovery, DiscoveryClient
+import threading
+import time
+
+# Create a registry server
+registry = AgentRegistry(
+    name="A2A Registry Server",
+    description="Central registry for agent discovery"
+)
+
+# Run the registry in a background thread
+registry_port = 8000
+thread = threading.Thread(
+    target=lambda: run_registry(registry, host="0.0.0.0", port=registry_port),
+    daemon=True
+)
+thread.start()
+time.sleep(1)  # Let the registry start
+
+# Create a sample agent
+agent_card = AgentCard(
+    name="Weather Agent",
+    description="Provides weather information",
+    url="http://localhost:8001",
+    version="1.0.0",
+    capabilities={
+        "weather_forecasting": True,
+        "google_a2a_compatible": True  # Enable Google A2A compatibility
+    }
+)
+agent = A2AServer(agent_card=agent_card)
+
+# Enable discovery - this registers with the registry
+registry_url = f"http://localhost:{registry_port}"
+discovery_client = enable_discovery(agent, registry_url=registry_url)
+
+# Run the agent in a separate thread
+agent_thread = threading.Thread(
+    target=lambda: run_server(agent, host="0.0.0.0", port=8001),
+    daemon=True
+)
+agent_thread.start()
+time.sleep(1)  # Let the agent start
+
+# Create a discovery client for discovering agents
+client = DiscoveryClient(agent_card=None)  # No agent card needed for discovery only
+client.add_registry(registry_url)
+
+# Discover all agents
+agents = client.discover()
+print(f"Discovered {len(agents)} agents:")
+for agent in agents:
+    print(f"- {agent.name} at {agent.url}")
+    print(f"  Capabilities: {agent.capabilities}")
+```
+
 ## 📖 Architecture & Design Principles
 
 Python A2A is built on three core design principles:
@@ -636,11 +698,12 @@ Python A2A is built on three core design principles:
 
 3. **Progressive Enhancement**: Start simple and add complexity only as needed
 
-The architecture consists of seven main components:
+The architecture consists of eight main components:
 
 - **Models**: Data structures representing A2A messages, tasks, and agent cards
 - **Client**: Components for sending messages to A2A agents and managing agent networks
 - **Server**: Components for building A2A-compatible agents
+- **Discovery**: Registry and discovery mechanisms for agent ecosystems
 - **MCP**: Tools for implementing Model Context Protocol servers and clients
 - **LangChain**: Bridge components for LangChain integration
 - **Workflow**: Engine for orchestrating complex agent interactions

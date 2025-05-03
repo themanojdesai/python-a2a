@@ -30,6 +30,7 @@ Key Features
 -----------
 
 - **Complete Implementation**: Fully implements the official A2A specification
+- **Agent Discovery**: Built-in support for agent registry and discovery mechanism
 - **MCP Integration**: First-class support for Model Context Protocol
 - **LangChain Integration**: Seamless interoperability with LangChain tools and agents
 - **Enterprise Ready**: Built for production with robust error handling

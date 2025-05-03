@@ -23,14 +23,14 @@ class A2AServer(BaseA2AServer):
     Enhanced A2A server with protocol support
     """
     
-    def __init__(self, agent_card=None, message_handler=None, google_a2a_compatible=False, **kwargs):
+    def __init__(self, agent_card=None, message_handler=None, google_a2a_compatible=True, **kwargs):
         """
         Initialize with optional agent card and message handler
         
         Args:
             agent_card: Optional agent card
             message_handler: Optional message handler function
-            google_a2a_compatible: Whether to use Google A2A format by default
+            google_a2a_compatible: Whether to use Google A2A format by default (True by default since this is an A2A protocol implementation)
             **kwargs: Additional keyword arguments
         """
         # Create default agent card if none provided
@@ -69,8 +69,8 @@ class A2AServer(BaseA2AServer):
         url = kwargs.get("url", None)
         version = kwargs.get("version", getattr(self.__class__, "version", "1.0.0"))
         
-        # Check for Google A2A compatibility flag
-        google_a2a_compatible = kwargs.get("google_a2a_compatible", False)
+        # Check for Google A2A compatibility flag - default to True since this is an A2A implementation
+        google_a2a_compatible = kwargs.get("google_a2a_compatible", True)
         
         # Create capabilities dict with Google A2A compatibility flag
         capabilities = kwargs.get("capabilities", {

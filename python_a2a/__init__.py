@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 
 # Setup feature flags
 import sys
@@ -51,6 +51,15 @@ from .client.streaming import StreamingClient
 from .server.base import BaseA2AServer
 from .server.a2a_server import A2AServer
 from .server.http import run_server
+
+# Agent discovery functionality
+from .discovery import (
+    AgentRegistry,
+    run_registry,
+    DiscoveryClient,
+    enable_discovery,
+    RegistryAgent
+)
 
 # Utility functions
 from .utils.formatting import (
@@ -170,6 +179,7 @@ HAS_UTILS = True
 HAS_DECORATORS = True
 HAS_WORKFLOW = True
 HAS_MCP = True
+HAS_DISCOVERY = True  # Agent discovery
 HAS_LANGCHAIN_INTEGRATION = True  # Always True since we provide the interface
 
 # Define __all__ for explicit exports
@@ -217,6 +227,13 @@ __all__ = [
     'BaseA2AServer',
     'A2AServer',
     'run_server',
+    
+    # Discovery
+    'AgentRegistry',
+    'run_registry',
+    'DiscoveryClient',
+    'enable_discovery',
+    'RegistryAgent',
     
     # Utilities
     'format_message_as_text',
