@@ -6,7 +6,9 @@ import requests
 import uuid
 import json
 import re
-from typing import Optional, Dict, Any, List, Union
+import asyncio
+import logging
+from typing import Optional, Dict, Any, List, Union, AsyncGenerator, Callable
 
 from ..models.message import Message, MessageRole
 from ..models.conversation import Conversation
@@ -17,7 +19,9 @@ from ..models.content import (
 from ..models.agent import AgentCard, AgentSkill
 from ..models.task import Task, TaskStatus, TaskState
 from .base import BaseA2AClient
-from ..exceptions import A2AConnectionError, A2AResponseError
+from ..exceptions import A2AConnectionError, A2AResponseError, A2AStreamingError
+
+logger = logging.getLogger(__name__)
 
 
 class A2AClient(BaseA2AClient):
@@ -1049,3 +1053,551 @@ class A2AClient(BaseA2AClient):
             True if using Google A2A format, False otherwise
         """
         return self._use_google_a2a
+        
+    async def send_message_async(self, message: Message) -> Message:
+        """
+        Send a message to an A2A-compatible agent asynchronously.
+        
+        Args:
+            message: The A2A message to send
+            
+        Returns:
+            The agent's response as an A2A message
+        """
+        # Implement async version of send_message using asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.send_message, message)
+    
+    async def send_conversation_async(self, conversation: Conversation) -> Conversation:
+        """
+        Send a conversation to an A2A-compatible agent asynchronously.
+        
+        Args:
+            conversation: The conversation to send
+            
+        Returns:
+            The updated conversation with the agent's response
+        """
+        # Implement async version of send_conversation using asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.send_conversation, conversation)
+    
+    async def send_task_async(self, task: Task) -> Task:
+        """
+        Send a task to an A2A-compatible agent asynchronously.
+        
+        Args:
+            task: The task to send
+            
+        Returns:
+            The updated task with the agent's response
+        """
+        # Implement async version of _send_task using asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._send_task, task)
+    
+    async def check_streaming_support(self) -> bool:
+        """
+        Check if the agent supports streaming.
+        
+        Returns:
+            True if streaming is supported, False otherwise
+        """
+        try:
+            # Check the agent card capabilities
+            if hasattr(self.agent_card, 'capabilities'):
+                capabilities = getattr(self.agent_card, 'capabilities', {})
+                if isinstance(capabilities, dict) and capabilities.get("streaming", False):
+                    return True
+            
+            # Try to fetch agent metadata to check for streaming capability
+            try:
+                # Add Accept header to prefer JSON
+                headers = dict(self.headers)
+                headers["Accept"] = "application/json"
+                
+                # Try the standard endpoint first
+                endpoint = f"{self.endpoint_url}/agent.json"
+                try:
+                    async with self._create_aiohttp_session() as session:
+                        async with session.get(endpoint, headers=headers) as response:
+                            if response.status == 200:
+                                data = await response.json(content_type=None)
+                                if isinstance(data, dict) and isinstance(data.get("capabilities"), dict):
+                                    return data.get("capabilities", {}).get("streaming", False)
+                except:
+                    # Try alternate endpoint
+                    endpoint = f"{self.endpoint_url}/a2a/agent.json"
+                    async with self._create_aiohttp_session() as session:
+                        async with session.get(endpoint, headers=headers) as response:
+                            if response.status == 200:
+                                data = await response.json(content_type=None)
+                                if isinstance(data, dict) and isinstance(data.get("capabilities"), dict):
+                                    return data.get("capabilities", {}).get("streaming", False)
+            except:
+                # Ignore errors in the async check
+                pass
+                
+            # Fall back to synchronous check
+            try:
+                # Add Accept header to prefer JSON
+                headers = dict(self.headers)
+                headers["Accept"] = "application/json"
+                
+                # Try the standard endpoint first
+                endpoint = f"{self.endpoint_url}/agent.json"
+                try:
+                    response = requests.get(endpoint, headers=headers, timeout=self.timeout)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if isinstance(data, dict) and isinstance(data.get("capabilities"), dict):
+                            return data.get("capabilities", {}).get("streaming", False)
+                except:
+                    # Try alternate endpoint
+                    endpoint = f"{self.endpoint_url}/a2a/agent.json"
+                    response = requests.get(endpoint, headers=headers, timeout=self.timeout)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if isinstance(data, dict) and isinstance(data.get("capabilities"), dict):
+                            return data.get("capabilities", {}).get("streaming", False)
+            except:
+                # Ignore errors in the synchronous check
+                pass
+        except Exception as e:
+            logger.warning(f"Error checking streaming support: {e}")
+        
+        # Default to false if we couldn't determine streaming support
+        return False
+    
+    def _create_aiohttp_session(self):
+        """
+        Create an aiohttp session for async HTTP requests.
+        
+        Returns:
+            An aiohttp session
+        
+        Raises:
+            ImportError: If aiohttp is not installed
+        """
+        try:
+            import aiohttp
+            return aiohttp.ClientSession(
+                headers=self.headers,
+                timeout=aiohttp.ClientTimeout(total=self.timeout)
+            )
+        except ImportError:
+            raise ImportError(
+                "aiohttp is required for streaming. "
+                "Install it with 'pip install aiohttp'."
+            )
+    
+    async def stream_response(
+        self, 
+        message: Message,
+        chunk_callback: Optional[Callable[[Union[str, Dict]], None]] = None
+    ) -> AsyncGenerator[Union[str, Dict], None]:
+        """
+        Stream a response from an A2A-compatible agent.
+        
+        Args:
+            message: The A2A message to send
+            chunk_callback: Optional callback function for each chunk
+            
+        Yields:
+            Response chunks from the agent
+            
+        Raises:
+            A2AConnectionError: If connection to the agent fails
+            A2AResponseError: If the agent returns an invalid response
+            A2AStreamingError: If streaming is not supported by the agent
+        """
+        # Check if streaming is supported
+        supports_streaming = await self.check_streaming_support()
+        
+        if not supports_streaming:
+            # Fall back to non-streaming if not supported
+            response = await self.send_message_async(message)
+            
+            # Get text from response
+            if hasattr(response.content, "text"):
+                result = response.content.text
+            else:
+                result = str(response.content)
+                
+            # Yield the entire response as one chunk
+            if chunk_callback:
+                chunk_callback(result)
+            yield result
+            return
+        
+        # Try to import aiohttp for streaming
+        try:
+            import aiohttp
+        except ImportError:
+            # Fall back to non-streaming if aiohttp not available
+            response = await self.send_message_async(message)
+            
+            # Get text from response
+            if hasattr(response.content, "text"):
+                result = response.content.text
+            else:
+                result = str(response.content)
+                
+            # Yield the entire response as one chunk
+            if chunk_callback:
+                chunk_callback(result)
+            yield result
+            return
+            
+        # Real streaming implementation with aiohttp
+        try:
+            # Set up streaming request
+            async with self._create_aiohttp_session() as session:
+                headers = dict(self.headers)
+                # Add headers to request server-sent events
+                headers['Accept'] = 'text/event-stream'
+                
+                # Try possible endpoints in order of preference
+                endpoints_to_try = [
+                    f"{self.endpoint_url}/stream",  # Standard streaming endpoint
+                    f"{self.endpoint_url}/a2a/stream",  # A2A-specific streaming endpoint
+                ]
+                
+                response = None
+                last_error = None
+                
+                for endpoint in endpoints_to_try:
+                    try:
+                        logger.debug(f"Trying streaming endpoint: {endpoint}")
+                        
+                        # Close previous response if we had one
+                        if response:
+                            await response.release()
+                            
+                        # Prepare message data for the request
+                        # Try different formats based on our protocol detection
+                        if self._use_google_a2a:
+                            data = message.to_google_a2a()
+                        else:
+                            data = message.to_dict()
+                            
+                        # Make the request
+                        response = await session.post(
+                            endpoint,
+                            json=data,
+                            headers=headers
+                        )
+                        
+                        # If we succeed, break out of the loop
+                        if response.status < 400:
+                            break
+                            
+                        # Store error for retry
+                        error_text = await response.text()
+                        last_error = A2AConnectionError(f"HTTP error {response.status}: {error_text}")
+                        
+                    except Exception as e:
+                        # Log the error and continue to next endpoint
+                        logger.debug(f"Error with streaming endpoint {endpoint}: {e}")
+                        last_error = e
+                
+                # If we didn't get a successful response, raise the last error
+                if not response or response.status >= 400:
+                    if last_error:
+                        raise last_error
+                    else:
+                        raise A2AConnectionError("All streaming endpoints failed")
+                
+                # Process the streaming response
+                try:
+                    buffer = ""
+                    
+                    async for chunk in response.content.iter_chunks():
+                        if not chunk:
+                            continue
+                            
+                        # Decode chunk
+                        chunk_text = chunk[0].decode('utf-8')
+                        buffer += chunk_text
+                        
+                        # Process complete events (separated by double newlines)
+                        while "\n\n" in buffer:
+                            event, buffer = buffer.split("\n\n", 1)
+                            
+                            # Extract data fields and event type from event
+                            event_type = "message"  # Default event type
+                            event_data = None
+                            
+                            for line in event.split("\n"):
+                                if line.startswith("event:"):
+                                    event_type = line[6:].strip()
+                                elif line.startswith("data:"):
+                                    event_data = line[5:].strip()
+                            
+                            # Skip if no data
+                            if not event_data:
+                                continue
+                                
+                            # Try to parse the data as JSON
+                            try:
+                                data_obj = json.loads(event_data)
+                                # Process with callback if provided
+                                if chunk_callback:
+                                    chunk_callback(data_obj)
+                                
+                                # Extract text from object if possible
+                                text_content = self._extract_text_from_chunk(data_obj)
+                                if text_content:
+                                    yield text_content
+                                else:
+                                    yield data_obj
+                            except json.JSONDecodeError:
+                                # Not JSON, treat as text
+                                if chunk_callback:
+                                    chunk_callback(event_data)
+                                yield event_data
+                
+                finally:
+                    # Ensure we close the response
+                    if response:
+                        await response.release()
+        
+        except Exception as e:
+            # Fall back to non-streaming for other errors
+            logger.warning(f"Error in streaming, falling back to non-streaming: {e}")
+            response = await self.send_message_async(message)
+            
+            # Get text from response
+            if hasattr(response.content, "text"):
+                result = response.content.text
+            else:
+                result = str(response.content)
+                
+            # Yield the entire response as one chunk
+            if chunk_callback:
+                chunk_callback(result)
+            yield result
+            
+    def _extract_text_from_chunk(self, chunk: Any) -> Optional[str]:
+        """
+        Extract text content from a response chunk.
+        
+        Args:
+            chunk: The chunk to extract text from
+            
+        Returns:
+            The extracted text or None if no text could be extracted
+        """
+        # Handle different types of chunks
+        if isinstance(chunk, str):
+            return chunk
+            
+        if isinstance(chunk, dict):
+            # First check for content field
+            if "content" in chunk:
+                # Content might be a string or object
+                content = chunk["content"]
+                if isinstance(content, str):
+                    return content
+                elif isinstance(content, dict) and "text" in content:
+                    return content["text"]
+                    
+            # Check for text field
+            if "text" in chunk:
+                return chunk["text"]
+                
+            # Check for parts array
+            if "parts" in chunk and isinstance(chunk["parts"], list):
+                for part in chunk["parts"]:
+                    if isinstance(part, dict) and part.get("type") == "text" and "text" in part:
+                        return part["text"]
+        
+        # Return None if no text could be extracted
+        return None
+        
+    async def stream_task(
+        self, 
+        task: Task,
+        chunk_callback: Optional[Callable[[Dict], None]] = None
+    ) -> AsyncGenerator[Dict, None]:
+        """
+        Stream the execution of a task.
+        
+        Args:
+            task: The task to execute
+            chunk_callback: Optional callback function for each chunk
+            
+        Yields:
+            Task status and result chunks
+        """
+        # Check if streaming is supported
+        supports_streaming = await self.check_streaming_support()
+        
+        if not supports_streaming:
+            # Fall back to non-streaming if not supported
+            result = await self.send_task_async(task)
+            
+            # Create a single chunk with the complete result
+            chunk = {
+                "status": result.status.state.value if hasattr(result.status, "state") else "unknown",
+                "artifacts": result.artifacts
+            }
+                
+            # Yield the entire response as one chunk
+            if chunk_callback:
+                chunk_callback(chunk)
+            yield chunk
+            return
+        
+        # Try to import aiohttp for streaming
+        try:
+            import aiohttp
+        except ImportError:
+            # Fall back to non-streaming if aiohttp not available
+            result = await self.send_task_async(task)
+            
+            # Create a single chunk with the complete result
+            chunk = {
+                "status": result.status.state.value if hasattr(result.status, "state") else "unknown",
+                "artifacts": result.artifacts
+            }
+                
+            # Yield the entire response as one chunk
+            if chunk_callback:
+                chunk_callback(chunk)
+            yield chunk
+            return
+        
+        # Real streaming implementation with aiohttp
+        try:
+            # Set up streaming request
+            async with self._create_aiohttp_session() as session:
+                headers = dict(self.headers)
+                # Add headers to request server-sent events
+                headers['Accept'] = 'text/event-stream'
+                
+                # Prepare JSON-RPC request
+                request_data = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tasks/stream",
+                    "params": task.to_dict()
+                }
+                
+                # Try possible endpoints in order of preference
+                endpoints_to_try = [
+                    f"{self.endpoint_url}/tasks/stream",  # Standard tasks streaming endpoint
+                    f"{self.endpoint_url}/a2a/tasks/stream",  # A2A-specific tasks streaming endpoint
+                ]
+                
+                response = None
+                last_error = None
+                
+                for endpoint in endpoints_to_try:
+                    try:
+                        logger.debug(f"Trying tasks streaming endpoint: {endpoint}")
+                        
+                        # Close previous response if we had one
+                        if response:
+                            await response.release()
+                            
+                        # Make the request
+                        response = await session.post(
+                            endpoint,
+                            json=request_data,
+                            headers=headers
+                        )
+                        
+                        # If we succeed, break out of the loop
+                        if response.status < 400:
+                            break
+                            
+                        # Store error for retry
+                        error_text = await response.text()
+                        last_error = A2AConnectionError(f"HTTP error {response.status}: {error_text}")
+                        
+                    except Exception as e:
+                        # Log the error and continue to next endpoint
+                        logger.debug(f"Error with tasks streaming endpoint {endpoint}: {e}")
+                        last_error = e
+                
+                # If we didn't get a successful response, raise the last error
+                if not response or response.status >= 400:
+                    if last_error:
+                        raise last_error
+                    else:
+                        raise A2AConnectionError("All tasks streaming endpoints failed")
+                
+                # Process the streaming response
+                try:
+                    buffer = ""
+                    
+                    async for chunk in response.content.iter_chunks():
+                        if not chunk:
+                            continue
+                            
+                        # Decode chunk
+                        chunk_text = chunk[0].decode('utf-8')
+                        buffer += chunk_text
+                        
+                        # Process complete events (separated by double newlines)
+                        while "\n\n" in buffer:
+                            event, buffer = buffer.split("\n\n", 1)
+                            
+                            # Extract data fields and event type from event
+                            event_type = "update"  # Default event type
+                            event_data = None
+                            
+                            for line in event.split("\n"):
+                                if line.startswith("event:"):
+                                    event_type = line[6:].strip()
+                                elif line.startswith("data:"):
+                                    event_data = line[5:].strip()
+                            
+                            # Skip if no data
+                            if not event_data:
+                                continue
+                                
+                            # Try to parse the data as JSON
+                            try:
+                                data_obj = json.loads(event_data)
+                                # Process with callback if provided
+                                if chunk_callback:
+                                    chunk_callback(data_obj)
+                                
+                                # Yield the data object
+                                yield data_obj
+                                
+                                # Check if this is the final update
+                                if event_type == "complete":
+                                    return
+                            except json.JSONDecodeError:
+                                # Not JSON, create a text chunk
+                                text_chunk = {
+                                    "type": "text",
+                                    "text": event_data
+                                }
+                                if chunk_callback:
+                                    chunk_callback(text_chunk)
+                                yield text_chunk
+                
+                finally:
+                    # Ensure we close the response
+                    if response:
+                        await response.release()
+        
+        except Exception as e:
+            # Fall back to non-streaming for other errors
+            logger.warning(f"Error in task streaming, falling back to non-streaming: {e}")
+            result = await self.send_task_async(task)
+            
+            # Create a single chunk with the complete result
+            chunk = {
+                "status": result.status.state.value if hasattr(result.status, "state") else "unknown",
+                "artifacts": result.artifacts
+            }
+                
+            # Yield the entire response as one chunk
+            if chunk_callback:
+                chunk_callback(chunk)
+            yield chunk

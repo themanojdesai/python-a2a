@@ -9,4 +9,5 @@ This section provides practical examples of using Python A2A in various scenario
    simple
    advanced
    langchain
+   langchain_agents
    agent_discovery

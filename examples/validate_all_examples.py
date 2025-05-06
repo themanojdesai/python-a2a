@@ -56,7 +56,7 @@ EXAMPLE_CATEGORIES = {
                 "file": "hello_a2a.py",
                 "description": "Simple hello world example",
                 "args": [],
-                "success_markers": ["Hello from A2A", "response"],
+                "success_markers": ["Welcome to Python A2A", "Basic A2A Message", "Response Message", "Message Properties", "You've created your first A2A messages"],
                 "timeout": 10,
                 "requires_api_key": False,
                 "expected_non_zero_exit": False
@@ -116,7 +116,7 @@ EXAMPLE_CATEGORIES = {
                 "file": "agent_skills.py",
                 "description": "Defining agent skills",
                 "args": [],
-                "success_markers": ["skill", "agent", "response"],
+                "success_markers": ["A2A Agent Skills", "Utility Assistant", "Testing Agent Skills", "Input:", "Response:", "You've learned how to use A2A agent and skill decorators"],
                 "timeout": 10,
                 "requires_api_key": False
             },
@@ -148,7 +148,7 @@ EXAMPLE_CATEGORIES = {
                 "file": "basic_streaming.py",
                 "description": "Minimal streaming implementation",
                 "args": ["--port", "8001"],
-                "success_markers": ["streaming", "chunk"],
+                "success_markers": ["Streaming Example", "Starting streaming server", "Streaming with sse", "chunk", "stream_events", "Running a streaming test"],
                 "timeout": 20,
                 "requires_api_key": False,
                 "server_example": True,
@@ -238,10 +238,10 @@ EXAMPLE_CATEGORIES = {
                 "name": "openai_agent",
                 "file": "openai_agent.py",
                 "description": "OpenAI powered agent",
-                "args": ["--test-only"],  # Use test-only flag instead of demo-mode
-                "success_markers": ["OpenAI", "agent", "response"],
+                "args": ["--test-only", "--test-mode"],  # Use test-only and test-mode flags
+                "success_markers": ["OpenAI", "Agent", "Model:", "Temperature:", "dependencies", "Test mode"],
                 "timeout": 15,
-                "requires_api_key": True,
+                "requires_api_key": False,  # No longer requires API key with test-mode
                 "api_env_var": "OPENAI_API_KEY",
                 "server_example": True,
                 "supports_port_arg": True
@@ -274,11 +274,12 @@ EXAMPLE_CATEGORIES = {
                 "name": "llm_client",
                 "file": "llm_client.py",
                 "description": "Generic LLM client",
-                "args": ["--interactive"],  # Using the --interactive flag
-                "success_markers": ["LLM", "client", "response"],
-                "timeout": 15,
-                "requires_api_key": False,
-                "interactive": True
+                "args": ["--test-mode"],  # Add test-mode flag
+                "success_markers": ["LLM Client Example", "All dependencies are installed", "Test mode", "Mock", "provider"],
+                "timeout": 15,  # Increased timeout to allow proper completion
+                "requires_api_key": False,  # No longer requires API key with test-mode
+                "api_env_var": "OPENAI_API_KEY",
+                "interactive": False
             },
         ]
     },
@@ -290,7 +291,7 @@ EXAMPLE_CATEGORIES = {
                 "file": "weather_assistant.py",
                 "description": "Weather assistant application",
                 "args": ["--no-test"],  # Use no-test flag to run without tests
-                "success_markers": ["weather", "forecast", "response"],
+                "success_markers": ["Weather Assistant Example", "Available Skills", "Cities with Weather Data", "Starting Weather Assistant", "Current Weather", "Weather Forecast", "Activity Recommendations"],
                 "timeout": 15,
                 "requires_api_key": False,
                 "server_example": True,
@@ -357,7 +358,7 @@ EXAMPLE_CATEGORIES = {
                 "file": "basic_workflow.py",
                 "description": "Basic workflow example",
                 "args": [],
-                "success_markers": ["workflow", "step", "completed"],
+                "success_markers": ["Workflow Example", "Creating a simple workflow", "Workflow steps", "Running the workflow", "Step completed", "Workflow execution completed successfully"],
                 "timeout": 30,  # Increased timeout
                 "requires_api_key": False,
                 "server_example": True,
@@ -395,21 +396,22 @@ EXAMPLE_CATEGORIES = {
                 "name": "mcp_agent",
                 "file": "mcp_agent.py",
                 "description": "MCP agent implementation",
-                "args": ["--auto-mcp"],  # Changed from demo-mode to auto-mcp
-                "success_markers": ["MCP", "agent", "tool"],
-                "timeout": 20,
+                "args": ["--auto-mcp", "--port", "5050"],  # Use a specific port to avoid conflicts
+                "success_markers": ["MCP Agent Example", "dependencies", "MCP-Enabled Agent", "agent port"],
+                "timeout": 15,
                 "requires_api_key": False,
-                "server_example": True
+                "server_example": True,
+                "supports_port_arg": True
             },
             {
                 "name": "mcp_tools",
                 "file": "mcp_tools.py",
                 "description": "MCP tools example",
                 "args": [],
-                "success_markers": ["MCP", "tool", "result"],
-                "timeout": 20,
+                "success_markers": ["MCP", "tool", "Available Tools", "Testing MCP Tools", "Tool testing completed"],
+                "timeout": 15,
                 "requires_api_key": False,
-                "interactive": True
+                "interactive": False
             },
             {
                 "name": "openai_mcp_agent",
@@ -431,41 +433,84 @@ EXAMPLE_CATEGORIES = {
                 "name": "a2a_to_langchain",
                 "file": "a2a_to_langchain.py",
                 "description": "Converting A2A to LangChain",
-                "args": [],
-                "success_markers": ["A2A", "LangChain", "conversion"],
-                "timeout": 30,  # Increased timeout
-                "requires_api_key": False,
-                "server_example": True  # These likely start servers
+                "args": ["--test-mode", "--port", "5555"],  # Use a specific port to avoid conflicts
+                "success_markers": ["A2A", "LangChain", "integration", "dependencies", "Test mode"],
+                "timeout": 60,  # Increased timeout for test mode server startup
+                "requires_api_key": True,  # Mark as requiring API key
+                "api_env_var": "OPENAI_API_KEY",
+                "server_example": True  # These start servers
             },
             {
                 "name": "langchain_to_a2a",
                 "file": "langchain_to_a2a.py",
                 "description": "Converting LangChain to A2A",
-                "args": [],
-                "success_markers": ["LangChain", "A2A", "conversion"],
-                "timeout": 30,  # Increased timeout
-                "requires_api_key": False,
+                "args": ["--test-mode"],  # Now supports test-mode flag
+                "success_markers": ["LangChain", "A2A", "integration", "dependencies"],
+                "timeout": 15,  # Reduced timeout
+                "requires_api_key": True,  # Mark as requiring API key
+                "api_env_var": "OPENAI_API_KEY",
                 "server_example": True
             },
             {
                 "name": "langchain_tools_to_mcp",
                 "file": "langchain_tools_to_mcp.py",
                 "description": "LangChain tools to MCP conversion",
-                "args": [],
-                "success_markers": ["LangChain", "MCP", "tool"],
-                "timeout": 30,  # Increased timeout
-                "requires_api_key": False,
+                "args": ["--test-mode"],  # Now supports test-mode flag
+                "success_markers": ["LangChain", "MCP", "tool", "dependencies"],
+                "timeout": 15,  # Reduced timeout
+                "requires_api_key": True,  # Mark as requiring API key
+                "api_env_var": "OPENAI_API_KEY",
                 "server_example": True
             },
             {
                 "name": "mcp_to_langchain",
                 "file": "mcp_to_langchain.py",
                 "description": "MCP to LangChain tools conversion",
-                "args": [],
-                "success_markers": ["MCP", "LangChain", "tool"],
-                "timeout": 30,  # Increased timeout
-                "requires_api_key": False,
+                "args": ["--test-mode"],  # Now supports test-mode flag
+                "success_markers": ["MCP", "LangChain", "tool", "dependencies"],
+                "timeout": 15,  # Reduced timeout
+                "requires_api_key": True,  # Mark as requiring API key
+                "api_env_var": "OPENAI_API_KEY",
                 "server_example": True
+            },
+            {
+                "name": "langchain_agent_with_tools",
+                "file": "langchain_agent_with_tools.py",
+                "description": "LangChain Agent with tools",
+                "args": ["--test-mode"],  # Now supports test-mode flag
+                "success_markers": ["Agent", "tools", "server", "dependencies", "Test mode"],
+                "timeout": 90,  # Longer timeout for agent examples with server startup
+                "requires_api_key": True,
+                "api_env_var": "OPENAI_API_KEY",
+                "server_example": True,
+                "supports_port_arg": True,
+                "slow_example": True  # Mark as slow to skip in fast runs
+            },
+            {
+                "name": "langchain_advanced_agent",
+                "file": "langchain_advanced_agent.py",
+                "description": "Advanced LangChain Agent with specialized tools",
+                "args": ["--test-mode"],  # Now supports test-mode flag
+                "success_markers": ["Advanced", "Agent", "Specialized", "tools", "dependencies"],
+                "timeout": 60,  # Longer timeout for complex examples
+                "requires_api_key": True,
+                "api_env_var": "OPENAI_API_KEY",
+                "server_example": True,
+                "supports_port_arg": True,
+                "slow_example": True  # Mark as slow to skip in fast runs
+            },
+            {
+                "name": "langchain_streaming",
+                "file": "langchain_streaming.py",
+                "description": "LangChain with streaming support",
+                "args": ["--test-mode"],  # Now supports test-mode flag
+                "success_markers": ["streaming", "LangChain", "component", "dependencies"],
+                "timeout": 45,  # Increased timeout for streaming
+                "requires_api_key": True,
+                "api_env_var": "OPENAI_API_KEY",
+                "server_example": True,
+                "supports_port_arg": True,
+                "slow_example": True  # Mark as slow to skip in fast runs
             },
         ]
     },
@@ -573,12 +618,46 @@ def run_example(
     Returns:
         A tuple of (success, details)
     """
+    # Print visible status to show progress with force_print
+    force_print(f"Running test: {category}/{example['name']}...")
     example_path = get_example_path(category, example["file"])
     if not os.path.exists(example_path):
         return False, f"Example file not found: {example_path}"
     
-    # Check if this example requires an API key
-    if example.get("requires_api_key", False):
+    # Handle examples that support test mode differently
+    # These examples include integrated mock components that don't require API keys
+    if (category == "langchain" or category == "ai_powered_agents") and "--test-mode" in example.get("args", []):
+        # For examples with test mode, we can run them even without API keys
+        # The examples have built-in mocks that will be used in test mode
+        print(f"🧪 Running {category} example in test mode: {example['name']}")
+        
+        # Check if we already have a real API key in the environment
+        api_env_var = example.get("api_env_var", "")
+        has_real_api_key = False
+        
+        if api_env_var and api_env_var in os.environ:
+            # Check that it's a real key (starts with sk-) and not a temporary one
+            api_key = os.environ.get(api_env_var)
+            if api_key and api_key.startswith("sk-") and not api_key.startswith("sk-test-key-for-"):
+                # We have a real API key, so use it instead of a mock/temp key
+                print(f"✅ Using real {api_env_var} API key from environment for better testing")
+                has_real_api_key = True
+        
+        # Bypass API key requirement for test mode examples
+        bypass_api_check = True
+        
+        # Only set a temporary key if we don't have a real one
+        if not has_real_api_key and api_env_var:
+            # Set temporary dummy API key for test mode examples
+            os.environ["TEMP_TEST_KEY"] = f"sk-test-key-for-validation-{api_env_var}"
+            os.environ[api_env_var] = os.environ["TEMP_TEST_KEY"]
+            print(f"🔑 Setting temporary {api_env_var} API key for validation")
+    else:
+        bypass_api_check = False
+        
+    # Check for API key requirement (unless we're bypassing the check)
+    if not bypass_api_check and example.get("requires_api_key", False):
+        # For other examples that require API keys, check if they are available
         api_env_var = example.get("api_env_var", "")
         if not check_api_key(api_env_var):
             return False, f"Missing API key environment variable: {api_env_var}"
@@ -690,28 +769,72 @@ def run_example(
                 # Get the success markers
                 success_markers = example.get("success_markers", [])
                 markers_found = []
+                markers_missing = []
                 
                 for marker in success_markers:
                     if marker.lower() in stdout_data.lower():
                         markers_found.append(marker)
+                    else:
+                        markers_missing.append(marker)
                 
-                if len(markers_found) > 0:
-                    return True, f"Success markers found: {', '.join(markers_found)}"
+                # Check for minimum success criteria
+                min_required = 1  # Default: at least one marker should be found
+                
+                # Calculate minimum required markers based on example category and nature
+                # Higher quality verification requires more than just 1 marker
+                
+                # Calculate min_required as a percentage of total markers
+                # to ensure we're thoroughly testing all examples
+                if len(success_markers) >= 5:
+                    # For examples with many markers (≥5), require at least 60%
+                    min_required = max(1, int(len(success_markers) * 0.6))
+                elif len(success_markers) >= 3:
+                    # For examples with medium markers (3-4), require at least 2
+                    min_required = 2
+                
+                # For specific examples that need stricter validation
+                if example.get("name") == "mcp_tools":
+                    # For mcp_tools, require at least 3 markers including structure ones
+                    min_required = max(min_required, 3)
+                elif example.get("name") == "mcp_agent":
+                    # For mcp_agent, require at least 3 markers for thorough testing
+                    min_required = max(min_required, 3)
+                
+                # Workflow examples must prove they executed successfully
+                if "workflow" in example.get("name", "").lower():
+                    workflow_markers = ["step completed", "workflow execution", "completed successfully"]
+                    if any(marker.lower() in stdout_data.lower() for marker in workflow_markers):
+                        min_required = max(min_required, 3)
+                
+                # Streaming examples need to verify actual streaming functionality
+                if "streaming" in example.get("name", "").lower():
+                    streaming_markers = ["chunk", "stream", "sse"]
+                    if any(marker.lower() in stdout_data.lower() for marker in streaming_markers):
+                        min_required = max(min_required, 3)
+                
+                # Check if we found enough markers
+                if len(markers_found) >= min_required:
+                    return True, f"Success markers found ({len(markers_found)}/{len(success_markers)}): {', '.join(markers_found)}"
                 else:
                     # For server examples or interactive examples, this might be okay if they don't output much
                     if example.get("interactive", False):
                         # Make it clear in the message that this was an interactive example that was tested
                         return True, "Interactive example run in auto mode"
-                    elif example.get("server_example", False):
+                    elif should_expect_timeout(example):
+                        # This is a server example that's expected to time out, so partial marker detection is okay
+                        if len(markers_found) > 0:
+                            return True, f"Server example with partial success markers: {', '.join(markers_found)}"
                         return True, "Server example started without errors"
-                    return False, f"No success markers found in output"
+                    
+                    # Full error reporting for failures
+                    return False, f"Insufficient success markers found. Found {len(markers_found)}/{len(success_markers)}: {', '.join(markers_found)}. Missing: {', '.join(markers_missing)}"
             else:
                 # If no output but process exited successfully
                 return True, "Example ran successfully (no output to verify markers)"
                 
         except subprocess.TimeoutExpired:
-            # For server examples, timeout might be expected
-            if example.get("server_example", False):
+            # Use the helper function to determine if timeout is expected
+            if should_expect_timeout(example):
                 # Kill the process but consider it successful
                 process.kill()
                 
@@ -719,9 +842,9 @@ def run_example(
                 if process in active_processes:
                     active_processes.remove(process)
                     
-                return True, "Server example timed out as expected (servers typically run indefinitely)"
+                return True, "Example timed out as expected (server likely runs indefinitely)"
             
-            # For non-server examples, timeout is an error
+            # For examples that should not time out, this is an error
             process.kill()
             
             # Remove from tracking
@@ -776,6 +899,14 @@ def validate_category(
     Returns:
         Results dictionary with success stats and details
     """
+    # Diagnostic print for categories that support test mode
+    if category in ["langchain", "ai_powered_agents"]:
+        print(f"\n🔍 Special diagnostics for {category} category with {len(examples)} examples")
+        for i, example in enumerate(examples):
+            test_mode = "--test-mode" in example.get("args", [])
+            print(f"  Example {i+1}: {example['name']} (test mode: {test_mode})")
+            print(f"    Args: {example.get('args', [])}")
+    
     # Start timing
     category_start_time = time.time()
     results = {
@@ -790,6 +921,34 @@ def validate_category(
     # Filter examples if skipping slow ones
     examples_to_run = []
     for example in examples:
+        # For examples with test mode, run them even without API keys
+        is_test_mode_example = False
+        for cat in ["langchain", "ai_powered_agents"]:
+            if category == cat and "--test-mode" in example.get("args", []):
+                is_test_mode_example = True
+                break
+        
+        # Add more diagnostics for categories that support test mode
+        if category in ["langchain", "ai_powered_agents"]:
+            print(f"Filtering example: {example['name']}")
+            
+            # Check for test mode
+            if "--test-mode" in example.get("args", []):
+                print(f"  - Is {category} test mode: Yes")
+            else:
+                print(f"  - Is {category} test mode: No")
+            
+            if example.get("requires_api_key", False):
+                print(f"  - Requires API key: Yes ({example.get('api_env_var', '')})")
+            else:
+                print(f"  - Requires API key: No")
+                
+            if skip_slow and example.get("slow_example", False):
+                print(f"  - Slow example being skipped: Yes")
+            else:
+                print(f"  - Slow example being skipped: No")
+        
+        # Skip slow examples if requested
         if skip_slow and (example.get("timeout", 10) > 15 or example.get("slow_example", False)):
             results["skipped"] += 1
             
@@ -803,6 +962,11 @@ def validate_category(
                 "success": None,  # None indicates skipped
                 "message": f"Skipped (--skip-slow flag used, {skip_reason})"
             })
+        # Special handling for examples with test mode to bypass API check
+        elif is_test_mode_example:
+            print(f"✅ Running {category} example in test mode: {example['name']}")
+            examples_to_run.append(example)
+        # Regular API key check for other examples
         elif example.get("requires_api_key", False):
             api_env_var = example.get("api_env_var", "")
             if not check_api_key(api_env_var):
@@ -1033,10 +1197,10 @@ def print_validation_summary(category_results: Dict[str, Dict[str, Any]]):
             if detail["success"] is True and "Interactive example run in auto mode" in detail.get("message", ""):
                 interactive_tested += 1
     
-    # Print header
-    print("\n" + "=" * 80)
-    print(f"{BOLD}VALIDATION SUMMARY{RESET}")
-    print("=" * 80)
+    # Print header with forced output for guaranteed visibility
+    force_print("\n" + "=" * 80)
+    force_print(f"{BOLD}VALIDATION SUMMARY{RESET}")
+    force_print("=" * 80)
     
     # Print overall stats
     print(f"\n{BOLD}Overall Results:{RESET}")
@@ -1183,11 +1347,57 @@ def add_test_args_to_interactive_examples():
     Handles special cases for examples that need specific arguments or don't support
     certain flags.
     """
+    # Example-specific test args that are known to work
+    example_specific_args = {
+        # llm_client doesn't need the --interactive flag (avoid hanging)
+        "llm_client": [],
+        
+        # weather_assistant only supports --no-test flag (fix for the error)
+        "weather_assistant": ["--no-test"],
+        
+        # agent_network supports "list" command but not arbitrary queries (fix for the error)
+        "agent_network": ["list"],
+        
+        # mcp_tools.py should NOT use --run flag during validation since it would
+        # start a server that runs indefinitely (causing a timeout)
+        "mcp_tools": [],
+        
+        # mcp_agent.py needs specific port to avoid conflicts
+        "mcp_agent": ["--auto-mcp", "--port", "5050"],
+        
+        # interactive_docs only supports --no-open-browser flag (fix for the error)
+        "interactive_docs": ["--no-open-browser"],
+        
+        # simple_server only supports port argument
+        "simple_server": ["--port", "8080"],
+        
+        # basic_streaming needs specific flags
+        "basic_streaming": ["--port", "8001", "--query", "test streaming"],
+        
+        # langchain examples need proper flags
+        "a2a_to_langchain": ["--test-mode"],
+        "langchain_to_a2a": ["--test-mode"],
+        "langchain_tools_to_mcp": ["--test-mode"],
+        "mcp_to_langchain": ["--test-mode"],
+        "langchain_agent_with_tools": ["--test-mode"],
+        "langchain_advanced_agent": ["--test-mode"],
+        "langchain_streaming": ["--test-mode"],
+    }
+    
     # Add test args to each category based on the type of example
     for category_name, category_info in EXAMPLE_CATEGORIES.items():
         for example in category_info["examples"]:
-            if example.get("interactive", False) and "test_args" not in example:
-                # Create appropriate test args based on the category and example
+            # Skip if test_args already defined in the example definition
+            if "test_args" in example:
+                continue
+                
+            # Check if we have specific arguments for this example
+            if example["name"] in example_specific_args:
+                example["test_args"] = example_specific_args[example["name"]]
+                continue
+                
+            # For interactive examples, provide sensible defaults based on category
+            if example.get("interactive", False):
                 if category_name == "streaming":
                     # Streaming examples need port but may not support all other flags
                     port = example.get("args", [])
@@ -1199,45 +1409,82 @@ def add_test_args_to_interactive_examples():
                     example["test_args"] = ["--port", port_value]
                     
                     # For more advanced streaming examples, add query parameter if they support it
-                    if example["name"] not in ["basic_streaming", "01_basic_streaming"]:
+                    if example["name"] not in ["01_basic_streaming"]:
                         example["test_args"].extend(["--query", "test streaming"])
                 
                 elif category_name == "ai_powered_agents":
-                    # AI agents examples
-                    example["test_args"] = ["--auto-test", "--query", "test query"]
+                    # AI agents examples often support --test-only flag
+                    example["test_args"] = ["--test-only"]
                 
                 elif category_name == "applications":
-                    # Application examples
-                    example["test_args"] = ["--auto-test", "--no-interactive", "--query", "test query"]
+                    # Application examples often support --no-test flag
+                    example["test_args"] = ["--no-test"]
                 
                 elif category_name == "agent_network":
-                    # Agent network examples
-                    example["test_args"] = ["--auto-test", "--query", "test query"]
+                    # Agent network examples - use minimal args to avoid errors
+                    example["test_args"] = []
                 
                 elif category_name == "mcp":
-                    # MCP examples
-                    example["test_args"] = ["--auto-test", "--query", "test query"]
+                    # MCP examples support different flags
+                    if "agent" in example["name"]:
+                        example["test_args"] = ["--auto-mcp"]
+                    else:
+                        example["test_args"] = []
                 
                 elif category_name == "developer_tools":
-                    # Developer tools examples 
-                    example["test_args"] = ["--auto-test", "--no-open-browser"]
+                    # Developer tools examples often support --no-open-browser
+                    example["test_args"] = ["--no-open-browser"]
                 
-                elif category_name == "getting_started":
-                    # Getting started examples (simple_server doesn't support --auto-test)
-                    if example["name"] == "simple_server":
-                        # Only use the port argument for simple_server
-                        port_value = "8080"  # Default port
-                        example["test_args"] = ["--port", port_value]
-                    else:
-                        # Other getting_started examples
-                        example["test_args"] = []
+                elif category_name == "langchain":
+                    # LangChain examples need proper arguments
+                    example["test_args"] = ["--test-mode"]
                 
                 else:
                     # Default test args - use an empty list to avoid passing unsupported flags
                     example["test_args"] = []
+            else:
+                # Non-interactive examples generally don't need special args
+                example["test_args"] = []
+
+def force_print(message, end="\n"):
+    """Print with immediate flushing to ensure visibility."""
+    sys.stdout.write(message + end)
+    sys.stdout.flush()
+
+def should_expect_timeout(example):
+    """Check if an example is expected to time out (server that runs indefinitely)."""
+    # Always expect timeouts for certain examples that we know run indefinitely
+    if example.get("name") in ["mcp_agent", "mcp_tools"] and example.get("server_example", False):
+        return True
+    
+    # Servers that don't terminate on their own should be allowed to time out
+    if example.get("server_example", False):
+        # Check for specific flags that run in test mode
+        test_mode_flags = ["--auto-test", "--test-only", "--test-mode"]
+        
+        # Check if the example has any of these test mode flags
+        if example.get("args", []) and any(flag in example.get("args", []) for flag in test_mode_flags):
+            # Has test mode flags, so it should exit normally
+            return False
+        
+        # Check if it has test_args with test mode flags
+        if example.get("test_args", []) and any(flag in example.get("test_args", []) for flag in test_mode_flags):
+            # Has test mode flags in test_args, so it should exit normally
+            return False
+            
+        # This is a server and is likely meant to run indefinitely
+        return True
+            
+    return False
 
 def main():
     """Main function to run validation."""
+    # Configure Python to run unbuffered by default for this script
+    os.environ["PYTHONUNBUFFERED"] = "1"
+    
+    # This helps ensure all output is shown immediately
+    force_print("Python A2A Examples Validation - Starting with unbuffered output")
+    
     # Add test args to interactive examples
     add_test_args_to_interactive_examples()
     
@@ -1264,18 +1511,18 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        # Banner
-        print(f"\n{BLUE}{BOLD}Python A2A Examples Validation{RESET}")
-        print(f"{BLUE}This tool validates all examples to ensure they work correctly.{RESET}")
-        print("-" * 80)
+        # Banner - use force_print for guaranteed visibility
+        force_print(f"\n{BLUE}{BOLD}Python A2A Examples Validation{RESET}")
+        force_print(f"{BLUE}This tool validates all examples to ensure they work correctly.{RESET}")
+        force_print("-" * 80)
         
         # Check dependencies
         missing_deps = check_import_dependencies()
         if missing_deps:
-            print(f"{YELLOW}Warning: Some dependencies are missing:{RESET}")
+            force_print(f"{YELLOW}Warning: Some dependencies are missing:{RESET}")
             for dep in missing_deps:
-                print(f"{YELLOW}• {dep}{RESET}")
-            print(f"{YELLOW}Some examples may be skipped. Install with: pip install python-a2a[all]{RESET}\n")
+                force_print(f"{YELLOW}• {dep}{RESET}")
+            force_print(f"{YELLOW}Some examples may be skipped. Install with: pip install python-a2a[all]{RESET}\n")
         
         # Determine which categories to validate
         categories_to_validate = {}
@@ -1289,8 +1536,8 @@ def main():
         else:
             categories_to_validate = EXAMPLE_CATEGORIES
         
-        # Show the plan
-        print(f"{BLUE}Validating {len(categories_to_validate)} categories with {sum(len(cat['examples']) for cat in categories_to_validate.values())} examples{RESET}")
+        # Show the plan with guaranteed visibility
+        force_print(f"{BLUE}Validating {len(categories_to_validate)} categories with {sum(len(cat['examples']) for cat in categories_to_validate.values())} examples{RESET}")
         
         # Run validations
         results = {}
