@@ -127,7 +127,7 @@ def main():
             text = content.get("text", "") if isinstance(content, dict) else ""
             
             # Check for specific commands
-            if "count words" in text.lower():
+            if "count how many words" in text.lower():
                 # Count words in the message
                 word_count = len(text.split())
                 response = f"Your message has {word_count} words."
@@ -175,7 +175,7 @@ def main():
     
     print("\n=== What's Next? ===")
     print("1. Connect to this server using 'simple_client.py':")
-    print(f"    python simple_client.py http://localhost:{port}")
+    print(f"    python simple_client.py --external http://localhost:{port}")
     print("2. Try 'function_calling.py' to add function calling capability")
     print("3. Explore more examples to build more powerful agents")
     
