@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Flow - Workflows</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Agent Flow</h1>
+                <p>Workflow Management</p>
+            </div>
+            
+            <div class="sidebar-section">
+                <h2>Navigation</h2>
+                <ul class="nav-list">
+                    <li><a href="/">Workflow Editor</a></li>
+                    <li class="active"><a href="/workflows">Workflows</a></li>
+                    <li><a href="/agents">Agents</a></li>
+                    <li><a href="/tools">Tools</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Main content -->
+        <div class="content-container">
+            <div class="content-header">
+                <h1>Workflows</h1>
+                <div class="header-actions">
+                    <a href="/" class="button primary">
+                        <i class="fas fa-plus"></i> Create Workflow
+                    </a>
+                    <button class="button" id="import-workflow-btn">
+                        <i class="fas fa-file-import"></i> Import
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Workflow list section -->
+            <div class="content-section">
+                <div class="list-toolbar">
+                    <input type="text" class="search-input" placeholder="Search workflows..." id="workflow-search">
+                    <button class="button" id="refresh-workflows-btn">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="list-container" id="workflow-list">
+                    <div class="loading-indicator">Loading workflows...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let workflows = [];
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWorkflows();
+            
+            // Set up event listeners
+            document.getElementById('refresh-workflows-btn').addEventListener('click', loadWorkflows);
+            document.getElementById('import-workflow-btn').addEventListener('click', importWorkflow);
+            document.getElementById('workflow-search').addEventListener('input', filterWorkflows);
+        });
+        
+        // Load workflows
+        function loadWorkflows() {
+            const workflowList = document.getElementById('workflow-list');
+            workflowList.innerHTML = '<div class="loading-indicator">Loading workflows...</div>';
+            
+            fetch('/api/workflows')
+                .then(response => response.json())
+                .then(data => {
+                    workflows = data;
+                    renderWorkflows();
+                })
+                .catch(error => {
+                    console.error('Error loading workflows:', error);
+                    workflowList.innerHTML = '<div class="error-message">Error loading workflows. <button class="link-button" onclick="loadWorkflows()">Retry</button></div>';
+                });
+        }
+        
+        // Render workflows
+        function renderWorkflows() {
+            const workflowList = document.getElementById('workflow-list');
+            workflowList.innerHTML = '';
+            
+            if (workflows.length === 0) {
+                workflowList.innerHTML = '<div class="empty-message">No workflows found. Create a new workflow or import an existing one.</div>';
+                return;
+            }
+            
+            // Create workflow cards
+            const grid = document.createElement('div');
+            grid.className = 'template-grid';
+            
+            workflows.forEach(workflow => {
+                const card = document.createElement('div');
+                card.className = 'template-card';
+                card.innerHTML = `
+                    <div class="template-header">
+                        <h3>${workflow.name || 'Unnamed Workflow'}</h3>
+                    </div>
+                    <p class="template-description">${workflow.description || 'No description'}</p>
+                    <div class="template-actions">
+                        <a href="/?id=${workflow.id}" class="button">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        <button class="button" onclick="runWorkflow('${workflow.id}')">
+                            <i class="fas fa-play"></i> Run
+                        </button>
+                        <button class="button danger" onclick="deleteWorkflow('${workflow.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+            
+            workflowList.appendChild(grid);
+        }
+        
+        // Filter workflows
+        function filterWorkflows() {
+            const searchTerm = document.getElementById('workflow-search').value.toLowerCase();
+            
+            const filteredWorkflows = workflows.filter(workflow => {
+                const name = (workflow.name || '').toLowerCase();
+                const description = (workflow.description || '').toLowerCase();
+                return name.includes(searchTerm) || description.includes(searchTerm);
+            });
+            
+            const workflowList = document.getElementById('workflow-list');
+            workflowList.innerHTML = '';
+            
+            if (filteredWorkflows.length === 0) {
+                workflowList.innerHTML = '<div class="empty-message">No workflows match your search.</div>';
+                return;
+            }
+            
+            // Create workflow cards
+            const grid = document.createElement('div');
+            grid.className = 'template-grid';
+            
+            filteredWorkflows.forEach(workflow => {
+                const card = document.createElement('div');
+                card.className = 'template-card';
+                card.innerHTML = `
+                    <div class="template-header">
+                        <h3>${workflow.name || 'Unnamed Workflow'}</h3>
+                    </div>
+                    <p class="template-description">${workflow.description || 'No description'}</p>
+                    <div class="template-actions">
+                        <a href="/?id=${workflow.id}" class="button">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        <button class="button" onclick="runWorkflow('${workflow.id}')">
+                            <i class="fas fa-play"></i> Run
+                        </button>
+                        <button class="button danger" onclick="deleteWorkflow('${workflow.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+            
+            workflowList.appendChild(grid);
+        }
+        
+        // Run workflow
+        function runWorkflow(workflowId) {
+            // Create input dialog
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-overlay';
+            dialog.classList.add('visible');
+            dialog.innerHTML = `
+                <div class="modal">
+                    <div class="modal-header">
+                        <h2>Run Workflow</h2>
+                        <button class="close-button">×</button>
+                    </div>
+                    <div class="modal-content">
+                        <div class="form-group">
+                            <label for="workflow-input">Input (JSON)</label>
+                            <textarea id="workflow-input" class="form-control" rows="5">{}</textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="modal-button secondary">Cancel</button>
+                        <button class="modal-button primary">Run</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(dialog);
+            
+            // Add event listeners
+            dialog.querySelector('.close-button').addEventListener('click', () => dialog.remove());
+            dialog.querySelector('.modal-button.secondary').addEventListener('click', () => dialog.remove());
+            
+            dialog.querySelector('.modal-button.primary').addEventListener('click', () => {
+                const input = document.getElementById('workflow-input').value;
+                
+                let inputData;
+                try {
+                    inputData = JSON.parse(input);
+                } catch (e) {
+                    showNotification('Invalid JSON input', true);
+                    return;
+                }
+                
+                // Run workflow
+                fetch(`/api/workflows/${workflowId}/run`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(inputData)
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        dialog.remove();
+                        
+                        if (data.error) {
+                            showNotification(`Error: ${data.error}`, true);
+                        } else if (data.execution_id) {
+                            showNotification(`Workflow started: Execution ID ${data.execution_id}`);
+                        } else {
+                            // Show results
+                            const resultsDialog = document.createElement('div');
+                            resultsDialog.className = 'modal-overlay';
+                            resultsDialog.classList.add('visible');
+                            resultsDialog.innerHTML = `
+                                <div class="modal">
+                                    <div class="modal-header">
+                                        <h2>Workflow Results</h2>
+                                        <button class="close-button">×</button>
+                                    </div>
+                                    <div class="modal-content">
+                                        <pre>${JSON.stringify(data.results, null, 2)}</pre>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button class="modal-button primary">Close</button>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            document.body.appendChild(resultsDialog);
+                            
+                            // Add event listeners
+                            resultsDialog.querySelector('.close-button').addEventListener('click', () => resultsDialog.remove());
+                            resultsDialog.querySelector('.modal-button.primary').addEventListener('click', () => resultsDialog.remove());
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error running workflow:', error);
+                        showNotification('Error running workflow', true);
+                    });
+            });
+        }
+        
+        // Delete workflow
+        function deleteWorkflow(workflowId) {
+            if (!confirm('Are you sure you want to delete this workflow?')) {
+                return;
+            }
+            
+            fetch(`/api/workflows/${workflowId}`, {
+                method: 'DELETE'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(`Error: ${data.error}`, true);
+                    } else {
+                        showNotification('Workflow deleted successfully');
+                        loadWorkflows();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting workflow:', error);
+                    showNotification('Error deleting workflow', true);
+                });
+        }
+        
+        // Import workflow
+        function importWorkflow() {
+            // Create file input
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json';
+            
+            fileInput.addEventListener('change', function() {
+                if (!this.files || !this.files[0]) return;
+                
+                const file = this.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        
+                        // Create workflow
+                        fetch('/api/workflows', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        })
+                            .then(response => response.json())
+                            .then(result => {
+                                if (result.error) {
+                                    showNotification(`Error: ${result.error}`, true);
+                                } else {
+                                    showNotification('Workflow imported successfully');
+                                    loadWorkflows();
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error importing workflow:', error);
+                                showNotification('Error importing workflow', true);
+                            });
+                    } catch (e) {
+                        showNotification('Invalid workflow file', true);
+                    }
+                };
+                
+                reader.readAsText(file);
+            });
+            
+            fileInput.click();
+        }
+        
+        // Show notification
+        function showNotification(message, isError = false) {
+            // Remove existing notifications
+            document.querySelectorAll('.notification').forEach(notification => notification.remove());
+            
+            // Create notification
+            const notification = document.createElement('div');
+            notification.className = `notification${isError ? ' error' : ''}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            // Remove after timeout
+            setTimeout(() => notification.remove(), 3000);
+        }
+    </script>
+</body>
+</html>

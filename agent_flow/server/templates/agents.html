@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Flow - Agent Management</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Agent Flow</h1>
+                <p>Agent Management</p>
+            </div>
+            
+            <div class="sidebar-section">
+                <h2>Navigation</h2>
+                <ul class="nav-list">
+                    <li><a href="/">Workflow Editor</a></li>
+                    <li><a href="/workflows">Workflows</a></li>
+                    <li class="active"><a href="/agents">Agents</a></li>
+                    <li><a href="/tools">Tools</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Main content -->
+        <div class="content-container">
+            <div class="content-header">
+                <h1>Agent Management</h1>
+                <div class="header-actions">
+                    <button class="button primary" id="create-agent-btn">
+                        <i class="fas fa-plus"></i> Create Agent
+                    </button>
+                    <button class="button" id="discover-agents-btn">
+                        <i class="fas fa-search"></i> Discover Agents
+                    </button>
+                    <button class="button" id="import-agents-btn">
+                        <i class="fas fa-file-import"></i> Import
+                    </button>
+                    <button class="button" id="export-agents-btn">
+                        <i class="fas fa-file-export"></i> Export
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Agent templates section -->
+            <div class="content-section">
+                <h2>Agent Templates</h2>
+                <div class="template-grid" id="agent-templates-grid">
+                    <!-- Templates will be loaded dynamically -->
+                    <div class="loading-indicator">Loading templates...</div>
+                </div>
+            </div>
+            
+            <!-- Running agents section -->
+            <div class="content-section">
+                <h2>Running Agents</h2>
+                <div class="agent-list-toolbar">
+                    <input type="text" class="search-input" placeholder="Search agents..." id="agent-search">
+                    <button class="button" id="refresh-agents-btn">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="agent-list-container">
+                    <table class="agent-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>URL</th>
+                                <th>Status</th>
+                                <th>Type</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agent-list">
+                            <!-- Agents will be loaded dynamically -->
+                            <tr>
+                                <td colspan="5" class="loading-cell">Loading agents...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create agent modal -->
+    <div class="modal-overlay" id="create-agent-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Create Agent</h2>
+                <button class="close-button">×</button>
+            </div>
+            <div class="modal-content">
+                <div class="form-group">
+                    <label for="template-select">Agent Template</label>
+                    <select id="template-select" class="form-control">
+                        <option value="" selected disabled>Select a template</option>
+                        <!-- Templates will be loaded dynamically -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="agent-port">Port</label>
+                    <input type="number" id="agent-port" class="form-control" min="1024" max="65535" value="8500">
+                </div>
+                <div id="api-key-section" style="display: none;">
+                    <div class="form-group">
+                        <label for="api-key">API Key</label>
+                        <input type="password" id="api-key" class="form-control">
+                        <p class="help-text">Required for this agent type</p>
+                    </div>
+                </div>
+                <div id="custom-script-section" style="display: none;">
+                    <div class="form-group">
+                        <label for="script-path">Script Path</label>
+                        <input type="text" id="script-path" class="form-control">
+                        <p class="help-text">Full path to your custom agent script</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-button secondary" id="cancel-create">Cancel</button>
+                <button class="modal-button primary" id="confirm-create">Create Agent</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agent details modal -->
+    <div class="modal-overlay" id="agent-details-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="agent-details-title">Agent Details</h2>
+                <button class="close-button">×</button>
+            </div>
+            <div class="modal-content">
+                <div class="agent-info-container">
+                    <div class="agent-info-section">
+                        <h3>Basic Information</h3>
+                        <div class="info-grid">
+                            <div class="info-label">Name:</div>
+                            <div class="info-value" id="detail-name">-</div>
+                            
+                            <div class="info-label">Description:</div>
+                            <div class="info-value" id="detail-description">-</div>
+                            
+                            <div class="info-label">URL:</div>
+                            <div class="info-value" id="detail-url">-</div>
+                            
+                            <div class="info-label">Status:</div>
+                            <div class="info-value" id="detail-status">-</div>
+                            
+                            <div class="info-label">Type:</div>
+                            <div class="info-value" id="detail-type">-</div>
+                        </div>
+                    </div>
+                    
+                    <div class="agent-info-section">
+                        <h3>Skills</h3>
+                        <div id="skills-container">
+                            <div class="loading-indicator">Loading skills...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-button secondary" id="stop-agent">Stop Agent</button>
+                <button class="modal-button primary" id="test-agent">Test Agent</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let agentTemplates = [];
+        let runningAgents = [];
+        let selectedTemplate = null;
+        let selectedAgent = null;
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            loadAgentTemplates();
+            loadRunningAgents();
+        });
+        
+        function setupEventListeners() {
+            // Button event listeners
+            document.getElementById('create-agent-btn').addEventListener('click', showCreateAgentModal);
+            document.getElementById('discover-agents-btn').addEventListener('click', discoverAgents);
+            document.getElementById('import-agents-btn').addEventListener('click', importAgents);
+            document.getElementById('export-agents-btn').addEventListener('click', exportAgents);
+            document.getElementById('refresh-agents-btn').addEventListener('click', loadRunningAgents);
+            
+            // Modal event listeners
+            document.querySelectorAll('.close-button').forEach(button => {
+                button.addEventListener('click', hideModals);
+            });
+            
+            document.getElementById('cancel-create').addEventListener('click', hideModals);
+            document.getElementById('confirm-create').addEventListener('click', createAgent);
+            
+            // Template selector
+            document.getElementById('template-select').addEventListener('change', function() {
+                const selectedId = this.value;
+                selectedTemplate = agentTemplates.find(t => t.id === selectedId);
+                
+                // Show/hide sections based on template
+                const apiKeySection = document.getElementById('api-key-section');
+                const customScriptSection = document.getElementById('custom-script-section');
+                
+                apiKeySection.style.display = selectedTemplate && selectedTemplate.requires_api_key ? 'block' : 'none';
+                customScriptSection.style.display = selectedTemplate && selectedTemplate.id === 'custom_script' ? 'block' : 'none';
+            });
+            
+            // Agent search
+            document.getElementById('agent-search').addEventListener('input', function() {
+                filterAgents(this.value);
+            });
+            
+            // Agent actions
+            document.getElementById('stop-agent').addEventListener('click', stopSelectedAgent);
+            document.getElementById('test-agent').addEventListener('click', testSelectedAgent);
+        }
+        
+        // Load agent templates
+        function loadAgentTemplates() {
+            fetch('/api/agent_templates')
+                .then(response => response.json())
+                .then(data => {
+                    agentTemplates = data;
+                    renderAgentTemplates();
+                    
+                    // Also update the select dropdown
+                    const templateSelect = document.getElementById('template-select');
+                    templateSelect.innerHTML = '<option value="" selected disabled>Select a template</option>';
+                    
+                    data.forEach(template => {
+                        const option = document.createElement('option');
+                        option.value = template.id;
+                        option.textContent = template.name;
+                        templateSelect.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading agent templates:', error);
+                    showNotification('Failed to load agent templates', true);
+                    
+                    // Show error in template grid
+                    const templateGrid = document.getElementById('agent-templates-grid');
+                    templateGrid.innerHTML = '<div class="error-message">Error loading templates. <button class="link-button" onclick="loadAgentTemplates()">Retry</button></div>';
+                });
+        }
+        
+        // Render agent templates
+        function renderAgentTemplates() {
+            const templateGrid = document.getElementById('agent-templates-grid');
+            templateGrid.innerHTML = '';
+            
+            if (agentTemplates.length === 0) {
+                templateGrid.innerHTML = '<div class="empty-message">No agent templates available.</div>';
+                return;
+            }
+            
+            agentTemplates.forEach(template => {
+                const templateCard = document.createElement('div');
+                templateCard.className = 'template-card';
+                templateCard.dataset.id = template.id;
+                
+                templateCard.innerHTML = `
+                    <div class="template-header">
+                        <h3>${template.name}</h3>
+                        ${template.requires_api_key ? '<span class="api-badge">API KEY</span>' : ''}
+                    </div>
+                    <p class="template-description">${template.description}</p>
+                    <div class="template-actions">
+                        <button class="button create-from-template" data-id="${template.id}">
+                            Create Agent
+                        </button>
+                    </div>
+                `;
+                
+                templateGrid.appendChild(templateCard);
+                
+                // Add event listener to create button
+                templateCard.querySelector('.create-from-template').addEventListener('click', () => {
+                    showCreateAgentModal(template.id);
+                });
+            });
+        }
+        
+        // Load running agents
+        function loadRunningAgents() {
+            // Show loading
+            const agentList = document.getElementById('agent-list');
+            agentList.innerHTML = '<tr><td colspan="5" class="loading-cell">Loading agents...</td></tr>';
+            
+            // Load from API
+            Promise.all([
+                fetch('/api/agents').then(res => res.json()),
+                fetch('/api/agent_servers').then(res => res.json())
+            ])
+                .then(([agentsData, serversData]) => {
+                    // Combine agents and servers data
+                    runningAgents = agentsData.map(agent => {
+                        // Find matching server
+                        const server = serversData.find(s => s.agent_id === agent.id);
+                        
+                        return {
+                            ...agent,
+                            server: server || null
+                        };
+                    });
+                    
+                    renderAgentList();
+                })
+                .catch(error => {
+                    console.error('Error loading agents:', error);
+                    showNotification('Failed to load agents', true);
+                    
+                    // Show error in agent list
+                    agentList.innerHTML = '<tr><td colspan="5" class="error-cell">Error loading agents. <button class="link-button" onclick="loadRunningAgents()">Retry</button></td></tr>';
+                });
+        }
+        
+        // Render agent list
+        function renderAgentList() {
+            const agentList = document.getElementById('agent-list');
+            agentList.innerHTML = '';
+            
+            if (runningAgents.length === 0) {
+                agentList.innerHTML = '<tr><td colspan="5" class="empty-cell">No agents running. Create or discover agents to get started.</td></tr>';
+                return;
+            }
+            
+            runningAgents.forEach(agent => {
+                const row = document.createElement('tr');
+                row.dataset.id = agent.id;
+                
+                // Status badge class
+                let statusClass = 'status-unknown';
+                if (agent.status === 'CONNECTED') {
+                    statusClass = 'status-connected';
+                } else if (agent.status === 'ERROR') {
+                    statusClass = 'status-error';
+                } else if (agent.status === 'DISCONNECTED') {
+                    statusClass = 'status-disconnected';
+                }
+                
+                row.innerHTML = `
+                    <td>${agent.name}</td>
+                    <td><a href="${agent.url}" target="_blank">${agent.url}</a></td>
+                    <td><span class="status-badge ${statusClass}">${agent.status}</span></td>
+                    <td>${agent.agent_type}</td>
+                    <td class="actions-cell">
+                        <button class="icon-button view-agent" title="View Details">
+                            <i class="fas fa-info-circle"></i>
+                        </button>
+                        <button class="icon-button test-agent" title="Test Agent">
+                            <i class="fas fa-flask"></i>
+                        </button>
+                        ${agent.server ? 
+                            `<button class="icon-button stop-agent" title="Stop Agent">
+                                <i class="fas fa-stop"></i>
+                            </button>` : 
+                            `<button class="icon-button" disabled title="Agent not managed by Agent Flow">
+                                <i class="fas fa-stop"></i>
+                            </button>`
+                        }
+                    </td>
+                `;
+                
+                agentList.appendChild(row);
+                
+                // Add event listeners
+                row.querySelector('.view-agent').addEventListener('click', () => {
+                    viewAgentDetails(agent.id);
+                });
+                
+                row.querySelector('.test-agent').addEventListener('click', () => {
+                    testAgent(agent.id);
+                });
+                
+                if (agent.server) {
+                    row.querySelector('.stop-agent').addEventListener('click', () => {
+                        stopAgent(agent.server.id);
+                    });
+                }
+            });
+        }
+        
+        // Filter agents
+        function filterAgents(searchTerm) {
+            const rows = document.querySelectorAll('#agent-list tr');
+            const lowerSearch = searchTerm.toLowerCase();
+            
+            rows.forEach(row => {
+                const agent = runningAgents.find(a => a.id === row.dataset.id);
+                if (!agent) return;
+                
+                const nameMatch = agent.name.toLowerCase().includes(lowerSearch);
+                const urlMatch = agent.url.toLowerCase().includes(lowerSearch);
+                const typeMatch = agent.agent_type.toLowerCase().includes(lowerSearch);
+                
+                if (nameMatch || urlMatch || typeMatch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        // Show create agent modal
+        function showCreateAgentModal(templateId) {
+            const modal = document.getElementById('create-agent-modal');
+            modal.classList.add('visible');
+            
+            // If template ID provided, select it
+            if (templateId) {
+                const templateSelect = document.getElementById('template-select');
+                templateSelect.value = templateId;
+                
+                // Trigger change event
+                const event = new Event('change');
+                templateSelect.dispatchEvent(event);
+            }
+        }
+        
+        // Create agent
+        function createAgent() {
+            // Get form values
+            const templateId = document.getElementById('template-select').value;
+            const port = document.getElementById('agent-port').value;
+            const apiKey = document.getElementById('api-key').value;
+            const scriptPath = document.getElementById('script-path').value;
+            
+            // Validate
+            if (!templateId) {
+                showNotification('Please select a template', true);
+                return;
+            }
+            
+            if (!port || port < 1024 || port > 65535) {
+                showNotification('Please enter a valid port (1024-65535)', true);
+                return;
+            }
+            
+            // Check if template requires API key
+            if (selectedTemplate && selectedTemplate.requires_api_key && !apiKey) {
+                showNotification('API key is required for this agent type', true);
+                return;
+            }
+            
+            // Check if custom script needs a path
+            if (templateId === 'custom_script' && !scriptPath) {
+                showNotification('Script path is required for custom script agents', true);
+                return;
+            }
+            
+            // Show loading
+            const createButton = document.getElementById('confirm-create');
+            const originalText = createButton.textContent;
+            createButton.textContent = 'Creating...';
+            createButton.disabled = true;
+            
+            // Prepare data
+            const data = {
+                template_id: templateId,
+                port: parseInt(port)
+            };
+            
+            // Add API key if needed
+            if (selectedTemplate && selectedTemplate.requires_api_key) {
+                data.api_key = apiKey;
+            }
+            
+            // Add script path if needed
+            if (templateId === 'custom_script') {
+                data.script_path = scriptPath;
+            }
+            
+            // Create agent
+            fetch('/api/create_agent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(`Error: ${data.error}`, true);
+                    } else {
+                        showNotification(`Agent created successfully: ${data.name}`);
+                        hideModals();
+                        
+                        // Refresh agent list
+                        loadRunningAgents();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating agent:', error);
+                    showNotification('Failed to create agent', true);
+                })
+                .finally(() => {
+                    // Reset button
+                    createButton.textContent = originalText;
+                    createButton.disabled = false;
+                });
+        }
+        
+        // Discover agents
+        function discoverAgents() {
+            showNotification('Discovering agents...');
+            
+            fetch('/api/agents/discover', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    base_url: 'http://localhost',
+                    port_min: 8000,
+                    port_max: 9000
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    showNotification(`Discovered ${data.length} agents`);
+                    
+                    // Refresh agent list
+                    loadRunningAgents();
+                })
+                .catch(error => {
+                    console.error('Error discovering agents:', error);
+                    showNotification('Failed to discover agents', true);
+                });
+        }
+        
+        // Import agents
+        function importAgents() {
+            // Create file input
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json';
+            
+            fileInput.addEventListener('change', function() {
+                if (!this.files || !this.files[0]) return;
+                
+                const file = this.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                showNotification('Importing agents...');
+                
+                fetch('/api/import_agents', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            showNotification(`Error: ${data.error}`, true);
+                        } else {
+                            showNotification(`Imported ${data.success} agents. ${data.failed} failed.`);
+                            
+                            // Refresh agent list
+                            loadRunningAgents();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error importing agents:', error);
+                        showNotification('Failed to import agents', true);
+                    });
+            });
+            
+            // Trigger file selection
+            fileInput.click();
+        }
+        
+        // Export agents
+        function exportAgents() {
+            showNotification('Exporting agents...');
+            
+            fetch('/api/export_agents', {
+                method: 'POST'
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Export failed');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `agent_collection_${new Date().toISOString().slice(0, 10)}.json`;
+                    
+                    // Trigger download
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    // Cleanup
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                    
+                    showNotification('Agents exported successfully');
+                })
+                .catch(error => {
+                    console.error('Error exporting agents:', error);
+                    showNotification('Failed to export agents', true);
+                });
+        }
+        
+        // View agent details
+        function viewAgentDetails(agentId) {
+            selectedAgent = runningAgents.find(a => a.id === agentId);
+            if (!selectedAgent) return;
+            
+            // Update modal title
+            document.getElementById('agent-details-title').textContent = selectedAgent.name;
+            
+            // Update basic info
+            document.getElementById('detail-name').textContent = selectedAgent.name;
+            document.getElementById('detail-description').textContent = selectedAgent.description || 'No description';
+            document.getElementById('detail-url').textContent = selectedAgent.url;
+            document.getElementById('detail-status').textContent = selectedAgent.status;
+            document.getElementById('detail-type').textContent = selectedAgent.agent_type;
+            
+            // Show loading for skills
+            document.getElementById('skills-container').innerHTML = '<div class="loading-indicator">Loading skills...</div>';
+            
+            // Show/hide stop button
+            document.getElementById('stop-agent').style.display = selectedAgent.server ? 'block' : 'none';
+            
+            // Show modal
+            document.getElementById('agent-details-modal').classList.add('visible');
+            
+            // Load skills
+            fetch(`/api/agents/${agentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Update skills
+                    const skillsContainer = document.getElementById('skills-container');
+                    
+                    if (!data.skills || data.skills.length === 0) {
+                        skillsContainer.innerHTML = '<div class="empty-message">No skills available.</div>';
+                        return;
+                    }
+                    
+                    // Render skills
+                    skillsContainer.innerHTML = '';
+                    
+                    data.skills.forEach(skill => {
+                        const skillCard = document.createElement('div');
+                        skillCard.className = 'skill-card';
+                        
+                        skillCard.innerHTML = `
+                            <h4>${skill.name}</h4>
+                            <p>${skill.description || 'No description'}</p>
+                        `;
+                        
+                        skillsContainer.appendChild(skillCard);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading agent details:', error);
+                    
+                    // Show error
+                    document.getElementById('skills-container').innerHTML = 
+                        '<div class="error-message">Error loading skills.</div>';
+                });
+        }
+        
+        // Stop agent
+        function stopAgent(serverId) {
+            if (!confirm('Are you sure you want to stop this agent?')) {
+                return;
+            }
+            
+            showNotification('Stopping agent...');
+            
+            fetch(`/api/agent_servers/${serverId}`, {
+                method: 'DELETE'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(`Error: ${data.error}`, true);
+                    } else {
+                        showNotification('Agent stopped successfully');
+                        
+                        // Refresh agent list
+                        loadRunningAgents();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error stopping agent:', error);
+                    showNotification('Failed to stop agent', true);
+                });
+        }
+        
+        // Stop the selected agent
+        function stopSelectedAgent() {
+            if (!selectedAgent || !selectedAgent.server) {
+                showNotification('Cannot stop this agent. It was not started by Agent Flow.', true);
+                return;
+            }
+            
+            stopAgent(selectedAgent.server.id);
+            hideModals();
+        }
+        
+        // Test agent
+        function testAgent(agentId) {
+            // Create test message dialog
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-overlay';
+            dialog.innerHTML = `
+                <div class="modal">
+                    <div class="modal-header">
+                        <h2>Test Agent</h2>
+                        <button class="close-button">×</button>
+                    </div>
+                    <div class="modal-content">
+                        <div class="form-group">
+                            <label for="test-message">Message</label>
+                            <textarea id="test-message" class="form-control" rows="3">Hello! What can you do?</textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="modal-button secondary test-cancel">Cancel</button>
+                        <button class="modal-button primary test-send">Send Message</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(dialog);
+            dialog.classList.add('visible');
+            
+            // Close button
+            dialog.querySelector('.close-button').addEventListener('click', () => {
+                dialog.remove();
+            });
+            
+            // Cancel button
+            dialog.querySelector('.test-cancel').addEventListener('click', () => {
+                dialog.remove();
+            });
+            
+            // Send button
+            dialog.querySelector('.test-send').addEventListener('click', () => {
+                const message = document.getElementById('test-message').value;
+                
+                if (!message) {
+                    showNotification('Please enter a message', true);
+                    return;
+                }
+                
+                // Show loading
+                const sendButton = dialog.querySelector('.test-send');
+                const originalText = sendButton.textContent;
+                sendButton.textContent = 'Sending...';
+                sendButton.disabled = true;
+                
+                // Send message
+                fetch(`/api/agents/${agentId}/message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Remove dialog
+                        dialog.remove();
+                        
+                        if (data.error) {
+                            showNotification(`Error: ${data.error}`, true);
+                        } else {
+                            // Show response dialog
+                            const responseDialog = document.createElement('div');
+                            responseDialog.className = 'modal-overlay';
+                            responseDialog.innerHTML = `
+                                <div class="modal">
+                                    <div class="modal-header">
+                                        <h2>Agent Response</h2>
+                                        <button class="close-button">×</button>
+                                    </div>
+                                    <div class="modal-content">
+                                        <div class="message-container">
+                                            <div class="user-message">
+                                                <div class="message-header">You</div>
+                                                <div class="message-content">${message}</div>
+                                            </div>
+                                            <div class="agent-message">
+                                                <div class="message-header">Agent</div>
+                                                <div class="message-content">${data.response}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button class="modal-button primary">Close</button>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            document.body.appendChild(responseDialog);
+                            responseDialog.classList.add('visible');
+                            
+                            // Close buttons
+                            responseDialog.querySelectorAll('.close-button, .modal-button.primary').forEach(button => {
+                                button.addEventListener('click', () => {
+                                    responseDialog.remove();
+                                });
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error testing agent:', error);
+                        showNotification('Failed to test agent', true);
+                        
+                        // Reset button
+                        sendButton.textContent = originalText;
+                        sendButton.disabled = false;
+                    });
+            });
+        }
+        
+        // Test the selected agent
+        function testSelectedAgent() {
+            if (!selectedAgent) return;
+            
+            testAgent(selectedAgent.id);
+            hideModals();
+        }
+        
+        // Hide all modals
+        function hideModals() {
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.classList.remove('visible');
+            });
+        }
+        
+        // Show notification
+        function showNotification(message, isError = false) {
+            // Remove existing notifications
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(notification => {
+                notification.remove();
+            });
+            
+            // Create notification
+            const notification = document.createElement('div');
+            notification.className = `notification${isError ? ' error' : ''}`;
+            notification.textContent = message;
+            
+            // Add to body
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

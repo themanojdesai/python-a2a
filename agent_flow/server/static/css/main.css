@@ -1,0 +1,657 @@
+/* Main CSS for Agent Flow UI */
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #121212;
+  color: #e0e0e0;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  background-color: #1e1e1e;
+  color: #ecf0f1;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  border-right: 1px solid #333;
+}
+
+.sidebar-header {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #333;
+}
+
+.sidebar-header h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #3498db;
+}
+
+.sidebar-header p {
+  margin: 5px 0 0;
+  opacity: 0.7;
+}
+
+.sidebar-section {
+  margin-bottom: 20px;
+}
+
+.sidebar-section h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #3498db;
+}
+
+.nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-list li {
+  margin-bottom: 5px;
+}
+
+.nav-list a {
+  display: block;
+  padding: 10px;
+  color: #ecf0f1;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.nav-list a:hover {
+  background-color: #2c2c2c;
+}
+
+.nav-list li.active a {
+  background-color: #3498db;
+  color: white;
+}
+
+.node-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.node-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  background-color: #2c2c2c;
+  border-radius: 4px;
+  cursor: grab;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  border-left: 3px solid #3498db;
+}
+
+.node-item[data-type="AGENT"] {
+  border-color: #3498db;
+}
+
+.node-item[data-type="TOOL"] {
+  border-color: #2ecc71;
+}
+
+.node-item[data-type="INPUT"] {
+  border-color: #f39c12;
+}
+
+.node-item[data-type="OUTPUT"] {
+  border-color: #1abc9c;
+}
+
+.node-item:hover {
+  background-color: #3a3a3a;
+  transform: translateY(-2px);
+}
+
+.empty-item {
+  padding: 10px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
+.tools-section {
+  margin-top: auto;
+  padding-top: 15px;
+  border-top: 1px solid #333;
+}
+
+.button {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  background-color: #2c2c2c;
+  color: white;
+  border: 1px solid #3498db;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.button:hover {
+  background-color: #3498db;
+}
+
+.button.primary {
+  background-color: #3498db;
+  border-color: #3498db;
+}
+
+.button.primary:hover {
+  background-color: #2980b9;
+  border-color: #2980b9;
+}
+
+.button.danger {
+  background-color: #2c2c2c;
+  border-color: #e74c3c;
+  color: #e74c3c;
+}
+
+.button.danger:hover {
+  background-color: #e74c3c;
+  color: white;
+}
+
+/* Canvas */
+.canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: #121212;
+  background-image: 
+    linear-gradient(rgba(55, 55, 55, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(55, 55, 55, 0.3) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Nodes */
+.workflow-node {
+  position: absolute;
+  min-width: 180px;
+  background-color: #1e1e1e;
+  border: 2px solid #3498db;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+  color: #ffffff;
+}
+
+.workflow-node.selected {
+  box-shadow: 0 0 0 2px #3498db;
+}
+
+.node-header {
+  padding: 10px;
+  background-color: #3498db;
+  color: white;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workflow-node.agent .node-header {
+  background-color: #3498db;
+}
+
+.workflow-node.tool .node-header {
+  background-color: #2ecc71;
+}
+
+.workflow-node.input .node-header {
+  background-color: #f39c12;
+}
+
+.workflow-node.output .node-header {
+  background-color: #1abc9c;
+}
+
+.node-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.node-content {
+  padding: 10px;
+  text-align: center;
+}
+
+.configure-button {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.configure-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.node-ports {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.port-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.port {
+  width: 12px;
+  height: 12px;
+  background-color: #95a5a6;
+  border-radius: 50%;
+  margin: 3px 0;
+  cursor: crosshair;
+}
+
+.port-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 3px;
+}
+
+.port:hover {
+  background-color: #3498db;
+}
+
+.port.input-port {
+  background-color: #3498db;
+}
+
+.port.output-port {
+  background-color: #2ecc71;
+}
+
+/* Connections */
+.connections-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.temp-connection-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+svg {
+  width: 100%;
+  height: 100%;
+}
+
+path.connection {
+  fill: none;
+  stroke: #3498db;
+  stroke-width: 2px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+path.temp-connection {
+  fill: none;
+  stroke: #3498db;
+  stroke-width: 2px;
+  stroke-dasharray: 5, 5;
+}
+
+path.connection:hover,
+path.connection.selected {
+  stroke: #e74c3c;
+  stroke-width: 3px;
+}
+
+/* Properties Panel */
+.properties-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 300px;
+  background-color: #1e1e1e;
+  border-radius: 4px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  padding: 15px;
+  z-index: 100;
+  display: none; /* Hidden by default, shown when a node is selected */
+  color: #ecf0f1;
+  border: 1px solid #333;
+}
+
+.properties-panel.visible {
+  display: block;
+}
+
+.properties-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #333;
+}
+
+.properties-header h2 {
+  margin: 0;
+  font-size: 16px;
+  color: #3498db;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #95a5a6;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.close-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.property-group {
+  margin-bottom: 15px;
+}
+
+.property-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.property-input {
+  width: 100%;
+  padding: 10px;
+  background-color: #2c2c2c;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-size: 14px;
+  color: white;
+}
+
+.property-input:focus {
+  outline: none;
+  border-color: #3498db;
+}
+
+.agent-selector {
+  margin-bottom: 10px;
+}
+
+.select-button {
+  width: 100%;
+  padding: 10px;
+  background-color: #2c2c2c;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.select-button i {
+  margin-right: 10px;
+  color: #3498db;
+}
+
+.select-button:hover {
+  background-color: #333;
+}
+
+/* Toolbar */
+.toolbar {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #1e1e1e;
+  border-radius: 30px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  padding: 10px;
+  display: flex;
+  z-index: 10;
+  border: 1px solid #333;
+}
+
+.tool-button {
+  background: none;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #95a5a6;
+  transition: all 0.2s;
+}
+
+.tool-button:hover {
+  background-color: #2c2c2c;
+  color: #3498db;
+}
+
+.tool-button.active {
+  background-color: #3498db;
+  color: white;
+}
+
+/* Run controls */
+.run-controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+
+.run-button {
+  background-color: #2ecc71;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.run-button:hover {
+  background-color: #27ae60;
+}
+
+/* Notifications */
+.notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 15px 20px;
+  background-color: #1e1e1e;
+  color: white;
+  border-radius: 4px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  border-left: 4px solid #2ecc71;
+}
+
+.notification.error {
+  border-left-color: #e74c3c;
+}
+/* Enhanced workflow output styling */
+.modal-content .text-content,
+.modal-content .json-content,
+.modal-content .markdown-content,
+.modal-content .html-content,
+.modal-content .image-content,
+.modal-content .code-content,
+.modal-content .table-content {
+  background-color: #1e1e1e;
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 15px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-content pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0;
+  padding: 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e0e0e0;
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: #252525;
+  border-radius: 4px;
+}
+
+.json-content pre {
+  color: #88c0d0; /* Blue for JSON */
+  /* Add more detailed styling for JSON */
+  background-color: #252525;
+}
+
+.markdown-content pre {
+  color: #a3be8c; /* Green for Markdown */
+}
+
+.output-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #888;
+  text-align: right;
+  font-style: italic;
+}
+
+.image-content img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 400px;
+  border: 1px solid #444;
+}
+
+/* For HTML content iframe */
+.html-content iframe {
+  width: 100%;
+  height: 400px;
+  border: 1px solid #444;
+  background-color: white;
+  border-radius: 4px;
+}
+
+/* For code content */
+.code-content .code-block {
+  font-family: 'Consolas', 'Monaco', monospace;
+  background-color: #252525;
+  color: #ebcb8b; /* Yellow highlighting for code */
+  padding: 15px;
+  border-radius: 4px;
+  border-left: 3px solid #88c0d0;
+  line-height: 1.5;
+}
+
+/* For table content */
+.table-content .result-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 15px 0;
+  font-size: 14px;
+  border: 1px solid #333;
+}
+
+.table-content .result-table th {
+  background-color: #2c2c2c;
+  color: #88c0d0;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px;
+  border-bottom: 2px solid #444;
+}
+
+.table-content .result-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #333;
+  color: #e0e0e0;
+}
+
+.table-content .result-table tbody tr:nth-child(even) {
+  background-color: #252525;
+}
+
+.table-content .result-table tbody tr:hover {
+  background-color: #2a2a2a;
+}
+EOF < /dev/null
