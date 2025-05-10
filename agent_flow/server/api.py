@@ -836,39 +836,24 @@ def configure_network_agents(data, agent_registry):
     # Create a deep copy of the data to avoid modifying the original
     network = copy.deepcopy(data)
 
-    # Persistent agent storage - use agent config hash to identify and reuse agents
+    # Persistent agent storage for network configurations
     network_storage = getattr(current_app.config, 'NETWORK_STORAGE', {})
-    agent_cache = getattr(current_app.config, 'AGENT_CACHE', {})
 
-    # Initialize agent cache if it doesn't exist
-    if not hasattr(current_app.config, 'AGENT_CACHE'):
-        current_app.config['AGENT_CACHE'] = {}
-        agent_cache = current_app.config['AGENT_CACHE']
+    # We won't use agent cache as it prevents configuration updates from being applied
+    agent_cache = {}
 
     # Configure and register agents
     for node in network['nodes']:
         if node['type'] == 'agent':
             agent_type = node.get('subType')
             config = node.get('config', {})
+            logging.debug(f"Configuring agent: {agent_type} with config: {config}")
 
-            # Generate a unique hash for this configuration to identify identical configs
-            config_hash = None
+            # We're not using caching to ensure fresh configurations are always applied
 
             if agent_type == 'openai':
-                # Generate a hash of the important configuration parameters
-                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('model', '')}_{config.get('apiKey', '')}_{config.get('systemMessage', '')}"
-                config_hash = hashlib.md5(config_key.encode()).hexdigest()
-
-                # Check if we already have this agent configured
-                if config_hash in agent_cache:
-                    cached_agent = agent_cache[config_hash]
-                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
-
-                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
-                        # Reuse the existing agent
-                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
-                        node['config']['agent_id'] = cached_agent['agent_id']
-                        continue
+                # Always create a fresh agent instance to ensure configuration is current
+                logging.info(f"Creating new OpenAI agent with configuration: {config.get('name')}")
 
                 # If not cached or not available, create a new agent
                 from python_a2a.server.llm.openai import OpenAIA2AServer
@@ -949,16 +934,6 @@ def configure_network_agents(data, agent_registry):
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
 
-                # Cache this agent configuration for future reuse
-                agent_cache[config_hash] = {
-                    'agent_id': agent.id,
-                    'name': config.get('name', 'OpenAI Agent'),
-                    'type': agent_type,
-                    'model': config.get('model', 'gpt-4'),
-                    'port': port,
-                    'created_at': time.time()
-                }
-
                 # Start the server in a background thread
                 import threading
                 def run_server():
@@ -972,20 +947,8 @@ def configure_network_agents(data, agent_registry):
                 server_thread.start()
 
             elif agent_type == 'anthropic':
-                # Generate a hash of the important configuration parameters
-                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('model', '')}_{config.get('apiKey', '')}_{config.get('systemMessage', '')}"
-                config_hash = hashlib.md5(config_key.encode()).hexdigest()
-
-                # Check if we already have this agent configured
-                if config_hash in agent_cache:
-                    cached_agent = agent_cache[config_hash]
-                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
-
-                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
-                        # Reuse the existing agent
-                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
-                        node['config']['agent_id'] = cached_agent['agent_id']
-                        continue
+                # Always create a fresh agent instance to ensure configuration is current
+                logging.info(f"Creating new Anthropic agent with configuration: {config.get('name')}")
 
                 # If not cached or not available, create a new agent
                 from python_a2a.server.llm.anthropic import AnthropicA2AServer
@@ -1064,16 +1027,6 @@ def configure_network_agents(data, agent_registry):
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
 
-                # Cache this agent configuration for future reuse
-                agent_cache[config_hash] = {
-                    'agent_id': agent.id,
-                    'name': config.get('name', 'Claude Agent'),
-                    'type': agent_type,
-                    'model': config.get('model', 'claude-3-opus'),
-                    'port': port,
-                    'created_at': time.time()
-                }
-
                 # Start the server in a background thread
                 import threading
                 def run_server():
@@ -1087,20 +1040,8 @@ def configure_network_agents(data, agent_registry):
                 server_thread.start()
                 
             elif agent_type == 'bedrock':
-                # Generate a hash of the important configuration parameters
-                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('model', '')}_{config.get('accessKey', '')}_{config.get('secretKey', '')}_{config.get('region', '')}_{config.get('systemMessage', '')}"
-                config_hash = hashlib.md5(config_key.encode()).hexdigest()
-
-                # Check if we already have this agent configured
-                if config_hash in agent_cache:
-                    cached_agent = agent_cache[config_hash]
-                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
-
-                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
-                        # Reuse the existing agent
-                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
-                        node['config']['agent_id'] = cached_agent['agent_id']
-                        continue
+                # Always create a fresh agent instance to ensure configuration is current
+                logging.info(f"Creating new Bedrock agent with configuration: {config.get('name')}")
 
                 # If not cached or not available, create a new agent
                 from python_a2a.server.llm.bedrock import BedrockA2AServer
@@ -1183,16 +1124,6 @@ def configure_network_agents(data, agent_registry):
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
 
-                # Cache this agent configuration for future reuse
-                agent_cache[config_hash] = {
-                    'agent_id': agent.id,
-                    'name': config.get('name', 'Bedrock Agent'),
-                    'type': agent_type,
-                    'model': config.get('model', 'anthropic.claude-3-sonnet-20240229-v1:0'),
-                    'port': port,
-                    'created_at': time.time()
-                }
-
                 # Start the server in a background thread
                 import threading
                 def run_server():
@@ -1206,20 +1137,8 @@ def configure_network_agents(data, agent_registry):
                 server_thread.start()
                 
             elif agent_type == 'custom':
-                # Generate a hash of the important configuration parameters
-                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('endpoint', '')}_{config.get('port', '')}"
-                config_hash = hashlib.md5(config_key.encode()).hexdigest()
-
-                # Check if we already have this agent configured
-                if config_hash in agent_cache:
-                    cached_agent = agent_cache[config_hash]
-                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
-
-                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
-                        # Reuse the existing agent
-                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
-                        node['config']['agent_id'] = cached_agent['agent_id']
-                        continue
+                # Always create a fresh agent instance to ensure configuration is current
+                logging.info(f"Creating new custom agent with configuration: {config.get('name')}")
 
                 # For custom agents, use the provided endpoint
                 endpoint = config.get('endpoint')
@@ -1247,16 +1166,6 @@ def configure_network_agents(data, agent_registry):
 
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
-
-                # Cache this agent configuration for future reuse
-                agent_cache[config_hash] = {
-                    'agent_id': agent.id,
-                    'name': config.get('name', 'Custom Agent'),
-                    'type': agent_type,
-                    'endpoint': endpoint,
-                    'port': port,
-                    'created_at': time.time()
-                }
 
                 # For custom agents, we don't need to start a server
                 # as they are already running somewhere else
