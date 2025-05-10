@@ -1665,6 +1665,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <div class="status-header">
                                     <h3>Execution Status</h3>
                                     <span class="status-badge pending">Pending</span>
+                                    <button id="clear-log-btn" class="secondary-btn" style="margin-left: auto; padding: 4px 10px; font-size: 12px;">
+                                        <i class="bi bi-trash"></i> Clear Messages
+                                    </button>
                                 </div>
                                 <div class="execution-log">
                                     <div class="log-container" id="execution-log-container">
@@ -1724,7 +1727,17 @@ document.addEventListener('DOMContentLoaded', function() {
             runButton.addEventListener('click', () => {
                 executeNetworkWithInput(networkData);
             });
-            
+
+            // Handle clear log button click
+            const clearLogButton = executionDialog.querySelector('#clear-log-btn');
+            clearLogButton.addEventListener('click', () => {
+                const logContainer = document.getElementById('execution-log-container');
+                // Clear all log entries except the initial one
+                logContainer.innerHTML = '<div class="log-entry">Agent network ready to run...</div>';
+                // Show notification
+                showNotification('Execution logs cleared', 'success');
+            });
+
             // Handle modal close
             const closeButtons = executionDialog.querySelectorAll('.modal-close');
             closeButtons.forEach(button => {

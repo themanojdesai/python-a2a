@@ -1031,7 +1031,6 @@ body {
 
 .status-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
   background-color: var(--surface);
@@ -1042,6 +1041,7 @@ body {
   margin: 0;
   font-size: 15px;
   font-weight: 500;
+  margin-right: 10px;
 }
 
 .status-badge {
