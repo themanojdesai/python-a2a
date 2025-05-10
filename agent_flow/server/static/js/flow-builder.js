@@ -1594,18 +1594,11 @@ document.addEventListener('DOMContentLoaded', function() {
      * Run the current network on the server
      */
     function runNetwork() {
-        // First, validate that the network is valid
-        const validationResult = validateNetwork();
-        if (!validationResult.valid) {
-            // Show validation errors
-            validationResult.errors.forEach(error => {
-                showNotification(error, 'error');
-            });
-            return;
-        }
-        
-        // Prepare network data to send to the server
-        const networkData = {
+        // Detect multiple networks on the canvas
+        const detectedNetworks = detectMultipleNetworks();
+
+        // Prepare network data for the current state
+        const currentNetworkData = {
             name: document.getElementById('network-name').textContent,
             nodes: nodes.map(node => ({
                 id: node.id,
@@ -1621,25 +1614,199 @@ document.addEventListener('DOMContentLoaded', function() {
                 targetPort: conn.end.port
             }))
         };
-        
-        // Show execution dialog for user input
-        showExecutionDialog(networkData);
+
+        // Use the enhanced network execution dialog
+        if (typeof window.showNetworkExecutionDialog === 'function') {
+            window.showNetworkExecutionDialog(currentNetworkData, detectedNetworks);
+        } else {
+            // Fallback to old dialog if new one isn't available
+            showExecutionDialog(currentNetworkData, detectedNetworks);
+        }
+    }
+
+    /**
+     * Detect multiple independent networks on the canvas
+     * @returns {Array} Array of detected networks
+     */
+    function detectMultipleNetworks() {
+        // This function detects separate connected components (networks) on the canvas
+        const networks = [];
+
+        // Skip if no nodes or connections
+        if (nodes.length === 0 || connections.length === 0) {
+            return networks;
+        }
+
+        // Create a map of node IDs to track visited status
+        const visitedNodes = new Map();
+        nodes.forEach(node => visitedNodes.set(node.id, false));
+
+        // Create an adjacency list representation of the graph
+        const adjacencyList = new Map();
+        nodes.forEach(node => adjacencyList.set(node.id, []));
+
+        // Add connections to the adjacency list (bidirectional)
+        connections.forEach(conn => {
+            const sourceId = conn.start.nodeId;
+            const targetId = conn.end.nodeId;
+            adjacencyList.get(sourceId).push(targetId);
+            adjacencyList.get(targetId).push(sourceId);
+        });
+
+        // Helper function for depth-first search
+        function dfs(nodeId, networkNodes) {
+            // Mark as visited
+            visitedNodes.set(nodeId, true);
+            networkNodes.push(nodeId);
+
+            // Visit all adjacent nodes
+            adjacencyList.get(nodeId).forEach(adjacentId => {
+                if (!visitedNodes.get(adjacentId)) {
+                    dfs(adjacentId, networkNodes);
+                }
+            });
+        }
+
+        // Find all connected components (networks)
+        for (const node of nodes) {
+            if (!visitedNodes.get(node.id)) {
+                const networkNodes = [];
+                dfs(node.id, networkNodes);
+
+                // Only count as a network if it has at least one input and one output node
+                const networkNodeObjects = networkNodes.map(nodeId =>
+                    nodes.find(n => n.id === nodeId)
+                );
+
+                const hasInput = networkNodeObjects.some(node => node.type === 'input');
+                const hasOutput = networkNodeObjects.some(node => node.type === 'output');
+
+                if (hasInput && hasOutput && networkNodes.length >= 3) {
+                    // Create a subset of the connections that belong to this network
+                    const networkConnections = connections.filter(conn =>
+                        networkNodes.includes(conn.start.nodeId) &&
+                        networkNodes.includes(conn.end.nodeId)
+                    );
+
+                    // Validate this network
+                    const isValid = validateNetworkSubset(networkNodeObjects, networkConnections);
+
+                    if (isValid) {
+                        // Create network data structure
+                        networks.push({
+                            name: `Network ${networks.length + 1}`,
+                            nodes: networkNodeObjects.map(node => ({
+                                id: node.id,
+                                type: node.type,
+                                subType: node.subType,
+                                position: node.position,
+                                config: node.config
+                            })),
+                            connections: networkConnections.map(conn => ({
+                                sourceNode: conn.start.nodeId,
+                                sourcePort: conn.start.port,
+                                targetNode: conn.end.nodeId,
+                                targetPort: conn.end.port
+                            })),
+                            nodeCount: networkNodes.length,
+                            connectionCount: networkConnections.length
+                        });
+                    }
+                }
+            }
+        }
+
+        return networks;
+    }
+
+    /**
+     * Validate a subset of nodes and connections as a valid network
+     * @param {Array} networkNodes - Array of node objects in the network
+     * @param {Array} networkConnections - Array of connection objects in the network
+     * @returns {boolean} - Whether the network is valid
+     */
+    function validateNetworkSubset(networkNodes, networkConnections) {
+        // Check for input and output nodes
+        const inputNodes = networkNodes.filter(node => node.type === 'input');
+        const outputNodes = networkNodes.filter(node => node.type === 'output');
+
+        if (inputNodes.length === 0 || outputNodes.length === 0) {
+            return false;
+        }
+
+        // Check for connections between nodes
+        if (networkConnections.length === 0) {
+            return false;
+        }
+
+        // Check if there's a path from input to output nodes
+        // This is a simplified check - a full check would need more graph theory
+        const connectedNodeIds = new Set();
+        networkConnections.forEach(conn => {
+            connectedNodeIds.add(conn.start.nodeId);
+            connectedNodeIds.add(conn.end.nodeId);
+        });
+
+        // Check if at least one input and one output node are connected
+        const inputConnected = inputNodes.some(node => connectedNodeIds.has(node.id));
+        const outputConnected = outputNodes.some(node => connectedNodeIds.has(node.id));
+
+        if (!inputConnected || !outputConnected) {
+            return false;
+        }
+
+        // Check for any disconnected nodes
+        for (const node of networkNodes) {
+            if (!connectedNodeIds.has(node.id)) {
+                return false; // Disconnected node found
+            }
+        }
+
+        // Check for node configuration
+        for (const node of networkNodes) {
+            if (node.type === 'agent') {
+                const config = node.config || {};
+                const agentType = node.subType;
+
+                // Validate agent configuration
+                if (agentType === 'openai' && (!config.apiKey || !config.model)) {
+                    return false;
+                }
+                else if (agentType === 'anthropic' && (!config.apiKey || !config.model)) {
+                    return false;
+                }
+                else if (agentType === 'bedrock' &&
+                        (!config.accessKey || !config.secretKey || !config.region || !config.model)) {
+                    return false;
+                }
+                else if (agentType === 'custom' &&
+                        (!config.port && !config.endpoint)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
     
     /**
      * Show the execution dialog for the user to provide input
      * @param {Object} networkData - The prepared network data
+     * @param {Array} detectedNetworks - Array of detected networks on the canvas
      */
-    function showExecutionDialog(networkData) {
+    function showExecutionDialog(networkData, detectedNetworks) {
+        // Check if we have multiple networks
+        const hasMultipleNetworks = detectedNetworks && detectedNetworks.length > 0;
+
         // Check if there's already an execution dialog
         let executionDialog = document.getElementById('execution-dialog');
-        
+
         // Create the dialog if it doesn't exist
         if (!executionDialog) {
             executionDialog = document.createElement('div');
             executionDialog.id = 'execution-dialog';
             executionDialog.className = 'modal';
-            
+
             executionDialog.innerHTML = `
                 <div class="modal-content execution-dialog-content">
                     <div class="modal-header">
@@ -1649,17 +1816,102 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="modal-body">
                         <div class="execution-tabs">
                             <button class="tab-btn active" data-tab="input">Input</button>
+                            <button class="tab-btn" data-tab="networks">Networks</button>
                             <button class="tab-btn" data-tab="execution">Execution</button>
                             <button class="tab-btn" data-tab="output">Output</button>
                         </div>
-                        
+
                         <div class="tab-content" id="input-tab">
                             <div class="form-group">
                                 <label for="user-input">Your request:</label>
                                 <textarea id="user-input" class="form-control" rows="5" placeholder="Enter your request here..."></textarea>
                             </div>
+                            <div class="form-group execution-mode-selector">
+                                <label>Execution Mode:</label>
+                                <div class="radio-group">
+                                    <label class="radio-option">
+                                        <input type="radio" name="execution-mode" value="sequential" checked> Sequential
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="execution-mode" value="parallel"> Parallel
+                                    </label>
+                                </div>
+                            </div>
                         </div>
-                        
+
+                        <div class="tab-content hidden" id="networks-tab">
+                            <div class="networks-selection">
+                                <div class="selection-header">
+                                    <h3>Network Selection</h3>
+                                    <div class="execution-mode">
+                                        <span>Execution Mode:</span>
+                                        <div class="toggle-container">
+                                            <input type="radio" id="sequential-mode" name="execution-mode" value="sequential" checked>
+                                            <label for="sequential-mode">Sequential</label>
+                                            <input type="radio" id="parallel-mode" name="execution-mode" value="parallel">
+                                            <label for="parallel-mode">Parallel</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="network-list" id="network-selection-list">
+                                    <div class="network-item current-network selected">
+                                        <div class="network-title">
+                                            <i class="bi bi-diagram-3"></i>
+                                            <span>Current Network</span>
+                                        </div>
+                                        <div class="network-details">
+                                            <span class="node-count">${nodes.length} nodes</span>
+                                            <span class="connection-count">${connections.length} connections</span>
+                                        </div>
+                                        <div class="network-actions">
+                                            <input type="checkbox" class="network-checkbox" id="network-current" checked>
+                                            <label for="network-current">Select</label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Detected networks will be shown here -->
+                                    <div id="detected-networks-container">
+                                        ${detectedNetworks && detectedNetworks.length > 0 ?
+                                            detectedNetworks.map((network, index) => `
+                                                <div class="network-item detected-network" data-network-index="${index}">
+                                                    <div class="network-title">
+                                                        <i class="bi bi-diagram-3"></i>
+                                                        <span>${network.name}</span>
+                                                    </div>
+                                                    <div class="network-details">
+                                                        <span class="node-count">${network.nodeCount} nodes</span>
+                                                        <span class="connection-count">${network.connectionCount} connections</span>
+                                                    </div>
+                                                    <div class="network-actions">
+                                                        <input type="checkbox" class="network-checkbox" id="network-${index}" checked>
+                                                        <label for="network-${index}">Select</label>
+                                                    </div>
+                                                </div>
+                                            `).join('') :
+                                            '<div class="no-networks-message">No additional networks detected</div>'
+                                        }
+                                    </div>
+
+                                    <!-- Saved networks will be loaded here -->
+                                    <div id="saved-networks-container"></div>
+
+                                    <!-- Network mode explanation -->
+                                    <div class="network-mode-explanation">
+                                        <h4>Execution Modes</h4>
+                                        <div class="mode-description">
+                                            <h5><i class="bi bi-arrow-down"></i> Sequential</h5>
+                                            <p>Networks execute one after another. The output of each network is used as input for the next.</p>
+                                        </div>
+                                        <div class="mode-description">
+                                            <h5><i class="bi bi-arrows"></i> Parallel</h5>
+                                            <p>All networks execute at the same time with the same input. Results are returned separately.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="tab-content hidden" id="execution-tab">
                             <div class="execution-status">
                                 <div class="status-header">
@@ -1676,7 +1928,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="tab-content hidden" id="output-tab">
                             <div class="form-group">
                                 <label for="network-output">Result:</label>
@@ -1725,8 +1977,71 @@ document.addEventListener('DOMContentLoaded', function() {
             // Handle run button click
             const runButton = executionDialog.querySelector('#run-network-btn');
             runButton.addEventListener('click', () => {
-                executeNetworkWithInput(networkData);
+                executeNetworkWithInput(networkData, detectedNetworks);
             });
+
+            // Show Networks tab if multiple networks are detected
+            // Add data-mode attributes to mode buttons
+            const modeButtons = executionDialog.querySelectorAll('.mode-btn');
+            if (modeButtons && modeButtons.length > 0) {
+                modeButtons.forEach(btn => {
+                    if (btn.textContent.toLowerCase().includes('sequential')) {
+                        btn.setAttribute('data-mode', 'sequential');
+                    } else if (btn.textContent.toLowerCase().includes('parallel')) {
+                        btn.setAttribute('data-mode', 'parallel');
+                    }
+                });
+            }
+
+            if (detectedNetworks && detectedNetworks.length > 0) {
+                const networksTab = executionDialog.querySelector('.tab-btn[data-tab="networks"]');
+                networksTab.style.display = 'inline-block';
+
+                // Add click handlers for network selection checkboxes and mode buttons
+                setTimeout(() => {
+                    // Handle checkbox selection
+                    const networkCheckboxes = executionDialog.querySelectorAll('.network-checkbox');
+                    networkCheckboxes.forEach(checkbox => {
+                        checkbox.addEventListener('change', () => {
+                            // Update visual selection state when checkbox changes
+                            const networkItem = checkbox.closest('.network-item');
+                            if (checkbox.checked) {
+                                networkItem.classList.add('selected');
+                            } else {
+                                networkItem.classList.remove('selected');
+                            }
+                        });
+                    });
+
+                    // Handle mode buttons
+                    const modeButtons = executionDialog.querySelectorAll('.mode-btn');
+                    if (modeButtons.length > 0) {
+                        modeButtons.forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                // Deactivate all buttons
+                                modeButtons.forEach(b => b.classList.remove('active'));
+                                // Activate clicked button
+                                btn.classList.add('active');
+                                // Update hidden input with selected mode
+                                const mode = btn.getAttribute('data-mode');
+                                const hiddenInput = executionDialog.querySelector('input[name="execution-mode"]');
+                                if (hiddenInput) {
+                                    hiddenInput.value = mode;
+                                }
+                                // Also update radio buttons in other tabs
+                                const radioButtons = executionDialog.querySelectorAll(`input[type="radio"][name="execution-mode"][value="${mode}"]`);
+                                radioButtons.forEach(radio => {
+                                    radio.checked = true;
+                                });
+                            });
+                        });
+                    }
+                }, 100);
+            } else {
+                // Hide Networks tab if no additional networks are detected
+                const networksTab = executionDialog.querySelector('.tab-btn[data-tab="networks"]');
+                networksTab.style.display = 'none';
+            }
 
             // Handle clear log button click
             const clearLogButton = executionDialog.querySelector('#clear-log-btn');
@@ -1749,59 +2064,119 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Show the dialog
         executionDialog.classList.add('open');
+
+        // If multiple networks are detected, show the Networks tab by default
+        if (hasMultipleNetworks) {
+            // Get all tab buttons and contents
+            const tabButtons = executionDialog.querySelectorAll('.tab-btn');
+            const tabContents = executionDialog.querySelectorAll('.tab-content');
+
+            // Switch to Networks tab
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            const networksTab = Array.from(tabButtons).find(btn => btn.getAttribute('data-tab') === 'networks');
+            if (networksTab) {
+                networksTab.classList.add('active');
+
+                // Show the networks tab content
+                tabContents.forEach(content => content.classList.add('hidden'));
+                document.getElementById('networks-tab').classList.remove('hidden');
+
+                // Show notification that multiple networks were detected
+                showNotification(`${detectedNetworks.length + 1} networks detected on the canvas. Select which ones to run.`, 'info');
+            }
+        }
     }
     
     /**
      * Execute the network with user input
      * @param {Object} networkData - The prepared network data
+     * @param {Array} detectedNetworks - Array of detected networks on the canvas
      */
-    function executeNetworkWithInput(networkData) {
+    function executeNetworkWithInput(networkData, detectedNetworks) {
         const userInput = document.getElementById('user-input').value;
-        
+
         if (!userInput.trim()) {
             showNotification('Please provide input for the network', 'warning');
             return;
         }
-        
+
         // Update UI to execution tab
         const executionDialog = document.getElementById('execution-dialog');
         const tabButtons = executionDialog.querySelectorAll('.tab-btn');
         const tabContents = executionDialog.querySelectorAll('.tab-content');
-        
+
         // Switch to execution tab
         tabButtons.forEach(btn => btn.classList.remove('active'));
-        tabButtons[1].classList.add('active'); // Execution tab
-        
+        tabButtons[2].classList.add('active'); // Execution tab (index 2 with new Networks tab)
+
         tabContents.forEach(content => content.classList.add('hidden'));
         document.getElementById('execution-tab').classList.remove('hidden');
-        
+
         // Update status badge
         const statusBadge = document.querySelector('.status-badge');
         statusBadge.className = 'status-badge running';
         statusBadge.textContent = 'Running';
-        
+
         // Update progress bar
         const progressFill = document.querySelector('.progress-fill');
         progressFill.style.width = '15%';
-        
+
+        // Get all selected networks for execution
+        const networks = getSelectedNetworks(networkData, detectedNetworks);
+
+        // Get execution mode
+        const executionMode = document.querySelector('input[name="execution-mode"]:checked').value;
+
+        // If no networks are selected (validation failed), abort
+        if (networks.length === 0) {
+            // Update status
+            statusBadge.className = 'status-badge error';
+            statusBadge.textContent = 'Error';
+
+            // Add error log
+            addLogEntry('No valid networks selected for execution', 'error');
+
+            // Re-enable run button
+            const runButton = document.getElementById('run-network-btn');
+            runButton.disabled = false;
+            runButton.textContent = 'Run';
+            return;
+        }
+
         // Add log entry
-        addLogEntry('Starting network execution...');
+        if (networks.length === 1) {
+            addLogEntry('Starting network execution...');
+        } else {
+            addLogEntry(`Starting execution of ${networks.length} networks in ${executionMode} mode...`);
+        }
         addLogEntry(`Processing input: "${userInput.substring(0, 40)}${userInput.length > 40 ? '...' : ''}"`);
-        
+
         // Disable run button during execution
         const runButton = document.getElementById('run-network-btn');
         runButton.disabled = true;
         runButton.textContent = 'Running...';
-        
-        // Add the user input to the network data
-        const executionData = {
-            ...networkData,
-            input: userInput
-        };
-        
+
         // Clear any previous execution highlights
         resetNodeStyles();
-        
+
+        // Prepare the execution data
+        let executionData;
+
+        if (networks.length === 1) {
+            // Single network execution
+            executionData = {
+                ...networks[0].data,
+                input: userInput
+            };
+        } else {
+            // Multi-network execution
+            executionData = {
+                networks: networks,
+                execution_mode: executionMode,
+                input: userInput
+            };
+        }
+
         // Send the request to the server
         fetch('/api/workflows/run-network', {
             method: 'POST',
@@ -1819,62 +2194,121 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             // Store execution ID for status polling
             const executionId = data.execution_id;
-            
+
             if (executionId) {
-                // Start polling for updates
+                // Start polling for updates (for long-running executions)
                 addLogEntry(`Execution started with ID: ${executionId}`);
                 pollExecutionStatus(executionId);
             } else {
                 // Update progress immediately if no execution ID
                 progressFill.style.width = '100%';
-                
+
                 // Update status
                 statusBadge.className = 'status-badge completed';
                 statusBadge.textContent = 'Completed';
-                
+
                 // Add log entries
-                addLogEntry('Network execution completed successfully');
-                
+                if (data.type === 'multi_network_output') {
+                    const networkCount = data.networks_count || networks.length;
+                    const mode = data.mode || executionMode;
+                    const executionTime = data.execution_time ? data.execution_time.toFixed(2) : '?';
+
+                    addLogEntry(`${networkCount} networks executed in ${executionTime} seconds (${mode} mode)`);
+                    addLogEntry('Multi-network execution completed successfully', 'success');
+                } else {
+                    addLogEntry('Network execution completed successfully', 'success');
+                }
+
                 showExecutionResult(data, userInput, tabButtons, tabContents, runButton);
             }
         })
         .catch(error => {
             console.error('Execution error:', error);
-            
+
             // Update status
             statusBadge.className = 'status-badge error';
             statusBadge.textContent = 'Error';
-            
+
             // Add error log
             addLogEntry(`Error: ${error.message}`, 'error');
-            
+
             // For development, we'll show a simulated response anyway
             progressFill.style.width = '100%';
-            
+
             setTimeout(() => {
                 tabButtons.forEach(btn => btn.classList.remove('active'));
-                tabButtons[2].classList.add('active'); // Output tab
-                
+                tabButtons[3].classList.add('active'); // Output tab (index 3 with new Networks tab)
+
                 tabContents.forEach(content => content.classList.add('hidden'));
                 document.getElementById('output-tab').classList.remove('hidden');
-                
+
                 // Update output with error message
                 const outputContainer = document.getElementById('network-output-container');
                 outputContainer.innerHTML = '';
-                
+
                 const outputContent = document.createElement('div');
                 outputContent.className = 'output-content error';
-                
+
                 // For development, we'll simulate a response
                 outputContent.textContent = simulateResponse(userInput);
-                
+
                 outputContainer.appendChild(outputContent);
-                
+
                 // Re-enable run button
                 runButton.disabled = false;
                 runButton.textContent = 'Run Again';
             }, 1000);
         });
+    }
+
+    /**
+     * Get selected networks for execution
+     * @param {Object} currentNetworkData - The current network data
+     * @param {Array} detectedNetworks - Array of detected networks on the canvas
+     * @returns {Array} Array of selected networks
+     */
+    function getSelectedNetworks(currentNetworkData, detectedNetworks) {
+        const networks = [];
+        const executionMode = document.querySelector('input[name="execution-mode"]:checked').value;
+
+        // Check if current network is selected
+        const currentNetworkCheckbox = document.getElementById('network-current');
+        if (currentNetworkCheckbox && currentNetworkCheckbox.checked) {
+            // Validate current network structure
+            const validationResult = validateNetwork();
+            if (validationResult.valid) {
+                networks.push({
+                    id: 'current',
+                    data: currentNetworkData,
+                    mode: executionMode
+                });
+            } else {
+                // Show validation errors
+                const currentNetworkItem = document.querySelector('.network-item.current-network');
+                if (currentNetworkItem) {
+                    currentNetworkItem.classList.add('invalid');
+                    showNotification('Current network is invalid. Check connections.', 'warning');
+                }
+            }
+        }
+
+        // Add selected detected networks
+        if (detectedNetworks && detectedNetworks.length > 0) {
+            detectedNetworks.forEach((network, index) => {
+                const networkCheckbox = document.getElementById(`network-${index}`);
+                if (networkCheckbox && networkCheckbox.checked) {
+                    networks.push({
+                        id: `detected-${index}`,
+                        data: network,
+                        mode: executionMode
+                    });
+                }
+            });
+        }
+
+        // In the future we can add saved networks here
+
+        return networks;
     }
     
     /**
@@ -2106,132 +2540,234 @@ document.addEventListener('DOMContentLoaded', function() {
         // Switch to output tab
         setTimeout(() => {
             tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabButtons[2].classList.add('active'); // Output tab
-            
+            tabButtons[3].classList.add('active'); // Output tab (index 3 with Networks tab)
+
             tabContents.forEach(content => content.classList.add('hidden'));
             document.getElementById('output-tab').classList.remove('hidden');
-            
+
             // Update output
             const outputContainer = document.getElementById('network-output-container');
             outputContainer.innerHTML = '';
-            
-            const outputContent = document.createElement('div');
-            outputContent.className = 'output-content';
-            
-            // Handle error case first
-            if (data.error) {
+
+            // Handle multi-network output
+            if (data.type === 'multi_network_output' && data.results && Array.isArray(data.results)) {
+                // Show a container for all network results
+                const networkResultsContainer = document.createElement('div');
+                networkResultsContainer.className = 'multi-network-results';
+
+                // Add execution summary
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'network-execution-summary';
+                summaryDiv.innerHTML = `
+                    <h3>Multi-Network Execution Summary</h3>
+                    <div class="summary-details">
+                        <div><strong>Mode:</strong> ${data.mode} execution</div>
+                        <div><strong>Networks:</strong> ${data.networks_count} networks</div>
+                        <div><strong>Time:</strong> ${data.execution_time ? data.execution_time.toFixed(2) : '?'} seconds</div>
+                    </div>
+                `;
+                networkResultsContainer.appendChild(summaryDiv);
+
+                // Sort results by network index if available
+                const sortedResults = [...data.results].sort((a, b) => {
+                    return (a.network_index || 0) - (b.network_index || 0);
+                });
+
+                // Add each network result
+                sortedResults.forEach((networkResult, index) => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'network-result-item';
+
+                    // Create header
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'network-result-header';
+
+                    // Add title
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = 'network-result-title';
+                    titleDiv.innerHTML = `
+                        <i class="bi bi-diagram-3"></i>
+                        <span>Network ${networkResult.network_index !== undefined ? networkResult.network_index + 1 : index + 1}</span>
+                    `;
+                    headerDiv.appendChild(titleDiv);
+
+                    // Add execution time if available
+                    if (networkResult.execution_time) {
+                        const timeDiv = document.createElement('div');
+                        timeDiv.className = 'network-result-time';
+                        timeDiv.textContent = `${networkResult.execution_time.toFixed(2)}s`;
+                        headerDiv.appendChild(timeDiv);
+                    }
+
+                    resultItem.appendChild(headerDiv);
+
+                    // Add content or error
+                    if (networkResult.error) {
+                        // Show error message
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'network-result-error';
+                        errorDiv.textContent = networkResult.error;
+                        resultItem.appendChild(errorDiv);
+                    } else if (networkResult.result) {
+                        // Create content div
+                        const contentDiv = document.createElement('div');
+                        contentDiv.className = 'network-result-content';
+
+                        // Format the result content
+                        const formattedResult = formatResultContent(networkResult.result);
+                        contentDiv.appendChild(formattedResult);
+
+                        resultItem.appendChild(contentDiv);
+                    }
+
+                    networkResultsContainer.appendChild(resultItem);
+                });
+
+                // Add to output container
+                outputContainer.appendChild(networkResultsContainer);
+
+                // If in sequential mode, also show the final result
+                if (data.mode === 'sequential' && data.result) {
+                    const finalResultDiv = document.createElement('div');
+                    finalResultDiv.className = 'final-result';
+                    finalResultDiv.innerHTML = '<h3>Final Output</h3>';
+
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'network-result-content';
+
+                    // Format the final result
+                    const formattedResult = formatResultContent(data.result);
+                    contentDiv.appendChild(formattedResult);
+
+                    finalResultDiv.appendChild(contentDiv);
+                    outputContainer.appendChild(finalResultDiv);
+                }
+            }
+            // Handle error case
+            else if (data.error) {
+                const outputContent = document.createElement('div');
+                outputContent.className = 'output-content error';
                 outputContent.textContent = `Error: ${data.error}`;
-                outputContent.classList.add('error');
                 outputContainer.appendChild(outputContent);
             }
-            // Check if the response has a structured result with type information
+            // Handle regular single network output
             else if (data.result !== undefined) {
-                // Check if we have a structured response with type and format
-                if (data.type) {
-                    const resultType = data.type;
-                    const resultFormat = data.format;
-                    const resultContent = data.result;
-                    
-                    // Format based on type
-                    if (resultType === 'json' || resultFormat === 'json' || typeof resultContent === 'object') {
-                        // Display as formatted JSON
-                        outputContent.className = 'output-content json';
-                        try {
-                            const formattedJson = typeof resultContent === 'string' 
-                                ? JSON.stringify(JSON.parse(resultContent), null, 2)
-                                : JSON.stringify(resultContent, null, 2);
-                            
-                            // Use a pre element for code formatting
-                            const pre = document.createElement('pre');
-                            pre.textContent = formattedJson;
-                            outputContent.appendChild(pre);
-                        } catch (e) {
-                            // Fall back to string representation if JSON parsing fails
-                            outputContent.textContent = typeof resultContent === 'string' 
-                                ? resultContent
-                                : JSON.stringify(resultContent);
-                        }
-                    }
-                    else if (resultType === 'markdown' || resultFormat === 'markdown') {
-                        // For markdown, we'd ideally use a markdown renderer
-                        // For now, we'll use a simple pre element with a markdown class
-                        outputContent.className = 'output-content markdown';
-                        
-                        // Use a pre element to preserve formatting
-                        const pre = document.createElement('pre');
-                        pre.textContent = resultContent;
-                        outputContent.appendChild(pre);
-                    }
-                    else if (resultType === 'html' || resultFormat === 'html') {
-                        // For HTML content, use innerHTML
-                        outputContent.className = 'output-content html';
-                        outputContent.innerHTML = resultContent;
-                    }
-                    else {
-                        // Default to text
-                        outputContent.className = 'output-content text';
-                        
-                        // Check if result is a string or object
-                        if (typeof resultContent === 'string') {
-                            // Replace newlines with <br> elements for better display
-                            const lines = resultContent.split('\n');
-                            for (let i = 0; i < lines.length; i++) {
-                                const line = document.createTextNode(lines[i]);
-                                outputContent.appendChild(line);
-                                if (i < lines.length - 1) {
-                                    outputContent.appendChild(document.createElement('br'));
-                                }
-                            }
-                        } else {
-                            // For objects, display as formatted JSON
-                            const pre = document.createElement('pre');
-                            try {
-                                pre.textContent = JSON.stringify(resultContent, null, 2);
-                            } catch (e) {
-                                pre.textContent = String(resultContent);
-                            }
-                            outputContent.appendChild(pre);
-                        }
-                    }
-                } else {
-                    // No type information, just show the result directly
-                    const resultContent = data.result;
-                    
-                    // Detect if the result is an object
-                    if (typeof resultContent === 'object' && resultContent !== null) {
-                        // Display as formatted JSON
-                        outputContent.className = 'output-content json';
-                        const pre = document.createElement('pre');
-                        pre.textContent = JSON.stringify(resultContent, null, 2);
-                        outputContent.appendChild(pre);
-                    } else {
-                        // Handle string with newlines properly
-                        outputContent.className = 'output-content text';
-                        
-                        // Replace newlines with <br> elements for better display
-                        const lines = String(resultContent).split('\n');
-                        for (let i = 0; i < lines.length; i++) {
-                            const line = document.createTextNode(lines[i]);
-                            outputContent.appendChild(line);
-                            if (i < lines.length - 1) {
-                                outputContent.appendChild(document.createElement('br'));
-                            }
-                        }
-                    }
-                }
-                
+                const outputContent = document.createElement('div');
+                outputContent.className = 'output-content';
+
+                // Format the result based on type
+                const formattedContent = formatResultContent(data);
+                outputContent.appendChild(formattedContent);
+
                 outputContainer.appendChild(outputContent);
-            } 
+            }
             // Fallback - use simulated response for development
             else {
+                const outputContent = document.createElement('div');
+                outputContent.className = 'output-content';
                 outputContent.textContent = simulateResponse(userInput);
                 outputContainer.appendChild(outputContent);
             }
-            
+
             // Re-enable run button
             runButton.disabled = false;
             runButton.textContent = 'Run Again';
         }, 1000);
+    }
+
+    /**
+     * Format result content based on its type
+     * @param {Object|string} data - The result data to format
+     * @returns {HTMLElement} - Formatted HTML element with the content
+     */
+    function formatResultContent(data) {
+        const container = document.createElement('div');
+
+        // If data is just a string, treat it as text
+        if (typeof data === 'string') {
+            container.className = 'formatted-content text';
+
+            // Replace newlines with <br> elements for better display
+            const lines = data.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                const line = document.createTextNode(lines[i]);
+                container.appendChild(line);
+                if (i < lines.length - 1) {
+                    container.appendChild(document.createElement('br'));
+                }
+            }
+            return container;
+        }
+
+        // Get the result data and type
+        let resultContent = data.result || data;
+        const resultType = data.type || '';
+        const resultFormat = data.format || '';
+
+        // Format based on type
+        if (resultType === 'json' || resultFormat === 'json' ||
+            (typeof resultContent === 'object' && resultContent !== null)) {
+            // Display as formatted JSON
+            container.className = 'formatted-content json';
+            try {
+                const formattedJson = typeof resultContent === 'string'
+                    ? JSON.stringify(JSON.parse(resultContent), null, 2)
+                    : JSON.stringify(resultContent, null, 2);
+
+                // Use a pre element for code formatting
+                const pre = document.createElement('pre');
+                pre.textContent = formattedJson;
+                container.appendChild(pre);
+            } catch (e) {
+                // Fall back to string representation if JSON parsing fails
+                container.textContent = typeof resultContent === 'string'
+                    ? resultContent
+                    : JSON.stringify(resultContent);
+            }
+        }
+        else if (resultType === 'markdown' || resultFormat === 'markdown') {
+            // For markdown, we'd ideally use a markdown renderer
+            // For now, we'll use a simple pre element with a markdown class
+            container.className = 'formatted-content markdown';
+
+            // Use a pre element to preserve formatting
+            const pre = document.createElement('pre');
+            pre.textContent = resultContent;
+            container.appendChild(pre);
+        }
+        else if (resultType === 'html' || resultFormat === 'html') {
+            // For HTML content, use innerHTML
+            container.className = 'formatted-content html';
+            container.innerHTML = resultContent;
+        }
+        else {
+            // Default to text
+            container.className = 'formatted-content text';
+
+            // Check if result is a string or object
+            if (typeof resultContent === 'string') {
+                // Replace newlines with <br> elements for better display
+                const lines = resultContent.split('\n');
+                for (let i = 0; i < lines.length; i++) {
+                    const line = document.createTextNode(lines[i]);
+                    container.appendChild(line);
+                    if (i < lines.length - 1) {
+                        container.appendChild(document.createElement('br'));
+                    }
+                }
+            } else {
+                // For objects, display as formatted JSON
+                const pre = document.createElement('pre');
+                try {
+                    pre.textContent = JSON.stringify(resultContent, null, 2);
+                } catch (e) {
+                    pre.textContent = String(resultContent);
+                }
+                container.appendChild(pre);
+            }
+        }
+
+        return container;
     }
     
     /**

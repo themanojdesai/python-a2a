@@ -507,6 +507,12 @@ def create_workflow_blueprint():
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
+        # Check if we're executing multiple networks
+        if 'networks' in data:
+            # This is a multi-network execution request
+            return run_multiple_networks(data, executor, agent_registry, tool_registry)
+
+        # Single network execution
         # Check if required fields are present
         if 'nodes' not in data or 'connections' not in data:
             return jsonify({"error": "Invalid network data: missing nodes or connections"}), 400
@@ -514,6 +520,16 @@ def create_workflow_blueprint():
         if 'input' not in data:
             return jsonify({"error": "No input provided"}), 400
 
+        try:
+            # Execute a single network
+            return execute_single_network(data, agent_registry, tool_registry, executor)
+        except Exception as e:
+            logger.exception("Error executing network")
+            return jsonify({"error": f"Error executing network: {str(e)}"}), 500
+
+
+    def execute_single_network(data, agent_registry, tool_registry, executor):
+        """Execute a single network and return the results."""
         try:
             # Validate agents and tools in the network
             validation_errors = validate_network_nodes(data, agent_registry, tool_registry)
@@ -536,28 +552,28 @@ def create_workflow_blueprint():
 
             # Convert the UI network format to a Workflow object
             workflow = convert_network_data_to_workflow(configured_network)
-            
+
             # Get input data
             input_data = {'input': data['input']}
-            
+
             # Log start of execution
             logger.info(f"🔄 Starting execution of network with {len(workflow.nodes)} nodes")
-            
+
             # Execute the workflow with proper timing
             import time
             start_time = time.time()
-            
+
             # Execute the workflow
             results = executor.execute_workflow(workflow, input_data, wait=True)
-            
+
             # Calculate execution time
             execution_time = time.time() - start_time
             logger.info(f"⏱️ Network execution completed in {execution_time:.2f} seconds")
-            
+
             # Look for output from output nodes
             output = None
             output_type = "text"  # Default output type
-            
+
             if results:
                 # First check for 'output' key
                 if 'output' in results:
@@ -576,15 +592,15 @@ def create_workflow_blueprint():
                             output_type = value['type']
                             output = value.get('content', value)
                         break
-            
+
             logger.info(f"Network execution completed successfully with results: {results}")
-            
+
             # Process output based on type for better rendering
             formatted_output = {
                 "result": output if output is not None else "Execution completed but no output was generated.",
                 "type": output_type
             }
-            
+
             # Add additional formatting based on output type
             if output_type == "markdown" and isinstance(output, str):
                 # Keep the raw markdown for client-side rendering
@@ -600,12 +616,239 @@ def create_workflow_blueprint():
             elif output_type == "html" and isinstance(output, str):
                 # HTML content
                 formatted_output["format"] = "html"
-                
+
             # Return the formatted result
             return jsonify(formatted_output)
+
         except Exception as e:
-            logger.exception("Error executing network")
+            logger.exception("Error executing single network")
             return jsonify({"error": f"Error executing network: {str(e)}"}), 500
+
+
+    def run_multiple_networks(data, executor, agent_registry, tool_registry):
+        """Run multiple networks in sequence or parallel."""
+        try:
+            # Validate the overall request structure
+            if 'networks' not in data or not isinstance(data['networks'], list):
+                return jsonify({"error": "Invalid multi-network request: networks must be an array"}), 400
+
+            if 'input' not in data:
+                return jsonify({"error": "No input provided"}), 400
+
+            # Get execution mode
+            execution_mode = data.get('execution_mode', 'sequential')
+            if execution_mode not in ('sequential', 'parallel'):
+                return jsonify({"error": f"Invalid execution mode: {execution_mode}"}), 400
+
+            networks = data['networks']
+            if not networks:
+                return jsonify({"error": "No networks provided for execution"}), 400
+
+            # Get the initial input
+            initial_input = data['input']
+            logger.info(f"🔄 Starting execution of {len(networks)} networks in {execution_mode} mode")
+
+            # Execute based on mode
+            if execution_mode == 'sequential':
+                return execute_networks_sequentially(networks, initial_input, agent_registry, tool_registry, executor)
+            else:  # parallel mode
+                return execute_networks_in_parallel(networks, initial_input, agent_registry, tool_registry, executor)
+
+        except Exception as e:
+            logger.exception("Error in multi-network execution")
+            return jsonify({"error": f"Error in multi-network execution: {str(e)}"}), 500
+
+
+    def execute_networks_sequentially(networks, initial_input, agent_registry, tool_registry, executor):
+        """Execute multiple networks in sequence, passing output from one as input to the next."""
+        import time
+        import copy
+
+        current_input = initial_input
+        all_results = []
+        total_start_time = time.time()
+
+        try:
+            for i, network_info in enumerate(networks):
+                # Clone the network data to avoid modifying the original
+                network_data = copy.deepcopy(network_info.get('data', {}))
+
+                # Verify the network data
+                if not network_data or 'nodes' not in network_data or 'connections' not in network_data:
+                    logger.warning(f"Skipping invalid network at position {i}")
+                    all_results.append({
+                        "error": "Invalid network data: missing nodes or connections",
+                        "network_index": i
+                    })
+                    continue
+
+                # Add the current input to the network
+                network_data['input'] = current_input
+
+                # Execute the individual network
+                logger.info(f"Executing network {i+1} of {len(networks)}")
+                start_time = time.time()
+
+                try:
+                    # Execute a single network
+                    result = execute_single_network(network_data, agent_registry, tool_registry, executor)
+
+                    # Extract the result for the next network
+                    result_data = result.json
+                    execution_time = time.time() - start_time
+
+                    # Store the result
+                    network_result = {
+                        "network_index": i,
+                        "execution_time": execution_time,
+                        "result": result_data
+                    }
+                    all_results.append(network_result)
+
+                    # Update the input for the next network if there is one
+                    if result_data and "result" in result_data:
+                        current_input = result_data["result"]
+                    else:
+                        # If no valid result, pass through the previous input
+                        logger.warning(f"Network {i+1} did not produce a valid result, passing through previous input")
+
+                except Exception as e:
+                    logger.exception(f"Error executing network {i+1}")
+                    all_results.append({
+                        "network_index": i,
+                        "error": str(e)
+                    })
+
+            # Calculate total execution time
+            total_execution_time = time.time() - total_start_time
+            logger.info(f"⏱️ Sequential network execution completed in {total_execution_time:.2f} seconds")
+
+            # Format the overall result
+            final_output = {
+                "mode": "sequential",
+                "networks_count": len(networks),
+                "execution_time": total_execution_time,
+                "results": all_results,
+                # Use the latest result as the overall result
+                "result": current_input if all_results else "No results generated",
+                "type": "multi_network_output"
+            }
+
+            return jsonify(final_output)
+
+        except Exception as e:
+            logger.exception("Error in sequential network execution")
+            return jsonify({
+                "error": f"Error in sequential execution: {str(e)}",
+                "partial_results": all_results
+            }), 500
+
+
+    def execute_networks_in_parallel(networks, initial_input, agent_registry, tool_registry, executor):
+        """Execute multiple networks in parallel, with the same input."""
+        import time
+        import copy
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from flask import copy_current_request_context
+
+        all_results = []
+        total_start_time = time.time()
+        max_workers = min(len(networks), 5)  # Limit concurrent executions
+
+        try:
+            # Create a thread-safe results list
+            results_lock = threading.Lock()
+
+            # Capture the current application context
+            app_context = current_app._get_current_object().app_context()
+
+            @copy_current_request_context
+            def execute_network_thread(index, network_info):
+                # Use Flask's application context within the thread
+                with app_context:
+                    try:
+                        # Clone the network data to avoid modifying the original
+                        network_data = copy.deepcopy(network_info.get('data', {}))
+
+                        # Verify the network data
+                        if not network_data or 'nodes' not in network_data or 'connections' not in network_data:
+                            logger.warning(f"Skipping invalid network at position {index}")
+                            with results_lock:
+                                all_results.append({
+                                    "network_index": index,
+                                    "error": "Invalid network data: missing nodes or connections"
+                                })
+                            return
+
+                        # Add the input to the network
+                        network_data['input'] = initial_input
+
+                        # Execute the individual network
+                        logger.info(f"Executing network {index+1} in parallel")
+                        start_time = time.time()
+
+                        # Execute a single network
+                        result = execute_single_network(network_data, agent_registry, tool_registry, executor)
+
+                        # Extract the result
+                        result_data = result.json
+                        execution_time = time.time() - start_time
+
+                        # Store the result
+                        network_result = {
+                            "network_index": index,
+                            "execution_time": execution_time,
+                            "result": result_data
+                        }
+
+                        with results_lock:
+                            all_results.append(network_result)
+
+                    except Exception as e:
+                        logger.exception(f"Error executing network {index+1} in parallel")
+                        with results_lock:
+                            all_results.append({
+                                "network_index": index,
+                                "error": str(e)
+                            })
+
+            # Execute networks in parallel using a thread pool
+            with ThreadPoolExecutor(max_workers=max_workers) as thread_executor:
+                # Submit all networks for execution
+                futures = [thread_executor.submit(execute_network_thread, i, network_info)
+                          for i, network_info in enumerate(networks)]
+
+                # Wait for all to complete
+                for future in as_completed(futures):
+                    # The results are already stored in all_results
+                    pass
+
+            # Sort results by network index
+            all_results.sort(key=lambda x: x.get('network_index', 0))
+
+            # Calculate total execution time
+            total_execution_time = time.time() - total_start_time
+            logger.info(f"⏱️ Parallel network execution completed in {total_execution_time:.2f} seconds")
+
+            # Format the overall result
+            # For parallel execution, we return an array of all results
+            final_output = {
+                "mode": "parallel",
+                "networks_count": len(networks),
+                "execution_time": total_execution_time,
+                "results": all_results,
+                "type": "multi_network_output"
+            }
+
+            return jsonify(final_output)
+
+        except Exception as e:
+            logger.exception("Error in parallel network execution")
+            return jsonify({
+                "error": f"Error in parallel execution: {str(e)}",
+                "partial_results": all_results
+            }), 500
     
     @blueprint.route('/', methods=['GET'])
     def list_workflows():
