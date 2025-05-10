@@ -503,26 +503,37 @@ def create_workflow_blueprint():
         agent_registry = current_app.config['AGENT_REGISTRY']
         tool_registry = current_app.config['TOOL_REGISTRY']
         data = request.json
-        
+
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        
+
         # Check if required fields are present
         if 'nodes' not in data or 'connections' not in data:
             return jsonify({"error": "Invalid network data: missing nodes or connections"}), 400
-        
+
         if 'input' not in data:
             return jsonify({"error": "No input provided"}), 400
-        
+
         try:
             # Validate agents and tools in the network
             validation_errors = validate_network_nodes(data, agent_registry, tool_registry)
             if validation_errors:
                 return jsonify({"error": "Network validation failed", "errors": validation_errors}), 400
-            
+
+            # Store the network data for future reference if it has an ID
+            if 'id' in data:
+                network_storage = current_app.config.get('NETWORK_STORAGE', {})
+                if not current_app.config.get('NETWORK_STORAGE'):
+                    current_app.config['NETWORK_STORAGE'] = {}
+                    network_storage = current_app.config['NETWORK_STORAGE']
+
+                # Store the latest version
+                network_storage[data['id']] = data
+                logger.info(f"Stored network configuration with ID: {data['id']}")
+
             # Configure agents if needed
             configured_network = configure_network_agents(data, agent_registry)
-            
+
             # Convert the UI network format to a Workflow object
             workflow = convert_network_data_to_workflow(configured_network)
             
@@ -809,35 +820,63 @@ def validate_network_nodes(data, agent_registry, tool_registry):
 def configure_network_agents(data, agent_registry):
     """
     Configure agents in the network and register them in the agent registry.
-    
+
     Args:
         data: Network data from the UI
         agent_registry: Agent registry for registering configured agents
-        
+
     Returns:
         Updated network data with configured agent references
     """
     from ..models.agent import AgentDefinition, AgentSource, AgentStatus
-    
-    # Create a deep copy of the data to avoid modifying the original
     import copy
+    import time
+    import hashlib
+
+    # Create a deep copy of the data to avoid modifying the original
     network = copy.deepcopy(data)
-    
+
+    # Persistent agent storage - use agent config hash to identify and reuse agents
+    network_storage = getattr(current_app.config, 'NETWORK_STORAGE', {})
+    agent_cache = getattr(current_app.config, 'AGENT_CACHE', {})
+
+    # Initialize agent cache if it doesn't exist
+    if not hasattr(current_app.config, 'AGENT_CACHE'):
+        current_app.config['AGENT_CACHE'] = {}
+        agent_cache = current_app.config['AGENT_CACHE']
+
     # Configure and register agents
     for node in network['nodes']:
         if node['type'] == 'agent':
             agent_type = node.get('subType')
             config = node.get('config', {})
-            
-            # Create different agent definitions based on type
+
+            # Generate a unique hash for this configuration to identify identical configs
+            config_hash = None
+
             if agent_type == 'openai':
-                # Create an OpenAI agent
+                # Generate a hash of the important configuration parameters
+                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('model', '')}_{config.get('apiKey', '')}_{config.get('systemMessage', '')}"
+                config_hash = hashlib.md5(config_key.encode()).hexdigest()
+
+                # Check if we already have this agent configured
+                if config_hash in agent_cache:
+                    cached_agent = agent_cache[config_hash]
+                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
+
+                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
+                        # Reuse the existing agent
+                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
+                        node['config']['agent_id'] = cached_agent['agent_id']
+                        continue
+
+                # If not cached or not available, create a new agent
                 from python_a2a.server.llm.openai import OpenAIA2AServer
                 from python_a2a.server.a2a_server import A2AServer
-                
+
                 # Import necessary components
                 from python_a2a.models.agent import AgentCard, AgentSkill
-                
+
                 # Create agent card
                 agent_card = AgentCard(
                     name=config.get('name', 'OpenAI Agent'),
@@ -852,7 +891,7 @@ def configure_network_agents(data, agent_registry):
                         )
                     ]
                 )
-                
+
                 # Create server instance
                 openai_server = OpenAIA2AServer(
                     api_key=config.get('apiKey', ''),
@@ -860,33 +899,33 @@ def configure_network_agents(data, agent_registry):
                     temperature=0.7,
                     system_prompt=config.get('systemMessage', 'You are a helpful AI assistant.')
                 )
-                
+
                 # Create a properly wrapped OpenAI agent
                 class OpenAIAgent(A2AServer):
                     def __init__(self, openai_server, agent_card):
                         super().__init__(agent_card=agent_card)
                         self.openai_server = openai_server
-                    
+
                     def handle_message(self, message):
                         # Process the message with the OpenAI server
                         return self.openai_server.handle_message(message)
-                
+
                 # Create the wrapped agent
                 server = OpenAIAgent(openai_server, agent_card)
-                
+
                 # Start server on a random port
                 import socket
                 sock = socket.socket()
                 sock.bind(('', 0))
                 port = sock.getsockname()[1]
                 sock.close()
-                
+
                 # Update agent card URL with the actual port
                 agent_card.url = f"http://localhost:{port}"
 
                 # Register server with its URL
                 agent_url = f"http://localhost:{port}"
-                
+
                 # Create agent definition
                 agent = AgentDefinition(
                     name=config.get('name', 'OpenAI Agent'),
@@ -898,17 +937,28 @@ def configure_network_agents(data, agent_registry):
                         "apiKey": config.get('apiKey', ''),
                         "model": config.get('model', 'gpt-4'),
                         "temperature": 0.7,
+                        "systemMessage": config.get('systemMessage', 'You are a helpful AI assistant.'),
                         "server": server,
                         "port": port
                     }
                 )
-                
+
                 # Register the agent
                 agent_registry.register(agent)
-                
+
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
-                
+
+                # Cache this agent configuration for future reuse
+                agent_cache[config_hash] = {
+                    'agent_id': agent.id,
+                    'name': config.get('name', 'OpenAI Agent'),
+                    'type': agent_type,
+                    'model': config.get('model', 'gpt-4'),
+                    'port': port,
+                    'created_at': time.time()
+                }
+
                 # Start the server in a background thread
                 import threading
                 def run_server():
@@ -917,18 +967,33 @@ def configure_network_agents(data, agent_registry):
                         a2a_run_server(server, host="0.0.0.0", port=port)
                     except Exception as e:
                         logger.error(f"Error starting agent server: {e}")
-                
+
                 server_thread = threading.Thread(target=run_server, daemon=True)
                 server_thread.start()
-                
+
             elif agent_type == 'anthropic':
-                # Create an Anthropic agent
+                # Generate a hash of the important configuration parameters
+                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('model', '')}_{config.get('apiKey', '')}_{config.get('systemMessage', '')}"
+                config_hash = hashlib.md5(config_key.encode()).hexdigest()
+
+                # Check if we already have this agent configured
+                if config_hash in agent_cache:
+                    cached_agent = agent_cache[config_hash]
+                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
+
+                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
+                        # Reuse the existing agent
+                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
+                        node['config']['agent_id'] = cached_agent['agent_id']
+                        continue
+
+                # If not cached or not available, create a new agent
                 from python_a2a.server.llm.anthropic import AnthropicA2AServer
                 from python_a2a.server.a2a_server import A2AServer
-                
+
                 # Import necessary components
                 from python_a2a.models.agent import AgentCard, AgentSkill
-                
+
                 # Create agent card
                 agent_card = AgentCard(
                     name=config.get('name', 'Claude Agent'),
@@ -943,40 +1008,40 @@ def configure_network_agents(data, agent_registry):
                         )
                     ]
                 )
-                
+
                 # Create server instance
                 anthropic_server = AnthropicA2AServer(
                     api_key=config.get('apiKey', ''),
                     model=config.get('model', 'claude-3-opus'),
                     system_prompt=config.get('systemMessage', 'You are Claude, an AI assistant by Anthropic.')
                 )
-                
+
                 # Create a properly wrapped Anthropic agent
                 class AnthropicAgent(A2AServer):
                     def __init__(self, anthropic_server, agent_card):
                         super().__init__(agent_card=agent_card)
                         self.anthropic_server = anthropic_server
-                    
+
                     def handle_message(self, message):
                         # Process the message with the Anthropic server
                         return self.anthropic_server.handle_message(message)
-                
+
                 # Create the wrapped agent
                 server = AnthropicAgent(anthropic_server, agent_card)
-                
+
                 # Start server on a random port
                 import socket
                 sock = socket.socket()
                 sock.bind(('', 0))
                 port = sock.getsockname()[1]
                 sock.close()
-                
+
                 # Update agent card URL with the actual port
                 agent_card.url = f"http://localhost:{port}"
 
                 # Register server with its URL
                 agent_url = f"http://localhost:{port}"
-                
+
                 # Create agent definition
                 agent = AgentDefinition(
                     name=config.get('name', 'Claude Agent'),
@@ -987,17 +1052,28 @@ def configure_network_agents(data, agent_registry):
                     config={
                         "apiKey": config.get('apiKey', ''),
                         "model": config.get('model', 'claude-3-opus'),
+                        "systemMessage": config.get('systemMessage', 'You are Claude, an AI assistant by Anthropic.'),
                         "server": server,
                         "port": port
                     }
                 )
-                
+
                 # Register the agent
                 agent_registry.register(agent)
-                
+
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
-                
+
+                # Cache this agent configuration for future reuse
+                agent_cache[config_hash] = {
+                    'agent_id': agent.id,
+                    'name': config.get('name', 'Claude Agent'),
+                    'type': agent_type,
+                    'model': config.get('model', 'claude-3-opus'),
+                    'port': port,
+                    'created_at': time.time()
+                }
+
                 # Start the server in a background thread
                 import threading
                 def run_server():
@@ -1006,18 +1082,33 @@ def configure_network_agents(data, agent_registry):
                         a2a_run_server(server, host="0.0.0.0", port=port)
                     except Exception as e:
                         logger.error(f"Error starting agent server: {e}")
-                
+
                 server_thread = threading.Thread(target=run_server, daemon=True)
                 server_thread.start()
                 
             elif agent_type == 'bedrock':
-                # Create a Bedrock agent
+                # Generate a hash of the important configuration parameters
+                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('model', '')}_{config.get('accessKey', '')}_{config.get('secretKey', '')}_{config.get('region', '')}_{config.get('systemMessage', '')}"
+                config_hash = hashlib.md5(config_key.encode()).hexdigest()
+
+                # Check if we already have this agent configured
+                if config_hash in agent_cache:
+                    cached_agent = agent_cache[config_hash]
+                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
+
+                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
+                        # Reuse the existing agent
+                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
+                        node['config']['agent_id'] = cached_agent['agent_id']
+                        continue
+
+                # If not cached or not available, create a new agent
                 from python_a2a.server.llm.bedrock import BedrockA2AServer
                 from python_a2a.server.a2a_server import A2AServer
-                
+
                 # Import necessary components
                 from python_a2a.models.agent import AgentCard, AgentSkill
-                
+
                 # Create agent card
                 agent_card = AgentCard(
                     name=config.get('name', 'Bedrock Agent'),
@@ -1032,7 +1123,7 @@ def configure_network_agents(data, agent_registry):
                         )
                     ]
                 )
-                
+
                 # Create server instance
                 bedrock_server = BedrockA2AServer(
                     aws_access_key_id=config.get('accessKey', ''),
@@ -1041,33 +1132,33 @@ def configure_network_agents(data, agent_registry):
                     model_id=config.get('model', 'anthropic.claude-3-sonnet-20240229-v1:0'),
                     system_prompt=config.get('systemMessage', 'You are an AI assistant.')
                 )
-                
+
                 # Create a properly wrapped Bedrock agent
                 class BedrockAgent(A2AServer):
                     def __init__(self, bedrock_server, agent_card):
                         super().__init__(agent_card=agent_card)
                         self.bedrock_server = bedrock_server
-                    
+
                     def handle_message(self, message):
                         # Process the message with the Bedrock server
                         return self.bedrock_server.handle_message(message)
-                
+
                 # Create the wrapped agent
                 server = BedrockAgent(bedrock_server, agent_card)
-                
+
                 # Start server on a random port
                 import socket
                 sock = socket.socket()
                 sock.bind(('', 0))
                 port = sock.getsockname()[1]
                 sock.close()
-                
+
                 # Update agent card URL with the actual port
                 agent_card.url = f"http://localhost:{port}"
 
                 # Register server with its URL
                 agent_url = f"http://localhost:{port}"
-                
+
                 # Create agent definition
                 agent = AgentDefinition(
                     name=config.get('name', 'Bedrock Agent'),
@@ -1080,17 +1171,28 @@ def configure_network_agents(data, agent_registry):
                         "secretKey": config.get('secretKey', ''),
                         "region": config.get('region', 'us-east-1'),
                         "model": config.get('model', 'anthropic.claude-3-sonnet-20240229-v1:0'),
+                        "systemMessage": config.get('systemMessage', 'You are an AI assistant.'),
                         "server": server,
                         "port": port
                     }
                 )
-                
+
                 # Register the agent
                 agent_registry.register(agent)
-                
+
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
-                
+
+                # Cache this agent configuration for future reuse
+                agent_cache[config_hash] = {
+                    'agent_id': agent.id,
+                    'name': config.get('name', 'Bedrock Agent'),
+                    'type': agent_type,
+                    'model': config.get('model', 'anthropic.claude-3-sonnet-20240229-v1:0'),
+                    'port': port,
+                    'created_at': time.time()
+                }
+
                 # Start the server in a background thread
                 import threading
                 def run_server():
@@ -1099,15 +1201,30 @@ def configure_network_agents(data, agent_registry):
                         a2a_run_server(server, host="0.0.0.0", port=port)
                     except Exception as e:
                         logger.error(f"Error starting agent server: {e}")
-                
+
                 server_thread = threading.Thread(target=run_server, daemon=True)
                 server_thread.start()
                 
             elif agent_type == 'custom':
+                # Generate a hash of the important configuration parameters
+                config_key = f"{agent_type}_{config.get('name', '')}_{config.get('endpoint', '')}_{config.get('port', '')}"
+                config_hash = hashlib.md5(config_key.encode()).hexdigest()
+
+                # Check if we already have this agent configured
+                if config_hash in agent_cache:
+                    cached_agent = agent_cache[config_hash]
+                    cached_agent_obj = agent_registry.get(cached_agent['agent_id'])
+
+                    if cached_agent_obj and cached_agent_obj.status == AgentStatus.CONNECTED:
+                        # Reuse the existing agent
+                        logger.info(f"Reusing existing agent configuration: {cached_agent['name']}")
+                        node['config']['agent_id'] = cached_agent['agent_id']
+                        continue
+
                 # For custom agents, use the provided endpoint
                 endpoint = config.get('endpoint')
                 port = config.get('port')
-                
+
                 if endpoint:
                     agent_url = endpoint
                 elif port:
@@ -1115,7 +1232,7 @@ def configure_network_agents(data, agent_registry):
                 else:
                     # Skip if neither is provided
                     continue
-                
+
                 # Create agent definition
                 agent = AgentDefinition(
                     name=config.get('name', 'Custom Agent'),
@@ -1124,13 +1241,23 @@ def configure_network_agents(data, agent_registry):
                     agent_source=AgentSource.CUSTOM,
                     agent_type="custom"
                 )
-                
+
                 # Register the agent
                 agent_registry.register(agent)
-                
+
                 # Update the node config with agent_id
                 node['config']['agent_id'] = agent.id
-                
+
+                # Cache this agent configuration for future reuse
+                agent_cache[config_hash] = {
+                    'agent_id': agent.id,
+                    'name': config.get('name', 'Custom Agent'),
+                    'type': agent_type,
+                    'endpoint': endpoint,
+                    'port': port,
+                    'created_at': time.time()
+                }
+
                 # For custom agents, we don't need to start a server
                 # as they are already running somewhere else
     

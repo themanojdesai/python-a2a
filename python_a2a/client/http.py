@@ -69,6 +69,15 @@ class A2AClient(BaseA2AClient):
                 url=self.endpoint_url,
                 version="unknown"
             )
+            
+    def get_agent_card(self) -> AgentCard:
+        """
+        Get the agent card for this client.
+        
+        Returns:
+            The agent card for the connected agent
+        """
+        return self.agent_card
     
     def _extract_json_from_html(self, html_content: str) -> Dict[str, Any]:
         """Extract JSON data from HTML content, typically when agent card is rendered as HTML"""
