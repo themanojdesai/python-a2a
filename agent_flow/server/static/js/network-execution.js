@@ -820,40 +820,53 @@ function showExecutionResults(dialog, data) {
     }
     // Handle single network output
     else if (data.result !== undefined) {
-        const outputDiv = document.createElement('div');
-        outputDiv.className = 'single-result';
+        const resultsWrapper = document.createElement('div');
+        resultsWrapper.className = 'single-network-result';
+
+        // Create styled success header
+        const successHeader = document.createElement('div');
+        successHeader.className = 'success-header';
+        successHeader.innerHTML = `
+            <div class="success-icon">
+                <i class="bi bi-check-circle-fill"></i>
+            </div>
+            <div class="success-title">Network Execution Successful</div>
+        `;
+        resultsWrapper.appendChild(successHeader);
+
+        // Add content with proper styling
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'result-content-wrapper';
 
         if (data.error) {
-            outputDiv.className += ' error';
-            outputDiv.textContent = `Error: ${data.error}`;
-        } else {
-            outputDiv.innerHTML = `
-                <div class="single-result-header">
-                    <i class="bi bi-check-circle-fill"></i>
-                    Network Execution Successful
+            contentDiv.className += ' error';
+            contentDiv.innerHTML = `
+                <div class="error-message">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>Error: ${data.error}</span>
                 </div>
             `;
-
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'single-result-content';
+        } else {
+            const resultContentDiv = document.createElement('div');
+            resultContentDiv.className = 'result-content';
 
             // Format based on type
             if (typeof data.result === 'string') {
-                contentDiv.textContent = data.result;
+                resultContentDiv.textContent = data.result;
             } else {
                 try {
                     const pre = document.createElement('pre');
                     pre.textContent = JSON.stringify(data.result, null, 2);
-                    contentDiv.appendChild(pre);
+                    resultContentDiv.appendChild(pre);
                 } catch (e) {
-                    contentDiv.textContent = String(data.result);
+                    resultContentDiv.textContent = String(data.result);
                 }
             }
-
-            outputDiv.appendChild(contentDiv);
+            contentDiv.appendChild(resultContentDiv);
         }
 
-        resultContainer.appendChild(outputDiv);
+        resultsWrapper.appendChild(contentDiv);
+        resultContainer.appendChild(resultsWrapper);
     }
     // Error case
     else if (data.error) {
