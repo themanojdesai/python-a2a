@@ -3293,7 +3293,18 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // TODO: Implement server-side saving
         console.log('Network data to save:', networkData);
-        alert('Save functionality will be implemented in the next phase.');
+
+        // Show a modern notification instead of an alert
+        showNotification('Coming Soon: Network saving functionality will be available in the next phase.', 'info');
+
+        // Add a visual feedback animation to the save button
+        const saveBtn = document.getElementById('floating-save-btn');
+        saveBtn.classList.add('save-success');
+
+        // Remove the animation class after it completes
+        setTimeout(() => {
+            saveBtn.classList.remove('save-success');
+        }, 1500);
     }
     
     /**
@@ -4504,27 +4515,27 @@ document.addEventListener('DOMContentLoaded', function() {
      * @param {string} message - The notification message
      * @param {string} type - The type of notification (info, success, warning, error)
      */
-    function showNotification(message, type = 'info') {
+    function showNotification(message, type = 'info', duration = 4000) {
         // Check if notification container exists
         let notificationContainer = document.getElementById('notification-container');
-        
+
         if (!notificationContainer) {
             notificationContainer = document.createElement('div');
             notificationContainer.id = 'notification-container';
             document.body.appendChild(notificationContainer);
         }
-        
+
         // Create notification
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
-        
+
         const iconMap = {
-            info: 'info-circle',
-            success: 'check-circle',
-            warning: 'exclamation-triangle',
-            error: 'x-circle'
+            info: 'info-circle-fill',
+            success: 'check-circle-fill',
+            warning: 'exclamation-triangle-fill',
+            error: 'x-circle-fill'
         };
-        
+
         notification.innerHTML = `
             <div class="notification-icon">
                 <i class="bi bi-${iconMap[type]}"></i>
@@ -4549,17 +4560,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 300);
         });
         
-        // Auto-dismiss after a delay
-        setTimeout(() => {
-            if (notification.parentNode === notificationContainer) {
-                notification.classList.add('closing');
-                setTimeout(() => {
-                    if (notification.parentNode === notificationContainer) {
-                        notificationContainer.removeChild(notification);
-                    }
-                }, 300);
-            }
-        }, 5000);
+        // Auto-dismiss after a delay (use shorter time for success/info, longer for warnings, no auto-dismiss for errors)
+        const dismissDelay = type === 'error' ? 0 : // Don't auto-dismiss errors
+                            type === 'warning' ? 7000 : // Longer time for warnings
+                            type === 'success' ? 3000 : 4000; // Shorter for success/info
+
+        if (dismissDelay > 0) {
+            setTimeout(() => {
+                if (notification.parentNode === notificationContainer) {
+                    notification.classList.add('closing');
+                    setTimeout(() => {
+                        if (notification.parentNode === notificationContainer) {
+                            notificationContainer.removeChild(notification);
+                        }
+                    }, 300);
+                }
+            }, dismissDelay);
+        }
     }
     
     /**

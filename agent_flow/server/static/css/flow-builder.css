@@ -386,6 +386,32 @@ body {
   animation: pulse-save 2s infinite;
 }
 
+.control-btn.save-btn.save-success {
+  background-color: var(--success);
+  animation: save-success-animation 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: scale(1.08);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
+}
+
+@keyframes save-success-animation {
+  0% {
+    transform: scale(1);
+    background-color: var(--primary);
+  }
+  15% {
+    transform: scale(1.15);
+    background-color: var(--success);
+  }
+  30% {
+    transform: scale(1.08);
+    background-color: var(--success);
+  }
+  100% {
+    transform: scale(1);
+    background-color: var(--primary);
+  }
+}
+
 @keyframes pulse-save {
   0% {
     box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
@@ -2019,20 +2045,24 @@ body {
   right: 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   z-index: 1000;
-  max-width: 320px;
+  max-width: 360px;
+  pointer-events: none; /* Allow clicks to pass through container */
 }
 
 .notification {
   display: flex;
-  align-items: flex-start;
-  background-color: var(--surface);
-  border-radius: 8px;
+  align-items: center;
+  background-color: rgba(18, 18, 18, 0.92);
+  border-radius: 10px;
   padding: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  animation: slideIn 0.3s ease forwards;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  backdrop-filter: blur(10px);
   border-left: 3px solid var(--primary);
+  pointer-events: auto; /* Restore pointer events for the notification itself */
+  transform-origin: right center;
 }
 
 .notification.closing {
@@ -2052,59 +2082,84 @@ body {
 }
 
 .notification-icon {
-  margin-right: 12px;
-  font-size: 18px;
+  margin-right: 14px;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
 }
 
 .notification.info .notification-icon {
   color: var(--primary);
+  background-color: rgba(59, 130, 246, 0.15);
 }
 
 .notification.success .notification-icon {
   color: var(--success);
+  background-color: rgba(16, 185, 129, 0.15);
 }
 
 .notification.warning .notification-icon {
   color: var(--warning);
+  background-color: rgba(245, 158, 11, 0.15);
 }
 
 .notification.error .notification-icon {
   color: var(--danger);
+  background-color: rgba(239, 68, 68, 0.15);
 }
 
 .notification-content {
   flex: 1;
+  padding-right: 8px;
 }
 
 .notification-content p {
   margin: 0;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
 }
 
 .notification-close {
   background: none;
   border: none;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
   font-size: 16px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   margin-left: 12px;
-  transition: color 0.2s ease;
+  transition: all 0.2s ease;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .notification-close:hover {
   color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
 }
 
 @keyframes slideIn {
   from {
-    transform: translateX(100%);
+    transform: translateX(30px);
     opacity: 0;
+    scale: 0.9;
   }
   to {
     transform: translateX(0);
     opacity: 1;
+    scale: 1;
   }
 }
 
@@ -2112,10 +2167,12 @@ body {
   from {
     transform: translateX(0);
     opacity: 1;
+    scale: 1;
   }
   to {
-    transform: translateX(100%);
+    transform: translateX(30px);
     opacity: 0;
+    scale: 0.9;
   }
 }
 
