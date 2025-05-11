@@ -489,6 +489,11 @@ body {
   color: var(--success);
 }
 
+.node.router .node-header {
+  background-color: rgba(139, 92, 246, 0.1); /* Purple tint */
+  color: #8b5cf6; /* Purple */
+}
+
 .node.input .node-header {
   background-color: rgba(245, 158, 11, 0.1);
   color: var(--warning);
@@ -554,6 +559,198 @@ body {
 
 .agent-model {
   color: var(--primary);
+}
+
+.router-strategy {
+  color: #8b5cf6; /* Purple */
+}
+
+/* Router specific styles */
+.node.router .output-ports-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-port-container {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.add-port-btn {
+  background-color: transparent;
+  border: 1px dashed #8b5cf6;
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: #8b5cf6;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.add-port-btn:hover {
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.add-port-btn i {
+  font-size: 14px;
+}
+
+/* Pattern rows for router config */
+.pattern-row, .mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pattern-row .pattern-input,
+.mapping-row .content-type-input {
+  flex: 2;
+}
+
+.pattern-row .port-select,
+.mapping-row .port-select {
+  flex: 1;
+}
+
+.pattern-row .remove-pattern-btn,
+.mapping-row .remove-mapping-btn {
+  background-color: var(--danger);
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  font-size: 12px;
+}
+
+.weight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.weight-row label {
+  flex: 1;
+}
+
+.weight-row .weight-input {
+  flex: 1;
+  max-width: 80px;
+}
+
+/* Connection port number */
+.port-number-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.router-strategy {
+  color: #8b5cf6; /* Purple */
+}
+
+/* Router specific styles */
+.node.router .output-ports-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-port-container {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.add-port-btn {
+  background-color: transparent;
+  border: 1px dashed #8b5cf6;
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: #8b5cf6;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.add-port-btn:hover {
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.add-port-btn i {
+  font-size: 14px;
+}
+
+/* Pattern rows for router config */
+.pattern-row, .mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pattern-row .pattern-input,
+.mapping-row .content-type-input {
+  flex: 2;
+}
+
+.pattern-row .port-select,
+.mapping-row .port-select {
+  flex: 1;
+}
+
+.pattern-row .remove-pattern-btn,
+.mapping-row .remove-mapping-btn {
+  background-color: var(--danger);
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  font-size: 12px;
+}
+
+.weight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.weight-row label {
+  flex: 1;
+}
+
+.weight-row .weight-input {
+  flex: 1;
+  max-width: 80px;
+}
+
+/* Connection port number */
+.port-number-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
 }
 
 .node-ports {
@@ -768,7 +965,7 @@ body {
   opacity: 0.6;
 }
 
-.agent-specific-config {
+.agent-specific-config, .strategy-specific-config {
   display: none;
   margin-top: 16px;
   padding-top: 16px;
@@ -825,6 +1022,26 @@ body {
 
 .success-btn:hover {
   background-color: var(--success-hover);
+}
+
+.small-btn {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background-color: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.small-btn:hover {
+  background-color: var(--surface-hover);
 }
 
 /* Modal */

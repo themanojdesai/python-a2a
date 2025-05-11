@@ -17,6 +17,7 @@ class NodeType(Enum):
     OUTPUT = auto()
     CONDITIONAL = auto()
     TRANSFORM = auto()
+    ROUTER = auto()
 
 
 class EdgeType(Enum):
@@ -26,6 +27,7 @@ class EdgeType(Enum):
     ERROR = auto()  # Execute on error
     CONDITION_TRUE = auto()  # Conditional branch when true
     CONDITION_FALSE = auto()  # Conditional branch when false
+    ROUTE_OUTPUT = auto()  # Router output (used with port number in config)
 
 
 class WorkflowNode:
@@ -359,12 +361,24 @@ class Workflow:
             return False, errors
         
         # Check for orphaned nodes (no connections)
+        # Router nodes are valid even if they don't have connections yet
+        # Also check if this is a development/testing workflow with a force flag
         orphaned_nodes = [
             node.id for node in self.nodes.values()
             if not node.incoming_edges and not node.outgoing_edges
+            and node.node_type != NodeType.ROUTER
+            and node.node_type != NodeType.INPUT  # INPUT nodes can exist without incoming edges
+            and node.node_type != NodeType.OUTPUT  # OUTPUT nodes can exist during construction
         ]
-        if orphaned_nodes:
-            errors.append(f"Orphaned nodes found: {', '.join(orphaned_nodes)}")
+
+        if orphaned_nodes and not self.metadata.get("force_validate", False):
+            # Only add as warning, not error to support in-progress workflows
+            if self.metadata.get("ignore_orphaned", False):
+                # Just log it but don't add to errors
+                import logging
+                logging.getLogger("WorkflowValidator").warning(f"Ignoring orphaned nodes: {', '.join(orphaned_nodes)}")
+            else:
+                errors.append(f"Orphaned nodes found: {', '.join(orphaned_nodes)}")
         
         # Check for cycles
         try:

@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ioCards.forEach(card => {
             card.addEventListener('dragstart', (e) => {
                 draggedCard = {
-                    type: card.getAttribute('data-type'), // 'input' or 'output'
+                    type: card.getAttribute('data-type'), // 'input', 'output', or 'router'
                     element: card
                 };
                 
@@ -402,6 +402,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     typeName = 'Database';
                     icon = 'database';
                     break;
+                case 'router':
+                    typeName = 'Router';
+                    icon = 'signpost-split';
+                    break;
             }
             
             nodeElement.innerHTML = `
@@ -456,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         } else if (cardData.type === 'output') {
             nodeElement.classList.add('output');
-            
+
             nodeElement.innerHTML = `
                 <div class="node-header">
                     <div class="node-title">
@@ -478,8 +482,98 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
             `;
+        } else if (cardData.type === 'router') {
+            nodeElement.classList.add('router');
+
+            // Generate output port HTML for 2 default ports
+            let outputPortsHTML = '';
+            for (let i = 0; i < 2; i++) {
+                outputPortsHTML += `
+                    <div class="output-port" data-port-number="${i}">
+                        <span class="port-label">Output ${i + 1}</span>
+                        <div class="port port-right" data-port-type="output" data-port-number="${i}"></div>
+                    </div>
+                `;
+            }
+
+            nodeElement.innerHTML = `
+                <div class="node-header">
+                    <div class="node-title">
+                        <i class="bi bi-signpost-split"></i>
+                        <span>Router</span>
+                    </div>
+                    <div class="node-actions">
+                        <button class="node-btn configure-node" title="Configure"><i class="bi bi-gear"></i></button>
+                        <button class="node-btn delete-node" title="Delete"><i class="bi bi-trash"></i></button>
+                    </div>
+                </div>
+                <div class="node-content">
+                    <div>Route messages dynamically</div>
+                    <div class="node-badge router-strategy">Keyword Routing</div>
+                </div>
+                <div class="node-ports">
+                    <div class="input-port">
+                        <div class="port port-left" data-port-type="input"></div>
+                        <span class="port-label">Input</span>
+                    </div>
+                    <div class="output-ports-container">
+                        ${outputPortsHTML}
+                    </div>
+                </div>
+                <div class="add-port-container">
+                    <button class="add-port-btn"><i class="bi bi-plus-circle"></i> Add Output</button>
+                </div>
+            `;
+
+            // Add listener to the "Add Output" button
+            nodeElement.addEventListener('DOMNodeInserted', function() {
+                const addPortBtn = nodeElement.querySelector('.add-port-btn');
+                if (addPortBtn) {
+                    addPortBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+
+                        // Get the current number of output ports
+                        const outputPortsContainer = nodeElement.querySelector('.output-ports-container');
+                        const currentPorts = outputPortsContainer.querySelectorAll('.output-port').length;
+
+                        // Create a new output port
+                        const newPortNumber = currentPorts;
+                        const newPortElement = document.createElement('div');
+                        newPortElement.className = 'output-port';
+                        newPortElement.setAttribute('data-port-number', newPortNumber);
+                        newPortElement.innerHTML = `
+                            <span class="port-label">Output ${newPortNumber + 1}</span>
+                            <div class="port port-right" data-port-type="output" data-port-number="${newPortNumber}"></div>
+                        `;
+
+                        // Add the new port to the container
+                        outputPortsContainer.appendChild(newPortElement);
+
+                        // Find the node data
+                        const nodeData = nodes.find(n => n.id === nodeElement.id);
+                        if (nodeData) {
+                            // Initialize outputPorts if it doesn't exist
+                            if (!nodeData.config.outputPorts) {
+                                nodeData.config.outputPorts = 2; // Default starting with 2
+                            }
+
+                            // Update the count
+                            nodeData.config.outputPorts = currentPorts + 1;
+
+                            // Add port event listeners
+                            const portEl = newPortElement.querySelector('.port');
+                            if (portEl) {
+                                initNodeEvents(nodeElement, nodeData);
+                            }
+                        }
+
+                        // Update connections
+                        updateConnections();
+                    });
+                }
+            });
         }
-        
+
         // Position the node
         nodeElement.style.left = `${x}px`;
         nodeElement.style.top = `${y}px`;
@@ -488,16 +582,34 @@ document.addEventListener('DOMContentLoaded', function() {
         nodeContainer.appendChild(nodeElement);
         
         // Store node data
+        // Initialize node data with appropriate defaults
         const nodeData = {
             id: nodeId,
             element: nodeElement,
             type: cardData.type,
-            subType: cardData.type === 'agent' ? cardData.agentType : 
+            subType: cardData.type === 'agent' ? cardData.agentType :
                    (cardData.type === 'tool' ? cardData.toolType : null),
             position: { x, y },
             config: {}
         };
-        
+
+        // Add type-specific default configuration
+        if (cardData.type === 'router') {
+            nodeData.config = {
+                name: 'Router',
+                routingStrategy: 'keyword',
+                outputPorts: 2,
+                keywordPatterns: [
+                    { keyword: 'default', port: 0 }
+                ],
+                portWeights: { 0: 1.0, 1: 1.0 },
+                contentTypeMappings: [
+                    { contentType: 'text', port: 0 },
+                    { contentType: 'json', port: 1 }
+                ]
+            };
+        }
+
         nodes.push(nodeData);
         
         // Add event listeners to the node
@@ -640,9 +752,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const startX = (portRect.left + portRect.width / 2 - canvasRect.left - canvasOffset.x) / canvasScale;
                 const startY = (portRect.top + portRect.height / 2 - canvasRect.top - canvasOffset.y) / canvasScale;
                 
+                // Check if this is a router output port (they have port numbers)
+                const portNumber = port.getAttribute('data-port-number');
+
                 connectionStart = {
                     nodeId: nodeData.id,
                     port: portType,
+                    portNumber: portNumber, // Will be undefined for non-router ports
                     x: startX,
                     y: startY
                 };
@@ -673,9 +789,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     const endX = (portRect.left + portRect.width / 2 - canvasRect.left - canvasOffset.x) / canvasScale;
                     const endY = (portRect.top + portRect.height / 2 - canvasRect.top - canvasOffset.y) / canvasScale;
                     
+                    // Check if this is a router output port (they have port numbers)
+                    const portNumber = port.getAttribute('data-port-number');
+
                     connectionEnd = {
                         nodeId: nodeData.id,
                         port: portType,
+                        portNumber: portNumber, // Will be undefined for non-router ports
                         x: endX,
                         y: endY
                     };
@@ -792,12 +912,14 @@ document.addEventListener('DOMContentLoaded', function() {
             start: {
                 nodeId: start.nodeId,
                 port: start.port,
+                portNumber: start.portNumber, // For router output ports
                 x: start.x,
                 y: start.y
             },
             end: {
                 nodeId: end.nodeId,
                 port: end.port,
+                portNumber: end.portNumber, // For router output ports
                 x: end.x,
                 y: end.y
             }
@@ -935,25 +1057,44 @@ document.addEventListener('DOMContentLoaded', function() {
         const configPanel = document.getElementById('config-panel');
         const configTitle = document.getElementById('config-title');
         const nodeNameInput = document.getElementById('node-name');
-        
-        // Set title based on node type
-        configTitle.textContent = nodeData.type === 'agent' ? 'Configure Agent' : 'Configure Tool';
-        
-        // Set current node name or default
-        nodeNameInput.value = nodeData.config.name || '';
-        
+
         // Hide all config sections first
-        document.querySelectorAll('.agent-specific-config').forEach(section => {
+        document.querySelectorAll('.agent-specific-config, .strategy-specific-config').forEach(section => {
             section.style.display = 'none';
         });
-        
-        // Show appropriate config section for agent type
-        if (nodeData.type === 'agent') {
+
+        // Set title and current node name
+        if (nodeData.type === 'router') {
+            configTitle.textContent = 'Configure Router';
+            nodeNameInput.value = nodeData.config.name || 'Router';
+
+            // Show router config section
+            const routerConfig = document.getElementById('router-config');
+            if (routerConfig) {
+                routerConfig.style.display = 'block';
+
+                // Set router strategy
+                const strategySelect = document.getElementById('router-strategy');
+                const strategy = nodeData.config.routingStrategy || 'keyword';
+                strategySelect.value = strategy;
+
+                // Show appropriate strategy-specific config
+                showRoutingStrategyConfig(strategy, nodeData.config);
+
+                // Set up change listener for strategy select
+                strategySelect.onchange = function() {
+                    showRoutingStrategyConfig(this.value, nodeData.config);
+                };
+            }
+        } else if (nodeData.type === 'agent') {
+            configTitle.textContent = 'Configure Agent';
+            nodeNameInput.value = nodeData.config.name || '';
+
             const configSection = document.getElementById(`${nodeData.subType}-config`);
             if (configSection) {
                 configSection.style.display = 'block';
             }
-            
+
             // Fill in saved config values
             if (nodeData.subType === 'openai') {
                 document.getElementById('openai-api-key').value = nodeData.config.apiKey || '';
@@ -975,6 +1116,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('agent-script').value = nodeData.config.script || '';
             }
         } else {
+            configTitle.textContent = 'Configure Tool';
+            nodeNameInput.value = nodeData.config.name || '';
             // Tool configuration will be implemented in the next phase
         }
         
@@ -988,6 +1131,229 @@ document.addEventListener('DOMContentLoaded', function() {
     function hideConfigPanel() {
         const configPanel = document.getElementById('config-panel');
         configPanel.classList.remove('open');
+    }
+
+    /**
+     * Show configuration options for the selected routing strategy
+     * @param {string} strategy - The selected routing strategy
+     * @param {Object} config - The current node configuration
+     */
+    function showRoutingStrategyConfig(strategy, config) {
+        // Hide all strategy-specific configs first
+        document.querySelectorAll('.strategy-specific-config').forEach(section => {
+            section.style.display = 'none';
+        });
+
+        // Show the appropriate strategy config section
+        switch (strategy) {
+            case 'ai':
+                const aiConfig = document.getElementById('ai-routing-config');
+                if (aiConfig) {
+                    aiConfig.style.display = 'block';
+
+                    // Set saved values
+                    const promptInput = document.getElementById('ai-router-prompt');
+                    if (promptInput) {
+                        promptInput.value = config.aiRouterPrompt || 'Examine the message content and route to the appropriate destination based on the output ports available.';
+                    }
+                }
+                break;
+
+            case 'keyword':
+                const keywordConfig = document.getElementById('keyword-routing-config');
+                if (keywordConfig) {
+                    keywordConfig.style.display = 'block';
+
+                    // Populate keyword patterns
+                    const patternsContainer = document.getElementById('keyword-patterns-container');
+                    if (patternsContainer) {
+                        // Clear existing patterns
+                        patternsContainer.innerHTML = '';
+
+                        // Add saved patterns or create a default empty one
+                        const patterns = config.keywordPatterns || [];
+                        if (patterns.length > 0) {
+                            patterns.forEach(pattern => {
+                                addKeywordPatternRow(patternsContainer, pattern.keyword, pattern.port);
+                            });
+                        } else {
+                            addKeywordPatternRow(patternsContainer, '', 0);
+                        }
+
+                        // Set up "Add Pattern" button
+                        const addPatternBtn = document.getElementById('add-keyword-pattern');
+                        if (addPatternBtn) {
+                            addPatternBtn.onclick = function() {
+                                addKeywordPatternRow(patternsContainer, '', 0);
+                            };
+                        }
+                    }
+                }
+                break;
+
+            case 'random':
+                const randomConfig = document.getElementById('random-routing-config');
+                if (randomConfig) {
+                    randomConfig.style.display = 'block';
+
+                    // Populate port weights
+                    const weightsContainer = document.getElementById('port-weights-container');
+                    if (weightsContainer) {
+                        // Clear existing weights
+                        weightsContainer.innerHTML = '';
+
+                        // Add port weight rows
+                        const weights = config.portWeights || {};
+                        const outputPorts = config.outputPorts || 2;
+
+                        for (let i = 0; i < outputPorts; i++) {
+                            const weight = weights[i] || 1.0;
+                            addPortWeightRow(weightsContainer, i, weight);
+                        }
+                    }
+                }
+                break;
+
+            case 'content-type':
+                const contentTypeConfig = document.getElementById('content-type-routing-config');
+                if (contentTypeConfig) {
+                    contentTypeConfig.style.display = 'block';
+
+                    // Populate content type mappings
+                    const mappingsContainer = document.getElementById('content-type-mappings-container');
+                    if (mappingsContainer) {
+                        // Clear existing mappings
+                        mappingsContainer.innerHTML = '';
+
+                        // Add saved mappings or create a default empty one
+                        const mappings = config.contentTypeMappings || [];
+                        if (mappings.length > 0) {
+                            mappings.forEach(mapping => {
+                                addContentTypeMappingRow(mappingsContainer, mapping.contentType, mapping.port);
+                            });
+                        } else {
+                            addContentTypeMappingRow(mappingsContainer, 'text', 0);
+                        }
+
+                        // Set up "Add Mapping" button
+                        const addMappingBtn = document.getElementById('add-content-mapping');
+                        if (addMappingBtn) {
+                            addMappingBtn.onclick = function() {
+                                addContentTypeMappingRow(mappingsContainer, '', 0);
+                            };
+                        }
+                    }
+                }
+                break;
+        }
+    }
+
+    /**
+     * Add a keyword pattern row to the router configuration
+     * @param {HTMLElement} container - The container element
+     * @param {string} keyword - The keyword to match
+     * @param {number} port - The port to route to
+     */
+    function addKeywordPatternRow(container, keyword, port) {
+        const row = document.createElement('div');
+        row.className = 'pattern-row';
+
+        // Create unique ID for the remove button
+        const rowId = Date.now() + Math.random().toString(36).substring(2, 9);
+
+        // Get number of output ports for select options
+        let outputPorts = 2; // Default
+        if (selectedNode && selectedNode.config && selectedNode.config.outputPorts) {
+            outputPorts = selectedNode.config.outputPorts;
+        }
+
+        // Create port options
+        let portOptions = '';
+        for (let i = 0; i < outputPorts; i++) {
+            portOptions += `<option value="${i}" ${port === i ? 'selected' : ''}>Output ${i+1}</option>`;
+        }
+
+        row.innerHTML = `
+            <input type="text" class="form-control pattern-input" placeholder="Keyword or regex pattern" value="${keyword || ''}">
+            <select class="form-control port-select">
+                ${portOptions}
+            </select>
+            <button class="remove-pattern-btn" data-row-id="${rowId}"><i class="bi bi-x"></i></button>
+        `;
+
+        // Add row to container
+        container.appendChild(row);
+
+        // Set up remove button
+        const removeBtn = row.querySelector('.remove-pattern-btn');
+        if (removeBtn) {
+            removeBtn.onclick = function() {
+                container.removeChild(row);
+            };
+        }
+    }
+
+    /**
+     * Add a port weight row to the router configuration
+     * @param {HTMLElement} container - The container element
+     * @param {number} portIndex - The port index
+     * @param {number} weight - The port weight
+     */
+    function addPortWeightRow(container, portIndex, weight) {
+        const row = document.createElement('div');
+        row.className = 'weight-row';
+
+        row.innerHTML = `
+            <label>Output ${portIndex + 1} Weight:</label>
+            <input type="number" class="form-control weight-input" min="0" step="0.1" value="${weight}" data-port="${portIndex}">
+        `;
+
+        container.appendChild(row);
+    }
+
+    /**
+     * Add a content type mapping row to the router configuration
+     * @param {HTMLElement} container - The container element
+     * @param {string} contentType - The content type to match
+     * @param {number} port - The port to route to
+     */
+    function addContentTypeMappingRow(container, contentType, port) {
+        const row = document.createElement('div');
+        row.className = 'mapping-row';
+
+        // Create unique ID for the remove button
+        const rowId = Date.now() + Math.random().toString(36).substring(2, 9);
+
+        // Get number of output ports for select options
+        let outputPorts = 2; // Default
+        if (selectedNode && selectedNode.config && selectedNode.config.outputPorts) {
+            outputPorts = selectedNode.config.outputPorts;
+        }
+
+        // Create port options
+        let portOptions = '';
+        for (let i = 0; i < outputPorts; i++) {
+            portOptions += `<option value="${i}" ${port === i ? 'selected' : ''}>Output ${i+1}</option>`;
+        }
+
+        row.innerHTML = `
+            <input type="text" class="form-control content-type-input" placeholder="Content type (e.g., text, json)" value="${contentType || ''}">
+            <select class="form-control port-select">
+                ${portOptions}
+            </select>
+            <button class="remove-mapping-btn" data-row-id="${rowId}"><i class="bi bi-x"></i></button>
+        `;
+
+        // Add row to container
+        container.appendChild(row);
+
+        // Set up remove button
+        const removeBtn = row.querySelector('.remove-mapping-btn');
+        if (removeBtn) {
+            removeBtn.onclick = function() {
+                container.removeChild(row);
+            };
+        }
     }
     
     /**
@@ -1098,6 +1464,78 @@ document.addEventListener('DOMContentLoaded', function() {
             // Tool-specific validations will be implemented in the next phase
         }
         
+        // Handle router configuration if it's a router node
+        if (selectedNode.type === 'router') {
+            const routerStrategy = document.getElementById('router-strategy').value;
+
+            // Collect router-specific config based on strategy
+            selectedNode.config.routingStrategy = routerStrategy;
+
+            switch (routerStrategy) {
+                case 'ai':
+                    const aiPrompt = document.getElementById('ai-router-prompt').value;
+                    if (!aiPrompt || aiPrompt.trim() === '') {
+                        validationErrors.push('AI Router prompt is required');
+                    } else {
+                        selectedNode.config.aiRouterPrompt = aiPrompt;
+                    }
+                    break;
+
+                case 'keyword':
+                    const patterns = [];
+                    document.querySelectorAll('.pattern-row').forEach(row => {
+                        const keywordInput = row.querySelector('.pattern-input');
+                        const portSelect = row.querySelector('.port-select');
+
+                        if (keywordInput && portSelect && keywordInput.value.trim() !== '') {
+                            patterns.push({
+                                keyword: keywordInput.value,
+                                port: parseInt(portSelect.value, 10)
+                            });
+                        }
+                    });
+
+                    if (patterns.length === 0) {
+                        validationErrors.push('At least one keyword pattern is required');
+                    } else {
+                        selectedNode.config.keywordPatterns = patterns;
+                    }
+                    break;
+
+                case 'random':
+                    const weights = {};
+                    document.querySelectorAll('.weight-input').forEach(input => {
+                        const port = parseInt(input.getAttribute('data-port'), 10);
+                        const weight = parseFloat(input.value) || 0;
+                        weights[port] = weight;
+                    });
+
+                    selectedNode.config.portWeights = weights;
+                    break;
+
+                case 'content-type':
+                    const mappings = [];
+                    document.querySelectorAll('.mapping-row').forEach(row => {
+                        const contentTypeInput = row.querySelector('.content-type-input');
+                        const portSelect = row.querySelector('.port-select');
+
+                        if (contentTypeInput && portSelect && contentTypeInput.value.trim() !== '') {
+                            mappings.push({
+                                contentType: contentTypeInput.value,
+                                port: parseInt(portSelect.value, 10)
+                            });
+                        }
+                    });
+
+                    if (mappings.length === 0) {
+                        validationErrors.push('At least one content type mapping is required');
+                    } else {
+                        selectedNode.config.contentTypeMappings = mappings;
+                    }
+                    break;
+            }
+        }
+
         // If validation fails, show errors and return
         if (validationErrors.length > 0) {
             validationErrors.forEach(error => {
@@ -1105,11 +1543,27 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             return;
         }
-        
+
         // Apply common config
         selectedNode.config.name = nodeName;
-        
+
         // Update node display with config info
+        if (selectedNode.type === 'router') {
+            // Update the strategy badge on the router node
+            const nodeElement = document.getElementById(selectedNode.id);
+            if (nodeElement) {
+                const strategyBadge = nodeElement.querySelector('.router-strategy');
+                if (strategyBadge) {
+                    const strategyLabels = {
+                        'ai': 'AI Routing',
+                        'keyword': 'Keyword Routing',
+                        'random': 'Random Routing',
+                        'content-type': 'Content Type Routing'
+                    };
+                    strategyBadge.textContent = strategyLabels[selectedNode.config.routingStrategy] || 'Not configured';
+                }
+            }
+        }
         if (selectedNode.type === 'agent') {
             const nodeNameElement = selectedNode.element.querySelector('.node-title span');
             if (nodeNameElement && selectedNode.config.name) {
@@ -1580,8 +2034,12 @@ document.addEventListener('DOMContentLoaded', function() {
             connections: connections.map(conn => ({
                 sourceNode: conn.start.nodeId,
                 sourcePort: conn.start.port,
+                sourcePortNumber: conn.start.portNumber, // For router output ports
                 targetNode: conn.end.nodeId,
-                targetPort: conn.end.port
+                targetPort: conn.end.port,
+                targetPortNumber: conn.end.portNumber, // For router output ports
+                // Also include edge type for router connections
+                edgeType: conn.start.portNumber !== undefined ? 'ROUTE_OUTPUT' : 'DATA'
             }))
         };
         

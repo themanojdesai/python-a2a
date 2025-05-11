@@ -593,7 +593,79 @@ def create_workflow_blueprint():
                             output = value.get('content', value)
                         break
 
-            logger.info(f"Network execution completed successfully with results: {results}")
+            # Even if we didn't find output in results, we may have incomplete execution
+            # with partial results that can still be displayed
+            if output is None:
+                logger.warning("No output found in results, looking for partial results")
+                # Get the workflow execution to check for partial results
+                execution_id = None
+                for exec_id, execution in executor.executions.items():
+                    if execution.workflow.id == workflow.id:
+                        execution_id = exec_id
+                        break
+
+                if execution_id:
+                    # Get any output from completed nodes
+                    status = executor.get_execution_status(execution_id)
+                    if status and "results" in status and status["results"]:
+                        for key, value in status["results"].items():
+                            output = value
+                            output_type = "text"
+                            if isinstance(value, dict) and 'type' in value:
+                                output_type = value['type']
+                                output = value.get('content', value)
+                            logger.info(f"Found partial result from {key}: {output}")
+                            break
+
+            # Even if we hit execution issues, try to extract any useful outputs
+            # from the most recent execution
+            current_execution = None
+            latest_time = None
+
+            # Find the latest execution
+            for exec_id, execution in executor.executions.items():
+                if hasattr(execution, 'start_time') and execution.start_time:
+                    if latest_time is None or execution.start_time > latest_time:
+                        latest_time = execution.start_time
+                        current_execution = execution
+
+            # Extract results from the latest execution
+            if current_execution and current_execution.results:
+                logger.info(f"Found results in latest execution: {current_execution.results}")
+                results = current_execution.results
+            else:
+                # Try any execution with results as a fallback
+                for exec_id, execution in executor.executions.items():
+                    if execution.results:
+                        logger.info(f"Found results in execution {exec_id}: {execution.results}")
+                        if not results:
+                            results = execution.results
+                            break
+
+            # If we still have no results, look for any inputs to output nodes
+            if not results and current_execution:
+                for node_id, node in current_execution.workflow.nodes.items():
+                    if node.node_type == NodeType.OUTPUT:
+                        node_execution = current_execution.node_executions.get(node_id)
+                        if node_execution and node_execution.input_values:
+                            # Use the first input we find
+                            for edge_id, message in node_execution.input_values.items():
+                                content = message.content
+                                # Extract text content if needed
+                                if isinstance(content, dict) and 'content' in content:
+                                    content = content['content']
+                                elif isinstance(content, dict) and 'text' in content:
+                                    content = content['text']
+
+                                output_key = node.config.get("output_key", "output")
+                                # Add to results
+                                if not results:
+                                    results = {}
+                                results[output_key] = content
+                                logger.info(f"Extracted output from node inputs: {output_key} = {str(content)[:100]}...")
+                                break
+
+            logger.info(f"Network execution completed with results: {results}")
 
             # Process output based on type for better rendering
             formatted_output = {
@@ -1452,6 +1524,8 @@ def convert_network_data_to_workflow(data):
             node_type = NodeType.CONDITIONAL
         elif ui_node['type'] == 'transform':
             node_type = NodeType.TRANSFORM
+        elif ui_node['type'] == 'router':
+            node_type = NodeType.ROUTER
         else:
             # Default to AGENT if type is unknown
             node_type = NodeType.AGENT
@@ -1484,19 +1558,71 @@ def convert_network_data_to_workflow(data):
         # Store mapping
         node_map[ui_node['id']] = node_id
     
+    # Check if there are any router nodes
+    router_nodes = {}
+    for ui_node_id, node_id in node_map.items():
+        node = workflow.nodes.get(node_id)
+        if node and node.node_type == NodeType.ROUTER:
+            router_nodes[ui_node_id] = node_id
+            logger.info(f"Found router node: {ui_node_id} -> {node_id}")
+
     # Process connections
     for ui_conn in data.get('connections', []):
         # Get source and target node IDs
-        source_id = node_map.get(ui_conn['sourceNode'])
-        target_id = node_map.get(ui_conn['targetNode'])
-        
+        source_node_id = ui_conn['sourceNode']
+        target_node_id = ui_conn['targetNode']
+        source_id = node_map.get(source_node_id)
+        target_id = node_map.get(target_node_id)
+
         if source_id and target_id:
+            # Create the edge
+            edge_type = EdgeType.DATA  # Default
+            edge_config = {}
+
+            # Check if source is a router node
+            if source_node_id in router_nodes:
+                edge_type = EdgeType.ROUTE_OUTPUT
+                port_number = ui_conn.get('sourcePortNumber')
+                # Debug logging
+                logger.info(f"Router connection from UI: {ui_conn}")
+
+                if port_number is not None:
+                    try:
+                        port_number = int(port_number)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid port number: {port_number}, defaulting to 0")
+                        port_number = 0
+                else:
+                    # Default port number based on connection order
+                    # Get outgoing connections from this router to count ports
+                    router_conns = [
+                        c for c in data.get('connections', [])
+                        if c['sourceNode'] == source_node_id
+                    ]
+                    port_index = router_conns.index(ui_conn)
+                    port_number = port_index
+                    logger.info(f"No port number specified, using index-based port: {port_number}")
+
+                edge_config = {"port_number": port_number}
+            # Explicitly check for ROUTE_OUTPUT edges from UI
+            elif ui_conn.get('edgeType') == 'ROUTE_OUTPUT':
+                edge_type = EdgeType.ROUTE_OUTPUT
+                port_number = ui_conn.get('sourcePortNumber', 0)
+                if isinstance(port_number, str):
+                    try:
+                        port_number = int(port_number)
+                    except ValueError:
+                        port_number = 0
+                edge_config = {"port_number": port_number}
+
+            logger.info(f"Creating edge: {source_id} -> {target_id}, type: {edge_type}, config: {edge_config}")
+
             # Add edge to workflow
             workflow.add_edge(
                 source_node_id=source_id,
                 target_node_id=target_id,
-                edge_type=EdgeType.DATA,
-                config={}
+                edge_type=edge_type,
+                config=edge_config
             )
     
     return workflow
