@@ -1064,47 +1064,218 @@ document.addEventListener('DOMContentLoaded', function() {
         
         connections.push(connectionData);
         
-        // Add click event to select the connection
-        path.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deselectAllNodes();
-            path.classList.add('selected');
-            
-            // Show button to delete connection
-            const rect = path.getBoundingClientRect();
-            const centerX = (rect.left + rect.right) / 2;
-            const centerY = (rect.top + rect.bottom) / 2;
-            
-            // Create delete button for connection if it doesn't exist
-            let deleteBtn = document.getElementById(`delete-${connectionId}`);
-            if (!deleteBtn) {
+        // Add hover and click events for better connection interaction
+        let deleteBtn = null;
+
+        // Create an invisible hitbox that matches the path but is wider
+        // This gives users a larger area to interact with
+        const hitbox = document.createElementNS(svgNS, 'path');
+        hitbox.setAttribute('id', `hitbox-${connectionId}`);
+        hitbox.setAttribute('class', 'connection-hitbox');
+        hitbox.setAttribute('d', path.getAttribute('d'));
+        svgContainer.insertBefore(hitbox, path);
+
+        // Function to show delete button when hovering the connection
+        // Create a variable to track hover intent
+        let hoverIntentTimer = null;
+        let isButtonVisible = false;
+
+        function showDeleteButton() {
+            // Clear any existing timer to prevent race conditions
+            if (hoverIntentTimer) {
+                clearTimeout(hoverIntentTimer);
+            }
+
+            // Don't create delete button if one already exists
+            if (document.getElementById(`delete-${connectionId}`)) {
+                return;
+            }
+
+            // Use a short delay before showing the button to prevent flickering
+            // This creates a more stable experience when moving across the line
+            hoverIntentTimer = setTimeout(() => {
+                // Double-check that we're still hovering before creating the button
+                if (!path.matches(':hover') && !hitbox.matches(':hover')) {
+                    return;
+                }
+
+                // Position delete button at the center of the path
+                const rect = path.getBoundingClientRect();
+                const centerX = rect.left + (rect.width / 2);
+                const centerY = rect.top + (rect.height / 2);
+
+                // Create delete button
                 deleteBtn = document.createElement('button');
                 deleteBtn.setAttribute('id', `delete-${connectionId}`);
                 deleteBtn.classList.add('connection-delete-btn');
-                deleteBtn.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
+                deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
                 deleteBtn.style.position = 'absolute';
                 deleteBtn.style.left = `${centerX}px`;
                 deleteBtn.style.top = `${centerY}px`;
-                deleteBtn.style.zIndex = '100';
-                document.body.appendChild(deleteBtn);
-                
-                deleteBtn.addEventListener('click', () => {
-                    // Remove connection
-                    svgContainer.removeChild(path);
+                deleteBtn.setAttribute('title', 'Delete Connection');
+
+            // Delete action - single click with no confirmation
+            deleteBtn.addEventListener('click', (evt) => {
+                evt.stopPropagation();
+
+                // Visual fade-out effect
+                path.style.opacity = '0';
+
+                // Animate the delete button
+                deleteBtn.style.transform = 'translate(-50%, -50%) scale(1.2)';
+                deleteBtn.style.opacity = '0';
+
+                // Remove everything after animation
+                setTimeout(() => {
+                    // Remove the path
+                    if (svgContainer.contains(path)) {
+                        svgContainer.removeChild(path);
+                    }
+
+                    // Remove the hitbox
+                    if (svgContainer.contains(hitbox)) {
+                        svgContainer.removeChild(hitbox);
+                    }
+
+                    // Remove the delete button
+                    if (document.body.contains(deleteBtn)) {
+                        document.body.removeChild(deleteBtn);
+                    }
+
+                    // Update connections array
                     connections = connections.filter(c => c.id !== connectionId);
-                    document.body.removeChild(deleteBtn);
+
+                    // Show success notification
+                    showNotification('Connection deleted', 'success');
+                }, 200);
+            });
+
+                // Add to DOM with a short delay to prevent flickering
+                document.body.appendChild(deleteBtn);
+
+                // Add mouse events to the delete button itself for consistent behavior
+                deleteBtn.addEventListener('mouseleave', (evt) => {
+                    // When mouse leaves the button, remove it if not over the path or hitbox
+                    if (!path.matches(':hover') && !hitbox.matches(':hover')) {
+                        deleteBtn.style.opacity = '0';
+                        deleteBtn.style.transform = 'translate(-50%, -50%) scale(0.8)';
+                        path.classList.remove('selected');
+
+                        setTimeout(() => {
+                            if (document.body.contains(deleteBtn)) {
+                                document.body.removeChild(deleteBtn);
+                            }
+                        }, 100);
+                    }
                 });
-            }
-            
-            // Remove button when clicking elsewhere
-            const removeBtn = () => {
-                if (deleteBtn && document.body.contains(deleteBtn)) {
-                    document.body.removeChild(deleteBtn);
+
+                // Add selected class to highlight
+                path.classList.add('selected');
+            }, 100); // Increased delay for better stability
+        }
+
+        // Mouse over event to show delete button
+        path.addEventListener('mouseover', showDeleteButton);
+        hitbox.addEventListener('mouseover', showDeleteButton);
+
+        // Variable to track mouseout intent - prevents flickering
+        let mouseOutTimer = null;
+
+        // Function to handle mouse leaving the connection with improved stability
+        function handleMouseOut(e) {
+            // Don't remove if mouse moved to any part of our connection or button
+            if (e.relatedTarget === deleteBtn ||
+                e.relatedTarget === hitbox ||
+                e.relatedTarget === path) {
+                if (mouseOutTimer) {
+                    clearTimeout(mouseOutTimer);
+                    mouseOutTimer = null;
                 }
-                canvas.removeEventListener('click', removeBtn);
+                return;
+            }
+
+            // Clear any existing hover intent timer
+            if (hoverIntentTimer) {
+                clearTimeout(hoverIntentTimer);
+                hoverIntentTimer = null;
+            }
+
+            // Add a short delay before removing the button to prevent flickering
+            // when quickly moving across elements
+            mouseOutTimer = setTimeout(() => {
+                // Double-check that we're really not hovering anything related
+                if (path.matches(':hover') ||
+                    hitbox.matches(':hover') ||
+                    (deleteBtn && deleteBtn.matches(':hover'))) {
+                    return;
+                }
+
+                const btn = document.getElementById(`delete-${connectionId}`);
+                if (!btn) return;
+
+                // Fade-out animation
+                btn.style.opacity = '0';
+                btn.style.transform = 'translate(-50%, -50%) scale(0.8)';
+                path.classList.remove('selected');
+
+                // Remove from DOM after animation
+                setTimeout(() => {
+                    if (document.body.contains(btn)) {
+                        document.body.removeChild(btn);
+                    }
+                }, 100);
+            }, 50); // Short delay for better stability
+        }
+
+        // Add mouse out handlers to both path and hitbox
+        path.addEventListener('mouseout', handleMouseOut);
+        hitbox.addEventListener('mouseout', handleMouseOut);
+
+        // Click event for the connection - reuse the same showDeleteButton function
+        path.addEventListener('click', (e) => {
+            e.stopPropagation();
+
+            // Same behavior as hover - show the delete button
+            showDeleteButton();
+
+            // Highlight the connection
+            path.classList.add('selected');
+
+            // Set up a one-time click elsewhere listener to hide the button
+            const hideButtonOnClickElsewhere = (evt) => {
+                if (evt.target !== path &&
+                    evt.target !== hitbox &&
+                    evt.target !== deleteBtn) {
+
+                    const btn = document.getElementById(`delete-${connectionId}`);
+                    if (btn) {
+                        // Fade out nicely
+                        btn.style.opacity = '0';
+                        setTimeout(() => {
+                            if (document.body.contains(btn)) {
+                                document.body.removeChild(btn);
+                            }
+                        }, 200);
+                    }
+
+                    // Remove highlight
+                    path.classList.remove('selected');
+
+                    // Remove this event listener
+                    document.removeEventListener('click', hideButtonOnClickElsewhere);
+                }
             };
-            
-            canvas.addEventListener('click', removeBtn);
+
+            // Add the click elsewhere listener after a short delay
+            setTimeout(() => {
+                document.addEventListener('click', hideButtonOnClickElsewhere);
+            }, 10);
+        });
+
+        // Also add click handler to the hitbox for consistency
+        hitbox.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showDeleteButton();
         });
         
         return connectionData;

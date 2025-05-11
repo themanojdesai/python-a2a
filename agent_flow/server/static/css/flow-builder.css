@@ -829,15 +829,29 @@ body {
 }
 
 /* Connections */
+/* Connection path and hitbox separation for better UX */
 .connection {
+  position: relative;
   fill: none;
   stroke: var(--primary);
-  stroke-width: 2.5px;
+  stroke-width: 2.5px; /* Back to original thin stroke */
   stroke-dasharray: 6 3;
   animation: flow 30s linear infinite;
+  /* Special behavior to create invisible wide hitbox */
+  paint-order: stroke;
+  stroke-opacity: 0.9;
+  /* Maintain pointer-events for good hover detection */
   pointer-events: stroke;
-  transition: stroke-width 0.2s ease;
-  opacity: 0.9;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+/* Wider invisible hitbox for more forgiving hover detection */
+.connection-hitbox {
+  pointer-events: all;
+  stroke: transparent;
+  stroke-width: 20px; /* Wider buffer for more reliable hovering */
+  fill: none;
 }
 
 @keyframes flow {
@@ -846,9 +860,31 @@ body {
   }
 }
 
-.connection:hover, .connection.selected {
-  stroke-width: 4px;
+.connection:hover {
+  stroke-width: 3px;
   opacity: 1;
+  filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.4));
+}
+
+.connection.selected {
+  stroke-width: 3.5px;
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+  stroke: #4f86f7; /* Slightly lighter blue for better visibility */
+}
+
+.connection-highlight {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: var(--primary);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 99;
 }
 
 .temp-connection {
@@ -1133,10 +1169,10 @@ body {
 
 /* Connection delete button */
 .connection-delete-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: var(--danger);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%; /* Make it circular */
+  background-color: rgba(239, 68, 68, 0.85);
   color: white;
   border: none;
   display: flex;
@@ -1144,13 +1180,93 @@ body {
   justify-content: center;
   cursor: pointer;
   transform: translate(-50%, -50%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(239, 68, 68, 0.4);
+  transition: all 0.15s ease-out; /* Smoother, more immediate transition */
+  backdrop-filter: blur(4px);
+  font-size: 14px;
+  z-index: 1000;
+  opacity: 0.9; /* Slightly transparent by default */
+  pointer-events: all;
 }
 
 .connection-delete-btn:hover {
-  background-color: var(--danger);
-  transform: translate(-50%, -50%) scale(1.2);
+  background-color: rgba(239, 68, 68, 0.95);
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239, 68, 68, 0.6);
+  opacity: 1;
+}
+
+.connection-delete-btn:active {
+  transform: translate(-50%, -50%) scale(0.95);
+  transition: all 0.1s ease;
+}
+
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Connection action menu */
+.connection-actions {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(30, 30, 30, 0.9);
+  padding: 6px;
+  border-radius: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(64, 64, 64, 0.4);
+  z-index: 1000;
+  animation: fadeInScale 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.connection-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.connection-action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
+}
+
+.connection-delete-action {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+}
+
+.connection-delete-action:hover {
+  background-color: rgba(239, 68, 68, 0.25);
+  color: white;
+}
+
+.connection-info-action {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--primary);
+}
+
+.connection-info-action:hover {
+  background-color: rgba(59, 130, 246, 0.25);
+  color: white;
 }
 
 /* Scrollbar styling */
