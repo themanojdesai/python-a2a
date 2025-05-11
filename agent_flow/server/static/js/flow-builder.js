@@ -1366,6 +1366,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const configTitle = document.getElementById('config-title');
         const nodeNameInput = document.getElementById('node-name');
 
+        // Explicitly disable autocomplete on all input fields
+        configPanel.querySelectorAll('input, textarea, select').forEach(el => {
+            el.setAttribute('autocomplete', 'off');
+        });
+
         // Hide all config sections first
         document.querySelectorAll('.agent-specific-config, .strategy-specific-config').forEach(section => {
             section.style.display = 'none';
@@ -3311,6 +3316,75 @@ document.addEventListener('DOMContentLoaded', function() {
      * Run the current network on the server
      */
     function runNetwork() {
+        // Check if there are any nodes first
+        if (nodes.length === 0) {
+            showNotification('Cannot run an empty network. Please add at least one agent node.', 'error');
+            return;
+        }
+
+        // Check if all agent nodes are properly configured
+        const agentNodes = nodes.filter(node => node.type === 'agent');
+
+        // If there are no agent nodes, show an error
+        if (agentNodes.length === 0) {
+            showNotification('No agent nodes found. Please add at least one agent to your network.', 'error');
+            return;
+        }
+
+        // Validate each agent node has necessary configuration
+        const unconfiguredAgents = [];
+        agentNodes.forEach(agent => {
+            // Only check OpenAI agents since others are marked as "under development"
+            if (agent.subType === 'openai') {
+                // Check if the agent has the required configuration
+                if (!agent.config ||
+                    !agent.config.apiKey ||
+                    !agent.config.model) {
+                    unconfiguredAgents.push(agent);
+                }
+            }
+        });
+
+        // Show error if any agents are not configured
+        if (unconfiguredAgents.length > 0) {
+            // First, clear any previous configuration indicators
+            document.querySelectorAll('.needs-configuration').forEach(node => {
+                node.classList.remove('needs-configuration');
+            });
+
+            // Highlight the unconfigured agents
+            unconfiguredAgents.forEach(agent => {
+                const agentElement = agent.element;
+                if (agentElement) {
+                    // Find the node content area to add an indicator badge without affecting the node shape
+                    // Only update the existing badge if it exists, don't create new elements
+                    const nodeContent = agentElement.querySelector('.node-content');
+                    if (nodeContent) {
+                        // Find the badge if it exists - but don't create one if it doesn't
+                        const nodeBadge = nodeContent.querySelector('.node-badge');
+                        if (nodeBadge) {
+                            // Update the existing badge
+                            nodeBadge.textContent = "Not Configured";
+                            nodeBadge.classList.add('not-configured-badge');
+                        }
+                    }
+
+                    // No longer adding the needs-configuration class to avoid distortion
+
+                    // Add a shake animation for emphasis
+                    agentElement.classList.add('shake-animation');
+
+                    // Remove the animation class after it completes
+                    setTimeout(() => {
+                        agentElement.classList.remove('shake-animation');
+                    }, 1000);
+                }
+            });
+
+            showNotification('Some agent nodes need configuration before running. Please configure all highlighted agents.', 'error');
+            return;
+        }
+
         // Detect multiple networks on the canvas
         const detectedNetworks = detectMultipleNetworks();
 

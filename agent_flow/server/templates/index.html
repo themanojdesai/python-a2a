@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="autocomplete" content="off">
     <title>Agent Network Builder</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap">
@@ -170,7 +171,7 @@
         </div>
 
         <!-- Node Configuration Panel -->
-        <div class="config-panel" id="config-panel">
+        <div class="config-panel" id="config-panel" autocomplete="off">
             <div class="panel-header">
                 <h2 id="config-title">Configure Agent</h2>
                 <button id="close-config" class="close-btn"><i class="bi bi-x-lg"></i></button>
@@ -180,14 +181,14 @@
                 <div class="config-section">
                     <div class="form-group">
                         <label for="node-name">Name</label>
-                        <input type="text" id="node-name" class="form-control" placeholder="My Agent">
+                        <input type="text" id="node-name" class="form-control" placeholder="My Agent" autocomplete="off">
                     </div>
                     
                     <!-- OpenAI Config -->
                     <div id="openai-config" class="agent-specific-config">
                         <div class="form-group">
                             <label for="openai-api-key">OpenAI API Key</label>
-                            <input type="password" id="openai-api-key" class="form-control" placeholder="sk-...">
+                            <input type="password" id="openai-api-key" class="form-control" placeholder="sk-..." autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="openai-model">Model</label>
@@ -199,7 +200,7 @@
                         </div>
                         <div class="form-group">
                             <label for="openai-system-message">System Message</label>
-                            <textarea id="openai-system-message" class="form-control" placeholder="You are a helpful AI assistant..." rows="3"></textarea>
+                            <textarea id="openai-system-message" class="form-control" placeholder="You are a helpful AI assistant..." rows="3" autocomplete="off"></textarea>
                         </div>
                     </div>
                     
@@ -207,7 +208,7 @@
                     <div id="anthropic-config" class="agent-specific-config">
                         <div class="form-group">
                             <label for="anthropic-api-key">Anthropic API Key</label>
-                            <input type="password" id="anthropic-api-key" class="form-control" placeholder="sk_ant-...">
+                            <input type="password" id="anthropic-api-key" class="form-control" placeholder="sk_ant-..." autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="anthropic-model">Model</label>
@@ -219,7 +220,7 @@
                         </div>
                         <div class="form-group">
                             <label for="anthropic-system-message">System Message</label>
-                            <textarea id="anthropic-system-message" class="form-control" placeholder="You are Claude, an AI assistant by Anthropic..." rows="3"></textarea>
+                            <textarea id="anthropic-system-message" class="form-control" placeholder="You are Claude, an AI assistant by Anthropic..." rows="3" autocomplete="off"></textarea>
                         </div>
                     </div>
                     
@@ -227,11 +228,11 @@
                     <div id="bedrock-config" class="agent-specific-config">
                         <div class="form-group">
                             <label for="aws-access-key">AWS Access Key</label>
-                            <input type="password" id="aws-access-key" class="form-control">
+                            <input type="password" id="aws-access-key" class="form-control" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="aws-secret-key">AWS Secret Key</label>
-                            <input type="password" id="aws-secret-key" class="form-control">
+                            <input type="password" id="aws-secret-key" class="form-control" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="aws-region">AWS Region</label>
@@ -251,7 +252,7 @@
                         </div>
                         <div class="form-group">
                             <label for="bedrock-system-message">System Message</label>
-                            <textarea id="bedrock-system-message" class="form-control" placeholder="You are an AI assistant..." rows="3"></textarea>
+                            <textarea id="bedrock-system-message" class="form-control" placeholder="You are an AI assistant..." rows="3" autocomplete="off"></textarea>
                         </div>
                     </div>
                     
@@ -259,15 +260,15 @@
                     <div id="custom-config" class="agent-specific-config">
                         <div class="form-group">
                             <label for="agent-port">Port</label>
-                            <input type="number" id="agent-port" class="form-control" placeholder="8000" min="1024" max="65535">
+                            <input type="number" id="agent-port" class="form-control" placeholder="8000" min="1024" max="65535" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="agent-endpoint">Endpoint URL (optional)</label>
-                            <input type="text" id="agent-endpoint" class="form-control" placeholder="http://localhost:{port}">
+                            <input type="text" id="agent-endpoint" class="form-control" placeholder="http://localhost:{port}" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="agent-script">Script Path (optional)</label>
-                            <input type="text" id="agent-script" class="form-control" placeholder="/path/to/agent.py">
+                            <input type="text" id="agent-script" class="form-control" placeholder="/path/to/agent.py" autocomplete="off">
                         </div>
                     </div>
                     
@@ -290,7 +291,7 @@
                         <div id="ai-routing-config" class="strategy-specific-config">
                             <div class="form-group">
                                 <label for="ai-router-prompt">AI Routing Prompt</label>
-                                <textarea id="ai-router-prompt" class="form-control" placeholder="Examine the message content and route to the appropriate destination..." rows="3"></textarea>
+                                <textarea id="ai-router-prompt" class="form-control" placeholder="Examine the message content and route to the appropriate destination..." rows="3" autocomplete="off"></textarea>
                             </div>
                         </div>
 
@@ -355,7 +356,7 @@
             <div class="modal-body">
                 <div class="form-group">
                     <label for="new-agent-name">Agent Name</label>
-                    <input type="text" id="new-agent-name" class="form-control" placeholder="My Custom Agent">
+                    <input type="text" id="new-agent-name" class="form-control" placeholder="My Custom Agent" autocomplete="off">
                 </div>
                 <div class="form-group">
                     <label for="new-agent-type">Agent Type</label>
