@@ -24,10 +24,11 @@ The A2A protocol establishes a standard communication format that enables AI age
 
 ## 📋 What's New in v0.5.X
 
+- **Agent Flow UI**: Visual workflow editor for building and managing agent networks with drag-and-drop interface
 - **Agent Discovery**: Built-in support for agent registry and discovery with full Google A2A protocol compatibility
 - **LangChain Integration**: Seamless integration with LangChain's tools and agents
 - **Expanded Tool Ecosystem**: Use tools from both LangChain and MCP in any agent
-- **Enhanced Agent Interoperability**: Convert between A2A agents and LangChain agents 
+- **Enhanced Agent Interoperability**: Convert between A2A agents and LangChain agents
 - **Mixed Workflow Engine**: Build workflows combining both ecosystems
 - **Simplified Agent Development**: Access thousands of pre-built tools instantly
 - **Advanced Streaming Architecture**: Enhanced streaming with Server-Sent Events (SSE), better error handling, and robust fallback mechanisms
@@ -412,6 +413,12 @@ a2a send http://localhost:5000 "What is artificial intelligence?"
 # Stream a response in real-time
 a2a stream http://localhost:5000 "Generate a step-by-step tutorial for making pasta"
 
+# Start the Agent Flow UI
+a2a ui
+
+# Start the Agent Flow UI with custom options
+a2a ui --port 9000 --host 0.0.0.0 --storage-dir ~/.my_workflows --debug --no-browser
+
 # Start an OpenAI-powered A2A server
 a2a openai --model gpt-4 --system-prompt "You are a helpful coding assistant"
 
@@ -593,6 +600,28 @@ pip install python-a2a
 
 ## 🧩 Core Features
 
+### Agent Flow UI
+
+The Agent Flow UI provides a visual workflow editor for building and managing agent networks:
+
+```bash
+# Start the Agent Flow UI
+a2a ui
+```
+
+This will automatically open a browser to http://localhost:8080 with the visual workflow editor:
+
+- **Visual Workflow Editor**: Drag and drop interface for creating agent workflows
+- **Agent Management**: Discover, add, and monitor agents
+- **Tool Integration**: Connect to MCP tools and incorporate them into workflows
+- **Real-time Execution**: Run workflows and see results in real-time
+- **Workflow Storage**: Save and load workflows for future use
+
+Additional options:
+```bash
+a2a ui --port 9000 --host 0.0.0.0 --storage-dir ~/.my_workflows --debug
+```
+
 ### Agent Networks
 
 Python A2A now includes a powerful system for managing multiple agents:
@@ -628,7 +657,7 @@ agent = network.get_agent("diagnosis")
 response = agent.ask("What are the symptoms of the flu?")
 ```
 
-### 7. Agent Discovery and Registry
+### Agent Discovery and Registry
 
 ```python
 from python_a2a import AgentCard, A2AServer, run_server
@@ -698,7 +727,7 @@ Python A2A is built on three core design principles:
 
 3. **Progressive Enhancement**: Start simple and add complexity only as needed
 
-The architecture consists of eight main components:
+The architecture consists of nine main components:
 
 - **Models**: Data structures representing A2A messages, tasks, and agent cards
 - **Client**: Components for sending messages to A2A agents and managing agent networks
@@ -707,6 +736,7 @@ The architecture consists of eight main components:
 - **MCP**: Tools for implementing Model Context Protocol servers and clients
 - **LangChain**: Bridge components for LangChain integration
 - **Workflow**: Engine for orchestrating complex agent interactions
+- **Agent Flow**: Visual workflow editor and agent management UI
 - **Utils**: Helper functions for common tasks
 - **CLI**: Command-line interface for interacting with agents
 
@@ -719,24 +749,28 @@ Python A2A can be used to build a wide range of AI systems:
 - **Experimentation Framework**: Easily swap out different LLM backends while keeping the same agent interface
 - **Benchmark Suite**: Compare performance of different agent implementations on standardized tasks
 - **Streaming Research Assistants**: Create responsive research tools with real-time output using streaming
+- **Visual Workflow Builder**: Use the Agent Flow UI to design and test complex agent architectures
 
 ### Enterprise Systems
 
 - **AI Orchestration**: Coordinate multiple AI agents across different departments using agent networks
 - **Legacy System Integration**: Wrap legacy systems with A2A interfaces for AI accessibility
 - **Complex Workflows**: Create sophisticated business processes with multi-agent workflows and conditional branching
+- **Visual Process Automation**: Design complex workflows using the drag-and-drop Agent Flow UI
 
 ### Customer-Facing Applications
 
 - **Multi-Stage Assistants**: Break complex user queries into subtasks handled by specialized agents
 - **Tool-Using Agents**: Connect LLMs to database agents, calculation agents, and more using MCP
 - **Real-time Chat Interfaces**: Build responsive chat applications with streaming response support
+- **Customer Journey Design**: Visually design and optimize customer interaction workflows
 
 ### Education & Training
 
 - **AI Education**: Create educational systems that demonstrate agent collaboration
 - **Simulation Environments**: Build simulated environments where multiple agents interact
 - **Educational Workflows**: Design step-by-step learning processes with feedback loops
+- **Visual Learning**: Use the Agent Flow UI to teach agent concepts through interactive visualization
 
 ## 🛠️ Real-World Examples
 

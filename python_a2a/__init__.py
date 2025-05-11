@@ -4,7 +4,7 @@ Python A2A - Agent-to-Agent Protocol
 A Python library for implementing Google's Agent-to-Agent (A2A) protocol.
 """
 
-__version__ = "0.5.4"
+__version__ = "0.5.5"
 
 # Setup feature flags
 import sys
@@ -167,12 +167,19 @@ try:
 except ImportError:
     HAS_CLI = False
 
+# Agent Flow import - optional but integrated by default
+try:
+    from .agent_flow import models, engine, server, storage
+    HAS_AGENT_FLOW_IMPORT = True
+except ImportError:
+    HAS_AGENT_FLOW_IMPORT = False
+
 # Set feature flags (all core features should be True)
 HAS_MODELS = True
 HAS_ADVANCED_MODELS = True
 HAS_CLIENT_BASE = True
 HAS_HTTP_CLIENT = True
-HAS_ADVANCED_CLIENTS = True 
+HAS_ADVANCED_CLIENTS = True
 HAS_SERVER_BASE = True
 HAS_SERVER = True
 HAS_UTILS = True
@@ -181,6 +188,7 @@ HAS_WORKFLOW = True
 HAS_MCP = True
 HAS_DISCOVERY = True  # Agent discovery
 HAS_LANGCHAIN_INTEGRATION = True  # Always True since we provide the interface
+HAS_AGENT_FLOW = True  # Agent Flow UI and workflow editor
 
 # Define __all__ for explicit exports
 __all__ = [

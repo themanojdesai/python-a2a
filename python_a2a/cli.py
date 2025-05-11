@@ -7,13 +7,17 @@ import json
 import sys
 import os
 import asyncio
+import socket
+import webbrowser
+import threading
+import time
 from typing import Dict, Any, Optional, List, Tuple
 
 from .models import Message, TextContent, MessageRole, Conversation
 from .client import A2AClient, AgentNetwork, StreamingClient
 from .server import A2AServer, run_server
 from .utils import (
-    pretty_print_message, 
+    pretty_print_message,
     pretty_print_conversation,
     create_text_message
 )
@@ -686,6 +690,135 @@ def network_command(args: argparse.Namespace) -> int:
         return 1
 
 
+def open_browser_after_delay(url: str, delay: float = 1.0) -> None:
+    """
+    Open a browser after a short delay to allow the server to start.
+    
+    Args:
+        url: The URL to open
+        delay: Time to wait in seconds before opening browser
+    """
+    def _open_browser():
+        time.sleep(delay)
+        webbrowser.open(url)
+        
+    # Start a thread to open the browser so it doesn't block the server
+    browser_thread = threading.Thread(target=_open_browser)
+    browser_thread.daemon = True
+    browser_thread.start()
+
+
+def find_available_port(start_port: int, max_attempts: int = 100) -> Optional[int]:
+    """
+    Find an available port starting from the specified port.
+    
+    Args:
+        start_port: The port to start checking from
+        max_attempts: Maximum number of ports to try
+        
+    Returns:
+        Available port number or None if no ports are available
+    """
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('localhost', port))
+                return port
+        except OSError:
+            continue
+    return None
+
+
+def ui_command(args: argparse.Namespace) -> int:
+    """
+    Start the Agent Flow UI
+    
+    Args:
+        args: Command-line arguments
+        
+    Returns:
+        Exit code (0 for success, non-zero for failure)
+    """
+    try:
+        # Set up port with availability check
+        port = args.port
+        if not args.skip_port_check:
+            # Check if the specified port is available
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind((args.host, port))
+            except OSError:
+                # Port is not available, find an available one
+                available_port = find_available_port(port + 1)
+                if available_port:
+                    print(f"Port {port} is not available. Using port {available_port} instead.")
+                    port = available_port
+                else:
+                    print(f"Error: Port {port} is not available and could not find an alternative port.")
+                    return 1
+
+        try:
+            # Import Agent Flow components from the python_a2a package
+            from python_a2a.agent_flow.models.agent import AgentRegistry
+            from python_a2a.agent_flow.models.tool import ToolRegistry
+            from python_a2a.agent_flow.storage.workflow_storage import FileWorkflowStorage
+            from python_a2a.agent_flow.engine.executor import WorkflowExecutor
+            from python_a2a.agent_flow.server.web import run_web_server
+        except ImportError as e:
+            raise A2AImportError(
+                f"Could not import Agent Flow modules: {str(e)}. "
+                "This might be a packaging issue. Please reinstall the package using 'pip install -e .'."
+            )
+        
+        # Set up storage directory
+        storage_dir = args.storage_dir
+        if not storage_dir:
+            home_dir = os.path.expanduser("~")
+            storage_dir = os.path.join(home_dir, ".agent_flow")
+        
+        os.makedirs(storage_dir, exist_ok=True)
+        print(f"Using storage directory: {storage_dir}")
+        
+        # Initialize components
+        agent_registry = AgentRegistry()
+        tool_registry = ToolRegistry()
+        workflow_storage = FileWorkflowStorage(
+            os.path.join(storage_dir, "workflows")
+        )
+        workflow_executor = WorkflowExecutor(
+            agent_registry, tool_registry
+        )
+        
+        # Start web server
+        host_display = "localhost" if args.host in ["0.0.0.0", "127.0.0.1"] else args.host
+        ui_url = f"http://{host_display}:{port}"
+        print(f"Starting Agent Flow UI at {ui_url}")
+        
+        # Open browser automatically if not disabled
+        if not args.no_browser:
+            open_browser_after_delay(ui_url)
+            print(f"Opening browser to {ui_url}...")
+        
+        run_web_server(
+            agent_registry,
+            tool_registry,
+            workflow_storage,
+            workflow_executor,
+            host=args.host,
+            port=port,
+            debug=args.debug
+        )
+        
+        return 0
+    
+    except A2AError as e:
+        print(f"Error: {str(e)}")
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return 1
+
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command-line arguments
@@ -716,15 +849,39 @@ def parse_args() -> argparse.Namespace:
     
     # Start simple server command
     serve_parser = subparsers.add_parser(
-        "serve", 
+        "serve",
         help="Start a simple A2A server",
         parents=[server_args]
     )
     serve_parser.set_defaults(func=serve_command)
     
+    # Start Agent Flow UI command
+    ui_parser = subparsers.add_parser(
+        "ui",
+        help="Start the Agent Flow UI",
+        parents=[server_args]
+    )
+    ui_parser.add_argument(
+        "--storage-dir", "-d",
+        default=None,
+        help="Directory to store workflow files (default: ~/.agent_flow)"
+    )
+    ui_parser.add_argument(
+        "--skip-port-check",
+        action="store_true",
+        help="Skip checking if the port is available"
+    )
+    ui_parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Don't automatically open a browser"
+    )
+    ui_parser.set_defaults(func=ui_command)
+    ui_parser.set_defaults(port=8080, host="localhost")  # Default UI port and host
+    
     # Start OpenAI server command
     openai_parser = subparsers.add_parser(
-        "openai", 
+        "openai",
         help="Start an OpenAI-powered A2A server",
         parents=[server_args]
     )
@@ -736,7 +893,7 @@ def parse_args() -> argparse.Namespace:
     
     # Start Anthropic server command
     anthropic_parser = subparsers.add_parser(
-        "anthropic", 
+        "anthropic",
         help="Start an Anthropic-powered A2A server",
         parents=[server_args]
     )

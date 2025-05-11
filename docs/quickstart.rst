@@ -147,11 +147,33 @@ Python A2A provides decorators for easy agent and skill creation:
         calculator = CalculatorAgent()
         run_server(calculator, port=5000)
 
+Using the Agent Flow UI
+--------------------
+
+Python A2A includes a visual workflow editor for building agent networks:
+
+.. code-block:: bash
+
+    # Start the Agent Flow UI
+    a2a ui
+
+The UI will open in your browser at http://localhost:8080.
+
+You can use the UI to:
+
+- Discover and connect to agents
+- Build visual workflows with drag-and-drop
+- Run and monitor workflows
+- Save and load workflows
+
+For more details on using the Agent Flow UI, see :doc:`guides/agent_flow`.
+
 Next Steps
 ---------
 
 Now that you've seen the basics, check out the following sections to learn more:
 
 - :doc:`guides/index` - For more detailed explanations
+- :doc:`guides/agent_flow` - For details on using the Agent Flow UI
 - :doc:`api/index` - For API reference
 - :doc:`examples/index` - For more complete examples

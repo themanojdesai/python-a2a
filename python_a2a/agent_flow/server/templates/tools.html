@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Flow - Tools</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Agent Flow</h1>
+                <p>Tool Management</p>
+            </div>
+            
+            <div class="sidebar-section">
+                <h2>Navigation</h2>
+                <ul class="nav-list">
+                    <li><a href="/">Workflow Editor</a></li>
+                    <li><a href="/workflows">Workflows</a></li>
+                    <li><a href="/agents">Agents</a></li>
+                    <li class="active"><a href="/tools">Tools</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Main content -->
+        <div class="content-container">
+            <div class="content-header">
+                <h1>Tools</h1>
+                <div class="header-actions">
+                    <button class="button primary" id="add-tool-btn">
+                        <i class="fas fa-plus"></i> Add Tool
+                    </button>
+                    <button class="button" id="discover-tools-btn">
+                        <i class="fas fa-search"></i> Discover MCP Tools
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Tool list section -->
+            <div class="content-section">
+                <div class="list-toolbar">
+                    <input type="text" class="search-input" placeholder="Search tools..." id="tool-search">
+                    <button class="button" id="refresh-tools-btn">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="list-container">
+                    <table class="agent-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>URL</th>
+                                <th>Status</th>
+                                <th>Parameters</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tool-list">
+                            <tr>
+                                <td colspan="5" class="loading-cell">Loading tools...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Tool Modal -->
+    <div class="modal-overlay" id="add-tool-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Add Tool</h2>
+                <button class="close-button">×</button>
+            </div>
+            <div class="modal-content">
+                <div class="form-group">
+                    <label for="tool-name">Name</label>
+                    <input type="text" id="tool-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="tool-description">Description</label>
+                    <input type="text" id="tool-description" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="tool-url">URL</label>
+                    <input type="text" id="tool-url" class="form-control" placeholder="http://localhost:3000">
+                </div>
+                <div class="form-group">
+                    <label for="tool-path">Tool Path (optional)</label>
+                    <input type="text" id="tool-path" class="form-control" placeholder="weather.current">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-button secondary" id="cancel-add-tool">Cancel</button>
+                <button class="modal-button primary" id="confirm-add-tool">Add Tool</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Discover Tools Modal -->
+    <div class="modal-overlay" id="discover-tools-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Discover MCP Tools</h2>
+                <button class="close-button">×</button>
+            </div>
+            <div class="modal-content">
+                <div class="form-group">
+                    <label for="mcp-url">MCP Server URL</label>
+                    <input type="text" id="mcp-url" class="form-control" value="http://localhost:3000">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-button secondary" id="cancel-discover">Cancel</button>
+                <button class="modal-button primary" id="confirm-discover">Discover</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let tools = [];
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTools();
+            
+            // Set up event listeners
+            document.getElementById('refresh-tools-btn').addEventListener('click', loadTools);
+            document.getElementById('tool-search').addEventListener('input', filterTools);
+            
+            // Add tool button
+            document.getElementById('add-tool-btn').addEventListener('click', () => {
+                document.getElementById('add-tool-modal').classList.add('visible');
+            });
+            
+            // Add tool modal
+            document.querySelectorAll('#add-tool-modal .close-button, #cancel-add-tool').forEach(button => {
+                button.addEventListener('click', () => {
+                    document.getElementById('add-tool-modal').classList.remove('visible');
+                });
+            });
+            
+            document.getElementById('confirm-add-tool').addEventListener('click', addTool);
+            
+            // Discover tools button
+            document.getElementById('discover-tools-btn').addEventListener('click', () => {
+                document.getElementById('discover-tools-modal').classList.add('visible');
+            });
+            
+            // Discover tools modal
+            document.querySelectorAll('#discover-tools-modal .close-button, #cancel-discover').forEach(button => {
+                button.addEventListener('click', () => {
+                    document.getElementById('discover-tools-modal').classList.remove('visible');
+                });
+            });
+            
+            document.getElementById('confirm-discover').addEventListener('click', discoverTools);
+        });
+        
+        // Load tools
+        function loadTools() {
+            const toolList = document.getElementById('tool-list');
+            toolList.innerHTML = '<tr><td colspan="5" class="loading-cell">Loading tools...</td></tr>';
+            
+            fetch('/api/tools')
+                .then(response => response.json())
+                .then(data => {
+                    tools = data;
+                    renderTools();
+                })
+                .catch(error => {
+                    console.error('Error loading tools:', error);
+                    toolList.innerHTML = '<tr><td colspan="5" class="error-cell">Error loading tools. <button class="link-button" onclick="loadTools()">Retry</button></td></tr>';
+                });
+        }
+        
+        // Render tools
+        function renderTools() {
+            const toolList = document.getElementById('tool-list');
+            toolList.innerHTML = '';
+            
+            if (tools.length === 0) {
+                toolList.innerHTML = '<tr><td colspan="5" class="empty-cell">No tools found. Add a new tool or discover MCP tools.</td></tr>';
+                return;
+            }
+            
+            tools.forEach(tool => {
+                const row = document.createElement('tr');
+                row.dataset.id = tool.id;
+                
+                // Status badge class
+                let statusClass = 'status-unknown';
+                if (tool.status === 'AVAILABLE') {
+                    statusClass = 'status-connected';
+                } else if (tool.status === 'ERROR') {
+                    statusClass = 'status-error';
+                } else if (tool.status === 'UNAVAILABLE') {
+                    statusClass = 'status-disconnected';
+                }
+                
+                row.innerHTML = `
+                    <td>${tool.name}</td>
+                    <td><a href="${tool.url}" target="_blank">${tool.url}${tool.tool_path ? '/' + tool.tool_path : ''}</a></td>
+                    <td><span class="status-badge ${statusClass}">${tool.status}</span></td>
+                    <td>${tool.parameters_count || 0} params</td>
+                    <td class="actions-cell">
+                        <button class="icon-button view-tool" title="View Details">
+                            <i class="fas fa-info-circle"></i>
+                        </button>
+                        <button class="icon-button test-tool" title="Test Tool">
+                            <i class="fas fa-flask"></i>
+                        </button>
+                        <button class="icon-button delete-tool" title="Delete Tool">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                
+                toolList.appendChild(row);
+                
+                // Add event listeners
+                row.querySelector('.view-tool').addEventListener('click', () => {
+                    viewToolDetails(tool.id);
+                });
+                
+                row.querySelector('.test-tool').addEventListener('click', () => {
+                    testTool(tool.id);
+                });
+                
+                row.querySelector('.delete-tool').addEventListener('click', () => {
+                    deleteTool(tool.id);
+                });
+            });
+        }
+        
+        // Filter tools
+        function filterTools() {
+            const searchTerm = document.getElementById('tool-search').value.toLowerCase();
+            
+            const rows = document.querySelectorAll('#tool-list tr');
+            rows.forEach(row => {
+                const tool = tools.find(t => t.id === row.dataset.id);
+                if (!tool) return;
+                
+                const nameMatch = tool.name.toLowerCase().includes(searchTerm);
+                const urlMatch = tool.url.toLowerCase().includes(searchTerm);
+                const pathMatch = tool.tool_path ? tool.tool_path.toLowerCase().includes(searchTerm) : false;
+                
+                if (nameMatch || urlMatch || pathMatch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        // Add tool
+        function addTool() {
+            const name = document.getElementById('tool-name').value;
+            const description = document.getElementById('tool-description').value;
+            const url = document.getElementById('tool-url').value;
+            const toolPath = document.getElementById('tool-path').value;
+            
+            if (!name || !url) {
+                showNotification('Name and URL are required', true);
+                return;
+            }
+            
+            const data = {
+                name,
+                description,
+                url,
+                tool_path: toolPath
+            };
+            
+            fetch('/api/tools', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.error) {
+                        showNotification(`Error: ${result.error}`, true);
+                    } else {
+                        showNotification('Tool added successfully');
+                        document.getElementById('add-tool-modal').classList.remove('visible');
+                        
+                        // Reset form
+                        document.getElementById('tool-name').value = '';
+                        document.getElementById('tool-description').value = '';
+                        document.getElementById('tool-url').value = '';
+                        document.getElementById('tool-path').value = '';
+                        
+                        // Reload tools
+                        loadTools();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error adding tool:', error);
+                    showNotification('Error adding tool', true);
+                });
+        }
+        
+        // Discover tools
+        function discoverTools() {
+            const mcpUrl = document.getElementById('mcp-url').value;
+            
+            if (!mcpUrl) {
+                showNotification('MCP URL is required', true);
+                return;
+            }
+            
+            // Update button
+            const button = document.getElementById('confirm-discover');
+            const originalText = button.textContent;
+            button.textContent = 'Discovering...';
+            button.disabled = true;
+            
+            fetch('/api/tools/discover', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url: mcpUrl })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('discover-tools-modal').classList.remove('visible');
+                    
+                    if (data.error) {
+                        showNotification(`Error: ${data.error}`, true);
+                    } else {
+                        showNotification(`Discovered ${data.length} tools`);
+                        loadTools();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error discovering tools:', error);
+                    showNotification('Error discovering tools', true);
+                })
+                .finally(() => {
+                    // Reset button
+                    button.textContent = originalText;
+                    button.disabled = false;
+                });
+        }
+        
+        // View tool details
+        function viewToolDetails(toolId) {
+            const tool = tools.find(t => t.id === toolId);
+            if (!tool) return;
+            
+            fetch(`/api/tools/${toolId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(`Error: ${data.error}`, true);
+                        return;
+                    }
+                    
+                    // Create modal
+                    const dialog = document.createElement('div');
+                    dialog.className = 'modal-overlay';
+                    dialog.classList.add('visible');
+                    
+                    // Create parameters list
+                    let parametersHtml = '<p>No parameters</p>';
+                    if (data.parameters && data.parameters.length > 0) {
+                        parametersHtml = '<table class="parameters-table"><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>';
+                        
+                        data.parameters.forEach(param => {
+                            parametersHtml += `<tr>
+                                <td>${param.name}</td>
+                                <td>${param.type_name}</td>
+                                <td>${param.required ? 'Yes' : 'No'}</td>
+                                <td>${param.description || '-'}</td>
+                            </tr>`;
+                        });
+                        
+                        parametersHtml += '</tbody></table>';
+                    }
+                    
+                    dialog.innerHTML = `
+                        <div class="modal">
+                            <div class="modal-header">
+                                <h2>${data.name} Details</h2>
+                                <button class="close-button">×</button>
+                            </div>
+                            <div class="modal-content">
+                                <div class="agent-info-container">
+                                    <div class="agent-info-section">
+                                        <h3>Basic Information</h3>
+                                        <div class="info-grid">
+                                            <div class="info-label">Name:</div>
+                                            <div class="info-value">${data.name}</div>
+                                            
+                                            <div class="info-label">Description:</div>
+                                            <div class="info-value">${data.description || '-'}</div>
+                                            
+                                            <div class="info-label">URL:</div>
+                                            <div class="info-value">${data.url}</div>
+                                            
+                                            <div class="info-label">Tool Path:</div>
+                                            <div class="info-value">${data.tool_path || '-'}</div>
+                                            
+                                            <div class="info-label">Status:</div>
+                                            <div class="info-value">${data.status}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="agent-info-section">
+                                        <h3>Parameters</h3>
+                                        ${parametersHtml}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="modal-button secondary">Delete</button>
+                                <button class="modal-button primary">Close</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.body.appendChild(dialog);
+                    
+                    // Add event listeners
+                    dialog.querySelector('.close-button').addEventListener('click', () => dialog.remove());
+                    dialog.querySelector('.modal-button.primary').addEventListener('click', () => dialog.remove());
+                    dialog.querySelector('.modal-button.secondary').addEventListener('click', () => {
+                        dialog.remove();
+                        deleteTool(toolId);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading tool details:', error);
+                    showNotification('Error loading tool details', true);
+                });
+        }
+        
+        // Test tool
+        function testTool(toolId) {
+            const tool = tools.find(t => t.id === toolId);
+            if (!tool) return;
+            
+            fetch(`/api/tools/${toolId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(`Error: ${data.error}`, true);
+                        return;
+                    }
+                    
+                    // Create parameter inputs
+                    let parametersHtml = '<p>This tool has no parameters.</p>';
+                    if (data.parameters && data.parameters.length > 0) {
+                        parametersHtml = '';
+                        
+                        data.parameters.forEach(param => {
+                            let inputHtml = '';
+                            
+                            if (param.type_name === 'boolean') {
+                                inputHtml = `<select id="param-${param.name}" class="form-control">
+                                    <option value="true">True</option>
+                                    <option value="false">False</option>
+                                </select>`;
+                            } else if (param.type_name === 'number') {
+                                inputHtml = `<input type="number" id="param-${param.name}" class="form-control">`;
+                            } else {
+                                inputHtml = `<input type="text" id="param-${param.name}" class="form-control">`;
+                            }
+                            
+                            parametersHtml += `
+                                <div class="form-group">
+                                    <label for="param-${param.name}">${param.name}${param.required ? ' *' : ''}</label>
+                                    ${inputHtml}
+                                    <p class="help-text">${param.description || ''}</p>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    // Create modal
+                    const dialog = document.createElement('div');
+                    dialog.className = 'modal-overlay';
+                    dialog.classList.add('visible');
+                    dialog.innerHTML = `
+                        <div class="modal">
+                            <div class="modal-header">
+                                <h2>Test Tool: ${data.name}</h2>
+                                <button class="close-button">×</button>
+                            </div>
+                            <div class="modal-content">
+                                <div class="form-group">
+                                    <h3>Parameters</h3>
+                                    <div id="tool-parameters">
+                                        ${parametersHtml}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="modal-button secondary">Cancel</button>
+                                <button class="modal-button primary">Execute</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.body.appendChild(dialog);
+                    
+                    // Add event listeners
+                    dialog.querySelector('.close-button').addEventListener('click', () => dialog.remove());
+                    dialog.querySelector('.modal-button.secondary').addEventListener('click', () => dialog.remove());
+                    
+                    dialog.querySelector('.modal-button.primary').addEventListener('click', () => {
+                        // Collect parameters
+                        const params = {};
+                        
+                        if (data.parameters && data.parameters.length > 0) {
+                            data.parameters.forEach(param => {
+                                const input = document.getElementById(`param-${param.name}`);
+                                if (!input) return;
+                                
+                                let value = input.value;
+                                
+                                // Convert value based on type
+                                if (param.type_name === 'boolean') {
+                                    value = value === 'true';
+                                } else if (param.type_name === 'number') {
+                                    value = parseFloat(value);
+                                }
+                                
+                                if (value !== '' || param.required) {
+                                    params[param.name] = value;
+                                }
+                            });
+                        }
+                        
+                        // Validate required parameters
+                        const missingParams = data.parameters
+                            .filter(p => p.required && (params[p.name] === undefined || params[p.name] === ''))
+                            .map(p => p.name);
+                        
+                        if (missingParams.length > 0) {
+                            showNotification(`Missing required parameters: ${missingParams.join(', ')}`, true);
+                            return;
+                        }
+                        
+                        // Execute tool
+                        const button = dialog.querySelector('.modal-button.primary');
+                        const originalText = button.textContent;
+                        button.textContent = 'Executing...';
+                        button.disabled = true;
+                        
+                        fetch(`/api/tools/${toolId}/execute`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(params)
+                        })
+                            .then(response => response.json())
+                            .then(result => {
+                                dialog.remove();
+                                
+                                if (result.error) {
+                                    showNotification(`Error: ${result.error}`, true);
+                                } else {
+                                    // Show results
+                                    const resultsDialog = document.createElement('div');
+                                    resultsDialog.className = 'modal-overlay';
+                                    resultsDialog.classList.add('visible');
+                                    resultsDialog.innerHTML = `
+                                        <div class="modal">
+                                            <div class="modal-header">
+                                                <h2>Tool Result</h2>
+                                                <button class="close-button">×</button>
+                                            </div>
+                                            <div class="modal-content">
+                                                <pre>${JSON.stringify(result, null, 2)}</pre>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button class="modal-button primary">Close</button>
+                                            </div>
+                                        </div>
+                                    `;
+                                    
+                                    document.body.appendChild(resultsDialog);
+                                    
+                                    // Add event listeners
+                                    resultsDialog.querySelector('.close-button').addEventListener('click', () => resultsDialog.remove());
+                                    resultsDialog.querySelector('.modal-button.primary').addEventListener('click', () => resultsDialog.remove());
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error executing tool:', error);
+                                showNotification('Error executing tool', true);
+                                
+                                // Reset button
+                                button.textContent = originalText;
+                                button.disabled = false;
+                            });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading tool details:', error);
+                    showNotification('Error loading tool details', true);
+                });
+        }
+        
+        // Delete tool
+        function deleteTool(toolId) {
+            if (!confirm('Are you sure you want to delete this tool?')) {
+                return;
+            }
+            
+            fetch(`/api/tools/${toolId}`, {
+                method: 'DELETE'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(`Error: ${data.error}`, true);
+                    } else {
+                        showNotification('Tool deleted successfully');
+                        loadTools();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting tool:', error);
+                    showNotification('Error deleting tool', true);
+                });
+        }
+        
+        // Show notification
+        function showNotification(message, isError = false) {
+            // Remove existing notifications
+            document.querySelectorAll('.notification').forEach(notification => notification.remove());
+            
+            // Create notification
+            const notification = document.createElement('div');
+            notification.className = `notification${isError ? ' error' : ''}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            // Remove after timeout
+            setTimeout(() => notification.remove(), 3000);
+        }
+    </script>
+</body>
+</html>

@@ -29,6 +29,7 @@ The A2A protocol establishes a standard communication format that enables AI age
 Key Features
 -----------
 
+- **Agent Flow UI**: Visual workflow editor for building agent networks with drag-and-drop interface
 - **Complete Implementation**: Fully implements the official A2A specification
 - **Agent Discovery**: Built-in support for agent registry and discovery mechanism
 - **MCP Integration**: First-class support for Model Context Protocol

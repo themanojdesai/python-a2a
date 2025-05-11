@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="autocomplete" content="off">
+    <title>Agent Network Builder</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/flow-builder.css">
+    <link rel="stylesheet" href="/static/css/network-execution.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar with agent templates -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Agent Network</h1>
+                <p>Drag & Drop Builder</p>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h2>IO Nodes</h2>
+                </div>
+                <div class="card-list" id="io-types">
+                    <div class="io-card" draggable="true" data-type="input">
+                        <div class="card-icon"><i class="bi bi-box-arrow-in-right"></i></div>
+                        <div class="card-content">
+                            <h3>Input Node</h3>
+                            <p>Network entry point</p>
+                        </div>
+                    </div>
+                    <div class="io-card" draggable="true" data-type="output">
+                        <div class="card-icon"><i class="bi bi-box-arrow-right"></i></div>
+                        <div class="card-content">
+                            <h3>Output Node</h3>
+                            <p>Network result</p>
+                        </div>
+                    </div>
+                    <div class="io-card" draggable="true" data-type="router">
+                        <div class="card-icon"><i class="bi bi-signpost-split"></i></div>
+                        <div class="card-content">
+                            <h3>Router Node</h3>
+                            <p>Dynamic message routing</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h2>Agent Types</h2>
+                    <button id="create-agent-btn" class="add-btn"><i class="bi bi-plus-circle"></i> New</button>
+                </div>
+                <div class="card-list" id="agent-types">
+                    <div class="agent-card" draggable="true" data-type="openai">
+                        <div class="card-icon"><i class="bi bi-robot"></i></div>
+                        <div class="card-content">
+                            <h3>OpenAI Agent</h3>
+                            <p>GPT-based agent</p>
+                        </div>
+                    </div>
+                    <div class="agent-card" draggable="true" data-type="anthropic">
+                        <div class="card-icon"><i class="bi bi-robot"></i></div>
+                        <div class="card-content">
+                            <h3>Claude Agent</h3>
+                            <p>Anthropic-powered agent</p>
+                        </div>
+                    </div>
+                    <div class="agent-card" draggable="true" data-type="bedrock">
+                        <div class="card-icon"><i class="bi bi-robot"></i></div>
+                        <div class="card-content">
+                            <h3>Bedrock Agent</h3>
+                            <p>AWS Bedrock models</p>
+                        </div>
+                    </div>
+                    <div class="agent-card" draggable="true" data-type="custom">
+                        <div class="card-icon"><i class="bi bi-code-square"></i></div>
+                        <div class="card-content">
+                            <h3>Custom Agent</h3>
+                            <p>Your own implementation</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h2>Tools</h2>
+                    <button id="create-tool-btn" class="add-btn"><i class="bi bi-plus-circle"></i> New</button>
+                </div>
+                <div class="card-list" id="tool-types">
+                    <div class="tool-card" draggable="true" data-type="search">
+                        <div class="card-icon"><i class="bi bi-search"></i></div>
+                        <div class="card-content">
+                            <h3>Search Tool</h3>
+                            <p>Web search capability</p>
+                        </div>
+                    </div>
+                    <div class="tool-card" draggable="true" data-type="calculator">
+                        <div class="card-icon"><i class="bi bi-calculator"></i></div>
+                        <div class="card-content">
+                            <h3>Calculator</h3>
+                            <p>Mathematical operations</p>
+                        </div>
+                    </div>
+                    <div class="tool-card" draggable="true" data-type="database">
+                        <div class="card-icon"><i class="bi bi-database"></i></div>
+                        <div class="card-content">
+                            <h3>Database</h3>
+                            <p>Data storage & retrieval</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <!-- Empty footer to maintain space but without buttons -->
+            </div>
+        </div>
+
+        <!-- Main canvas area -->
+        <div class="main-content">
+            <div class="toolbar">
+                <div class="left-tools">
+                    <button id="add-input-btn" class="tool-btn" title="Add Input Node"><i class="bi bi-box-arrow-in-right"></i></button>
+                    <button id="add-output-btn" class="tool-btn" title="Add Output Node"><i class="bi bi-box-arrow-right"></i></button>
+                    <div class="divider"></div>
+                    <button id="undo-btn" class="tool-btn" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
+                    <button id="redo-btn" class="tool-btn" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+                </div>
+                <div class="center-tools">
+                    <span class="network-name" id="network-name">My Agent Network</span>
+                </div>
+                <div class="right-tools">
+                    <button id="zoom-in-btn" class="tool-btn" title="Zoom In"><i class="bi bi-zoom-in"></i></button>
+                    <button id="zoom-out-btn" class="tool-btn" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
+                    <button id="zoom-reset-btn" class="tool-btn" title="Reset Zoom"><i class="bi bi-aspect-ratio"></i></button>
+                    <div class="divider"></div>
+                    <button id="delete-btn" class="tool-btn" title="Delete Selected"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <div id="canvas" class="canvas">
+                    <!-- Nodes will be added here dynamically -->
+                    <div class="help-text" id="empty-canvas-help">
+                        <i class="bi bi-arrow-left"></i>
+                        <p>Drag agents & tools from the sidebar to build your network</p>
+                    </div>
+                </div>
+                <div id="canvas-controls">
+                    <div class="control-group">
+                        <button id="floating-zoom-reset" class="control-btn zoom-btn" title="Reset Zoom & Pan">
+                            <i class="bi bi-arrows-fullscreen"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="control-group primary">
+                        <button id="floating-save-btn" class="control-btn save-btn" title="Save Network">
+                            <i class="bi bi-save"></i>
+                        </button>
+                        <button id="floating-run-btn" class="control-btn run-btn" title="Run Network">
+                            <i class="bi bi-play-fill"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Node Configuration Panel -->
+        <div class="config-panel" id="config-panel" autocomplete="off">
+            <div class="panel-header">
+                <h2 id="config-title">Configure Agent</h2>
+                <button id="close-config" class="close-btn"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="panel-content">
+                <!-- Basic settings for all nodes -->
+                <div class="config-section">
+                    <div class="form-group">
+                        <label for="node-name">Name</label>
+                        <input type="text" id="node-name" class="form-control" placeholder="My Agent" autocomplete="off">
+                    </div>
+                    
+                    <!-- OpenAI Config -->
+                    <div id="openai-config" class="agent-specific-config">
+                        <div class="form-group">
+                            <label for="openai-api-key">OpenAI API Key</label>
+                            <input type="password" id="openai-api-key" class="form-control" placeholder="sk-..." autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="openai-model">Model</label>
+                            <select id="openai-model" class="form-control">
+                                <option value="gpt-4o">GPT-4o</option>
+                                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="openai-system-message">System Message</label>
+                            <textarea id="openai-system-message" class="form-control" placeholder="You are a helpful AI assistant..." rows="3" autocomplete="off"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- Anthropic Config -->
+                    <div id="anthropic-config" class="agent-specific-config">
+                        <div class="form-group">
+                            <label for="anthropic-api-key">Anthropic API Key</label>
+                            <input type="password" id="anthropic-api-key" class="form-control" placeholder="sk_ant-..." autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="anthropic-model">Model</label>
+                            <select id="anthropic-model" class="form-control">
+                                <option value="claude-3-opus">Claude 3 Opus</option>
+                                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                                <option value="claude-3-haiku">Claude 3 Haiku</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="anthropic-system-message">System Message</label>
+                            <textarea id="anthropic-system-message" class="form-control" placeholder="You are Claude, an AI assistant by Anthropic..." rows="3" autocomplete="off"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- Bedrock Config -->
+                    <div id="bedrock-config" class="agent-specific-config">
+                        <div class="form-group">
+                            <label for="aws-access-key">AWS Access Key</label>
+                            <input type="password" id="aws-access-key" class="form-control" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="aws-secret-key">AWS Secret Key</label>
+                            <input type="password" id="aws-secret-key" class="form-control" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="aws-region">AWS Region</label>
+                            <select id="aws-region" class="form-control">
+                                <option value="us-east-1">US East (N. Virginia)</option>
+                                <option value="us-west-2">US West (Oregon)</option>
+                                <option value="eu-west-1">EU (Ireland)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="bedrock-model">Model</label>
+                            <select id="bedrock-model" class="form-control">
+                                <option value="anthropic.claude-3-sonnet-20240229-v1:0">Claude 3 Sonnet</option>
+                                <option value="anthropic.claude-3-haiku-20240307-v1:0">Claude 3 Haiku</option>
+                                <option value="amazon.titan-text-express-v1">Titan Text</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="bedrock-system-message">System Message</label>
+                            <textarea id="bedrock-system-message" class="form-control" placeholder="You are an AI assistant..." rows="3" autocomplete="off"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- Custom Agent Config -->
+                    <div id="custom-config" class="agent-specific-config">
+                        <div class="form-group">
+                            <label for="agent-port">Port</label>
+                            <input type="number" id="agent-port" class="form-control" placeholder="8000" min="1024" max="65535" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-endpoint">Endpoint URL (optional)</label>
+                            <input type="text" id="agent-endpoint" class="form-control" placeholder="http://localhost:{port}" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-script">Script Path (optional)</label>
+                            <input type="text" id="agent-script" class="form-control" placeholder="/path/to/agent.py" autocomplete="off">
+                        </div>
+                    </div>
+                    
+                    <!-- Router Config -->
+                    <div id="router-config" class="agent-specific-config">
+                        <div id="router-strategy-container">
+                            <div class="strategy-header">
+                                <h4>Routing Strategy</h4>
+                            </div>
+                            <select id="router-strategy">
+                                <option value="keyword">Keyword Routing</option>
+                                <option value="ai" disabled>AI-based Routing (Coming Soon)</option>
+                                <option value="random" disabled>Random Routing (Coming Soon)</option>
+                                <option value="content-type" disabled>Content-type Routing (Coming Soon)</option>
+                            </select>
+                            <p class="strategy-description">Routes messages to different outputs based on keywords found in the content. The router will analyze incoming messages and direct them to specific outputs based on the patterns you define below.</p>
+                        </div>
+
+                        <!-- AI Routing Config -->
+                        <div id="ai-routing-config" class="strategy-specific-config">
+                            <div class="form-group">
+                                <label for="ai-router-prompt">AI Routing Prompt</label>
+                                <textarea id="ai-router-prompt" class="form-control" placeholder="Examine the message content and route to the appropriate destination..." rows="3" autocomplete="off"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Keyword Routing Config -->
+                        <div id="keyword-routing-config" class="strategy-specific-config router-pattern-section">
+                            <div class="form-group">
+                                <div class="patterns-header">
+                                    <h4>Keyword Patterns</h4>
+                                    <span class="pattern-count">0 patterns</span>
+                                </div>
+                                <p class="patterns-description">Define keywords or regex patterns that will trigger specific output routes. If a message contains any of these patterns, it will be routed to the corresponding output.</p>
+                                <div id="keyword-patterns-container">
+                                    <!-- Patterns will be added here dynamically -->
+                                    <div class="empty-patterns" id="empty-patterns-placeholder">
+                                        <i class="bi bi-signpost-split"></i>
+                                        <p>No patterns defined yet. Add a pattern to begin routing messages.</p>
+                                    </div>
+                                </div>
+                                <button id="add-keyword-pattern"><i class="bi bi-plus-circle"></i> Add New Pattern</button>
+                            </div>
+                        </div>
+
+                        <!-- Random Routing Config -->
+                        <div id="random-routing-config" class="strategy-specific-config">
+                            <div class="form-group">
+                                <label>Port Weights</label>
+                                <div id="port-weights-container">
+                                    <!-- Weights will be added here dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Content-type Routing Config -->
+                        <div id="content-type-routing-config" class="strategy-specific-config">
+                            <div class="form-group">
+                                <label>Content Type Mappings</label>
+                                <div id="content-type-mappings-container">
+                                    <!-- Mappings will be added here dynamically -->
+                                </div>
+                                <button id="add-content-mapping" class="small-btn">+ Add Mapping</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tool-specific Config will be added dynamically -->
+                </div>
+            </div>
+            <div class="panel-footer">
+                <button id="cancel-config" class="secondary-btn">Cancel</button>
+                <button id="apply-config" class="primary-btn">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Agent Modal -->
+    <div class="modal" id="new-agent-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Agent</h2>
+                <button class="close-btn modal-close"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="new-agent-name">Agent Name</label>
+                    <input type="text" id="new-agent-name" class="form-control" placeholder="My Custom Agent" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="new-agent-type">Agent Type</label>
+                    <select id="new-agent-type" class="form-control">
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic Claude</option>
+                        <option value="bedrock">AWS Bedrock</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div id="new-agent-config-container">
+                    <!-- Dynamic config fields based on type -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary-btn modal-close">Cancel</button>
+                <button id="create-agent-confirm" class="primary-btn">Create Agent</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Confirmation tooltip -->
+    <div class="connection-tooltip" id="connection-tooltip">
+        <p>Click to connect</p>
+    </div>
+
+    <script src="/static/js/flow-builder.js"></script>
+    <script src="/static/js/network-execution.js"></script>
+</body>
+</html>
