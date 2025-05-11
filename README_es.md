@@ -17,114 +17,114 @@
       <!-- Add other languages here like: | <a href="README_de.md">Deutsch</a> -->
   </p>
   
-**The Definitive Python Implementation of Google's Agent-to-Agent (A2A) Protocol with Model Context Protocol (MCP) Integration**
+**Implementación oficial de Python para el protocolo Google Agent-to-Agent (A2A), con integración de Model Context Protocol (MCP)**
 
 </div>
 
-## 🌟 Overview
+## 🌟 Descripción general
 
-Python A2A is a comprehensive, production-ready library for implementing Google's [Agent-to-Agent (A2A) protocol](https://google.github.io/A2A/) with full support for the [Model Context Protocol (MCP)](https://contextual.ai/introducing-mcp/). It provides everything you need to build interoperable AI agent ecosystems that can collaborate seamlessly to solve complex problems.
+Python A2A es una biblioteca completa y lista para producción para implementar el [protocolo Agent-to-Agent (A2A) de Google](https://google.github.io/A2A/) con soporte completo para el [Model Context Protocol (MCP)](https://contextual.ai/introducing-mcp/). Proporciona todas las funcionalidades necesarias para construir un ecosistema de agentes de IA interoperables que puedan colaborar de forma fluida para resolver problemas complejos.
 
-The A2A protocol establishes a standard communication format that enables AI agents to interact regardless of their underlying implementation, while MCP extends this capability by providing a standardized way for agents to access external tools and data sources. Python A2A makes these protocols accessible with an intuitive API that developers of all skill levels can use to build sophisticated multi-agent systems.
+El protocolo A2A establece un formato de comunicación estándar para que los agentes de IA interactúen, y el MCP amplía esta capacidad proporcionando un método estandarizado para que los agentes accedan a herramientas y fuentes de datos externas. Python A2A hace que estos protocolos sean fáciles de usar mediante una API intuitiva, permitiendo a los desarrolladores construir sistemas de agentes complejos.
 
-## 📋 What's New in v0.5.X
+## 📋 Nuevas características en v0.5.X
 
-- **Agent Discovery**: Built-in support for agent registry and discovery with full Google A2A protocol compatibility
-- **LangChain Integration**: Seamless integration with LangChain's tools and agents
-- **Expanded Tool Ecosystem**: Use tools from both LangChain and MCP in any agent
-- **Enhanced Agent Interoperability**: Convert between A2A agents and LangChain agents 
-- **Mixed Workflow Engine**: Build workflows combining both ecosystems
-- **Simplified Agent Development**: Access thousands of pre-built tools instantly
-- **Advanced Streaming Architecture**: Enhanced streaming with Server-Sent Events (SSE), better error handling, and robust fallback mechanisms
-- **Task-Based Streaming**: New `tasks_send_subscribe` method for streaming task updates in real-time
-- **Streaming Chunks API**: Improved chunk processing with the `StreamingChunk` class for structured streaming data
-- **Multi-Endpoint Support**: Automatic discovery and fallback across multiple streaming endpoints
+- **Descubrimiento de agentes**: Soporte integrado para registro y descubrimiento de agentes con compatibilidad completa con el protocolo Google A2A
+- **Integración con LangChain**: Integración fluida con las herramientas y agentes de LangChain
+- **Ecosistema de herramientas expandido**: Use herramientas de LangChain y MCP en cualquier agente
+- **Interoperabilidad mejorada entre agentes**: Convierta entre agentes A2A y agentes de LangChain 
+- **Motor de flujo de trabajo mixto**: Cree flujos de trabajo combinando ambos ecosistemas
+- **Desarrollo de agentes simplificado**: Acceda a miles de herramientas preconstruidas de inmediato
+- **Arquitectura de transmisión avanzada**: Transmisión mejorada con eventos de servidor enviado (SSE), mejor manejo de errores y mecanismos de respaldo robustos
+- **Transmisión basada en tareas**: Nuevo método `tasks_send_subscribe` para transmisión de actualizaciones de tareas en tiempo real
+- **API de fragmentos de transmisión**: Procesamiento de fragmentos mejorado con la clase `StreamingChunk` para datos de transmisión estructurados
+- **Soporte para múltiples puntos finales**: Descubrimiento y respaldo automáticos entre múltiples puntos finales de transmisión
 
-## 📋 What's New in v0.4.X
+## 📋 Nuevas características en v0.4.X
 
-- **Agent Network System**: Manage and discover multiple agents with the new `AgentNetwork` class
-- **Real-time Streaming**: Implement streaming responses with `StreamingClient` for responsive UIs
-- **Workflow Engine**: Define complex multi-agent workflows using the new fluent API with conditional branching and parallel execution
-- **AI-Powered Router**: Automatically route queries to the most appropriate agent with the `AIAgentRouter`
-- **Command Line Interface**: Control your agents from the terminal with the new CLI tool
-- **Enhanced Asynchronous Support**: Better async/await support throughout the library
-- **New Connection Options**: Improved error handling and retry logic for more robust agent communication
+- **Sistema de red de agentes**: Administre y descubra múltiples agentes con la nueva clase `AgentNetwork`
+- **Transmisión en tiempo real**: Implemente respuestas de transmisión con `StreamingClient` para interfaces de usuario responsivas
+- **Motor de flujo de trabajo**: Defina flujos de trabajo complejos de múltiples agentes usando la nueva API fluida con bifurcación condicional y ejecución paralela
+- **Enrutador impulsado por IA**: Enrutamiento automático de consultas al agente más adecuado con `AIAgentRouter`
+- **Interfaz de línea de comandos**: Controle sus agentes desde el terminal con la nueva herramienta CLI
+- **Soporte asincrónico mejorado**: Mejor soporte para async/await a lo largo de la biblioteca
+- **Nuevas opciones de conexión**: Mejor manejo de errores y lógica de reintento para una comunicación de agentes más robusta
 
-## ✨ Why Choose Python A2A?
+## ✨ ¿Por qué elegir Python A2A?
 
-- **Complete Implementation**: Fully implements the official A2A specification with zero compromises
-- **Agent Discovery**: Built-in agent registry and discovery for building agent ecosystems
-- **MCP Integration**: First-class support for Model Context Protocol for powerful tool-using agents
-- **Enterprise Ready**: Built for production environments with robust error handling and validation
-- **Framework Agnostic**: Works with any Python framework (Flask, FastAPI, Django, etc.)
-- **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, AWS Bedrock, and more
-- **Minimal Dependencies**: Core functionality requires only the `requests` library
-- **Excellent Developer Experience**: Comprehensive documentation, type hints, and examples
+- **Implementación completa**: Implementa completamente la especificación oficial de A2A sin compromisos
+- **Descubrimiento de agentes**: Registro y descubrimiento integrados para construir ecosistemas de agentes
+- **Integración de MCP**: Soporte de primera clase para el Protocolo de Contexto del Modelo para agentes que usan herramientas
+- **Listo para empresas**: Construido para entornos de producción con manejo robusto de errores y validación
+- **Agnóstico de marco**: Funciona con cualquier marco de Python (Flask, FastAPI, Django, etc.)
+- **Flexibilidad del proveedor de LLM**: Integraciones nativas con OpenAI, Anthropic, AWS Bedrock y más
+- **Dependencias mínimas**: La funcionalidad básica requiere solo la biblioteca `requests`
+- **Excelente experiencia del desarrollador**: Documentación completa, sugerencias de tipo y ejemplos
 
-## 📦 Installation
+## 📦 Instalación
 
-### Using pip (traditional)
+### Usando pip (tradicional)
 
-Install the base package with all dependencies:
+Instale el paquete base con todas las dependencias:
 
 ```bash
-pip install python-a2a  # Includes LangChain, MCP, and other integrations
+pip install python-a2a  # Incluye LangChain, MCP y otras integraciones
 ```
 
-Or install with specific components based on your needs:
+O instale con componentes específicos según sus necesidades:
 
 ```bash
-# For Flask-based server support
+# Para soporte de servidor basado en Flask
 pip install "python-a2a[server]"
 
-# For OpenAI integration
+# Para integración con OpenAI
 pip install "python-a2a[openai]"
 
-# For Anthropic Claude integration
+# Para integración con Anthropic Claude
 pip install "python-a2a[anthropic]"
 
-# For AWS-Bedrock integration
+# Para integración con AWS-Bedrock
 pip install "python-a2a[bedrock]"
 
-# For MCP support (Model Context Protocol)
+# Para soporte de MCP (Model Context Protocol)
 pip install "python-a2a[mcp]"
 
-# For all optional dependencies
+# Para todas las dependencias opcionales
 pip install "python-a2a[all]"
 ```
 
-### Using UV (recommended)
+### Usando UV (recomendado)
 
-[UV](https://github.com/astral-sh/uv) is a modern Python package management tool that's faster and more reliable than pip. To install with UV:
+[UV](https://github.com/astral-sh/uv) es una herramienta moderna de gestión de paquetes de Python que es más rápida y confiable que pip. Para instalar con UV:
 
 ```bash
-# Install UV if you don't have it already
+# Instale UV si aún no lo tiene
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install the base package
+# Instale el paquete base
 uv install python-a2a
 ```
 
-### Development Installation
+### Instalación para desarrollo
 
-For development, UV is recommended for its speed:
+Para desarrollo, se recomienda UV por su velocidad:
 
 ```bash
-# Clone the repository
+# Clone el repositorio
 git clone https://github.com/themanojdesai/python-a2a.git
 cd python-a2a
 
-# Create a virtual environment and install development dependencies
+# Cree un entorno virtual y instale dependencias de desarrollo
 uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # En Windows: .venv\Scripts\activate
 uv pip install -e ".[dev]"
 ```
 
-> 💡 **Tip**: Click the code blocks to copy them to your clipboard.
+> 💡 **Consejo**: Haga clic en los bloques de código para copiarlos a su portapapeles.
 
-## 🚀 Quick Start Examples
+## 🚀 Ejemplos rápidos
 
-### 1. Create a Simple A2A Agent with Skills
+### 1. Cree un agente A2A simple con habilidades
 
 ```python
 from python_a2a import A2AServer, skill, agent, run_server, TaskStatus, TaskState
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     run_server(agent, port=5000)
 ```
 
-### 2. Build an Agent Network with Multiple Agents
+### 2. Construya una red de agentes con múltiples agentes
 
 ```python
 from python_a2a import AgentNetwork, A2AClient, AIAgentRouter
@@ -209,9 +209,9 @@ for agent_info in network.list_agents():
     print(f"- {agent_info['name']}: {agent_info['description']}")
 ```
 
-### Real-time Streaming
+### Transmisión en tiempo real
 
-Get real-time responses from agents with comprehensive streaming support:
+Obtenga respuestas en tiempo real de los agentes con soporte de transmisión completo:
 
 ```python
 import asyncio
@@ -243,19 +243,19 @@ async def main():
         print(f"Streaming error: {e}")
 ```
 
-Check out the `examples/streaming/` directory for complete streaming examples:
+Consulte el directorio `examples/streaming/` para ejemplos completos de transmisión:
 
-- **basic_streaming.py**: Minimal streaming implementation (start here!)
-- **01_basic_streaming.py**: Comprehensive introduction to streaming basics
-- **02_advanced_streaming.py**: Advanced streaming with different chunking strategies
-- **03_streaming_llm_integration.py**: Integrating streaming with LLM providers
-- **04_task_based_streaming.py**: Task-based streaming with progress tracking
-- **05_streaming_ui_integration.py**: Streaming UI integration (CLI and web)
-- **06_distributed_streaming.py**: Distributed streaming architecture
+- **basic_streaming.py**: Implementación mínima de transmisión (¡comience aquí!)
+- **01_basic_streaming.py**: Introducción completa a los fundamentos de transmisión
+- **02_advanced_streaming.py**: Transmisión avanzada con diferentes estrategias de fragmentación
+- **03_streaming_llm_integration.py**: Integración de transmisión con proveedores de LLM
+- **04_task_based_streaming.py**: Transmisión basada en tareas con seguimiento de progreso
+- **05_streaming_ui_integration.py**: Integración de interfaz de usuario de transmisión (CLI y web)
+- **06_distributed_streaming.py**: Arquitectura de transmisión distribuida
 
-### 3. Workflow Engine
+### 3. Motor de flujo de trabajo
 
-The new workflow engine allows you to define complex agent interactions:
+El nuevo motor de flujo de trabajo le permite definir interacciones complejas entre agentes:
 
 ```python
 from python_a2a import AgentNetwork, Flow
@@ -301,9 +301,9 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 4. AI-Powered Router
+### 4. Enrutador impulsado por IA
 
-Intelligent routing to select the best agent for each query:
+Enrutamiento inteligente para seleccionar el mejor agente para cada consulta:
 
 ```python
 from python_a2a import AgentNetwork, AIAgentRouter, A2AClient
@@ -348,7 +348,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 5. Define Complex Workflows with Multiple Agents
+### 5. Defina flujos de trabajo complejos con múltiples agentes
 
 ```python
 from python_a2a import AgentNetwork, Flow, AIAgentRouter
@@ -408,7 +408,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 6. Use the Command Line Interface
+### 6. Use la interfaz de línea de comandos
 
 ```bash
 # Send a message to an agent
@@ -439,11 +439,11 @@ a2a network --add weather=http://localhost:5001 travel=http://localhost:5002 --s
 a2a workflow --script research_workflow.py --context initial_data.json
 ```
 
-## 🔄 LangChain Integration (New in v0.5.X)
+## 🔄 Integración con LangChain (Nuevo en v0.5.X)
 
-Python A2A includes built-in LangChain integration, making it easy to combine the best of both ecosystems:
+Python A2A incluye una integración integrada con LangChain, lo que facilita combinar lo mejor de ambos ecosistemas:
 
-### 1. Converting MCP Tools to LangChain
+### 1. Conversión de herramientas MCP a LangChain
 
 ```python
 from python_a2a.mcp import FastMCP, text_response
@@ -480,7 +480,7 @@ result = calculator_tool.run("5 * 9 + 3")
 print(f"Result: {result}")
 ```
 
-### 2. Converting LangChain Tools to MCP Server
+### 2. Conversión de herramientas de LangChain a servidor MCP
 
 ```python
 from langchain.tools import Tool
@@ -509,7 +509,7 @@ mcp_server = to_mcp_server(calculator_tool)
 mcp_server.run(port=5000)
 ```
 
-### 3. Converting LangChain Components to A2A Servers
+### 3. Conversión de componentes de LangChain a servidores A2A
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -554,7 +554,7 @@ llm_result = llm_client.ask("What is the capital of France?")
 travel_result = travel_client.ask('{"query": "What are some must-see attractions in Paris?"}')
 ```
 
-### 4. Converting A2A Agents to LangChain Agents
+### 4. Conversión de agentes A2A a agentes de LangChain
 
 ```python
 from python_a2a.langchain import to_langchain_agent
@@ -589,18 +589,18 @@ result = chain.invoke({"destination": "Japan"})
 print(result)
 ```
 
-LangChain is automatically installed as a dependency with python-a2a, so everything works right out of the box:
+LangChain se instala automáticamente como dependencia con python-a2a, por lo que todo funciona de inmediato:
 
 ```bash
 pip install python-a2a
-# That's it! LangChain is included automatically
+# ¡Eso es todo! LangChain se incluye automáticamente
 ```
 
-## 🧩 Core Features
+## 🧩 Características principales
 
-### Agent Networks
+### Redes de agentes
 
-Python A2A now includes a powerful system for managing multiple agents:
+Python A2A ahora incluye un sistema poderoso para administrar múltiples agentes:
 
 ```python
 from python_a2a import AgentNetwork, A2AClient
@@ -633,7 +633,7 @@ agent = network.get_agent("diagnosis")
 response = agent.ask("What are the symptoms of the flu?")
 ```
 
-### 7. Agent Discovery and Registry
+### 7. Descubrimiento y registro de agentes
 
 ```python
 from python_a2a import AgentCard, A2AServer, run_server
@@ -693,98 +693,98 @@ for agent in agents:
     print(f"  Capabilities: {agent.capabilities}")
 ```
 
-## 📖 Architecture & Design Principles
+## 📖 Arquitectura y principios de diseño
 
-Python A2A is built on three core design principles:
+Python A2A se basa en tres principios de diseño fundamentales:
 
-1. **Protocol First**: Adheres strictly to the A2A and MCP protocol specifications for maximum interoperability
+1. **Protocolo primero**: Se adhiere estrictamente a las especificaciones de los protocolos A2A y MCP para máxima interoperabilidad
 
-2. **Modularity**: All components are designed to be composable and replaceable
+2. **Modularidad**: Todos los componentes están diseñados para ser componibles y reemplazables
 
-3. **Progressive Enhancement**: Start simple and add complexity only as needed
+3. **Mejora progresiva**: Comience simple y agregue complejidad solo cuando sea necesario
 
-The architecture consists of eight main components:
+La arquitectura consta de ocho componentes principales:
 
-- **Models**: Data structures representing A2A messages, tasks, and agent cards
-- **Client**: Components for sending messages to A2A agents and managing agent networks
-- **Server**: Components for building A2A-compatible agents
-- **Discovery**: Registry and discovery mechanisms for agent ecosystems
-- **MCP**: Tools for implementing Model Context Protocol servers and clients
-- **LangChain**: Bridge components for LangChain integration
-- **Workflow**: Engine for orchestrating complex agent interactions
-- **Utils**: Helper functions for common tasks
-- **CLI**: Command-line interface for interacting with agents
+- **Modelos**: Estructuras de datos que representan mensajes A2A, tareas y tarjetas de agentes
+- **Cliente**: Componentes para enviar mensajes a agentes A2A y administrar redes de agentes
+- **Servidor**: Componentes para construir agentes compatibles con A2A
+- **Descubrimiento**: Mecanismos de registro y descubrimiento para ecosistemas de agentes
+- **MCP**: Herramientas para implementar servidores y clientes del Protocolo de Contexto del Modelo
+- **LangChain**: Componentes de puente para la integración con LangChain
+- **Flujo de trabajo**: Motor para orquestar interacciones complejas entre agentes
+- **Utils**: Funciones auxiliares para tareas comunes
+- **CLI**: Interfaz de línea de comandos para interactuar con agentes
 
-## 🗺️ Use Cases
+## 🗺️ Casos de uso
 
-Python A2A can be used to build a wide range of AI systems:
+Python A2A puede usarse para construir una amplia gama de sistemas de IA:
 
-### Research & Development
+### Investigación y desarrollo
 
-- **Experimentation Framework**: Easily swap out different LLM backends while keeping the same agent interface
-- **Benchmark Suite**: Compare performance of different agent implementations on standardized tasks
-- **Streaming Research Assistants**: Create responsive research tools with real-time output using streaming
+- **Marco de experimentación**: Cambie fácilmente entre diferentes backend de LLM manteniendo la misma interfaz de agente
+- **Conjunto de pruebas**: Compare el rendimiento de diferentes implementaciones de agentes en tareas estandarizadas
+- **Asistentes de investigación con transmisión**: Cree herramientas de investigación responsivas con salida en tiempo real usando transmisión
 
-### Enterprise Systems
+### Sistemas empresariales
 
-- **AI Orchestration**: Coordinate multiple AI agents across different departments using agent networks
-- **Legacy System Integration**: Wrap legacy systems with A2A interfaces for AI accessibility
-- **Complex Workflows**: Create sophisticated business processes with multi-agent workflows and conditional branching
+- **Orquestación de IA**: Coordine múltiples agentes de IA a través de diferentes departamentos usando redes de agentes
+- **Integración con sistemas legados**: Envuelva sistemas legados con interfaces A2A para accesibilidad de IA
+- **Flujos de trabajo complejos**: Cree procesos empresariales sofisticados con flujos de trabajo de múltiples agentes y bifurcación condicional
 
-### Customer-Facing Applications
+### Aplicaciones orientadas al cliente
 
-- **Multi-Stage Assistants**: Break complex user queries into subtasks handled by specialized agents
-- **Tool-Using Agents**: Connect LLMs to database agents, calculation agents, and more using MCP
-- **Real-time Chat Interfaces**: Build responsive chat applications with streaming response support
+- **Asistentes de varias etapas**: Divida consultas complejas del usuario en subtareas manejadas por agentes especializados
+- **Agentes que usan herramientas**: Conecte LLMs a agentes de base de datos, agentes de cálculo y más usando MCP
+- **Interfaz de chat en tiempo real**: Construya aplicaciones de chat responsivas con soporte de transmisión de respuestas
 
-### Education & Training
+### Educación y capacitación
 
-- **AI Education**: Create educational systems that demonstrate agent collaboration
-- **Simulation Environments**: Build simulated environments where multiple agents interact
-- **Educational Workflows**: Design step-by-step learning processes with feedback loops
+- **Sistemas educativos de IA**: Cree sistemas educativos que demuestren la colaboración de agentes
+- **Entornos de simulación**: Construya entornos simulados donde múltiples agentes interactúen
+- **Flujos de trabajo educativos**: Diseñe procesos de aprendizaje paso a paso con bucles de retroalimentación
 
-## 🛠️ Real-World Examples
+## 🛠️ Ejemplos del mundo real
 
-Check out the [`examples/`](https://github.com/themanojdesai/python-a2a/tree/main/examples) directory for real-world examples, including:
+Consulte el directorio [`examples/`](https://github.com/themanojdesai/python-a2a/tree/main/examples) para ejemplos del mundo real, incluyendo:
 
-- Multi-agent customer support systems
-- LLM-powered research assistants with tool access
-- Real-time streaming implementations
-- LangChain integration examples
-- MCP server implementations for various tools
-- Workflow orchestration examples
-- Agent network management
+- Sistemas de soporte al cliente de múltiples agentes
+- Asistentes de investigación impulsados por LLM con acceso a herramientas
+- Implementaciones de transmisión en tiempo real
+- Ejemplos de integración con LangChain
+- Implementaciones de servidores MCP para diversas herramientas
+- Ejemplos de orquestación de flujos de trabajo
+- Administración de redes de agentes
 
-## 🔄 Related Projects
+## 🔄 Proyectos relacionados
 
-Here are some related projects in the AI agent and interoperability space:
+Aquí hay algunos proyectos relacionados en el espacio de agentes de IA e interoperabilidad:
 
-- [**Google A2A**](https://github.com/google/A2A) - The official Google A2A protocol specification
-- [**LangChain**](https://github.com/langchain-ai/langchain) - Framework for building applications with LLMs
-- [**AutoGen**](https://github.com/microsoft/autogen) - Microsoft's framework for multi-agent conversations
-- [**CrewAI**](https://github.com/joaomdmoura/crewAI) - Framework for orchestrating role-playing agents
-- [**MCP**](https://github.com/contextco/mcp) - The Model Context Protocol for tool-using agents
+- [**Google A2A**](https://github.com/google/A2A) - La especificación oficial del protocolo A2A de Google
+- [**LangChain**](https://github.com/langchain-ai/langchain) - Marco para construir aplicaciones con LLM
+- [**AutoGen**](https://github.com/microsoft/autogen) - Marco de Microsoft para conversaciones de múltiples agentes
+- [**CrewAI**](https://github.com/joaomdmoura/crewAI) - Marco para orquestar agentes de role-playing
+- [**MCP**](https://github.com/contextco/mcp) - El Protocolo de Contexto del Modelo para agentes que usan herramientas
 
-## 👥 Contributors
+## 👥 Colaboradores
 
-Thanks to all our contributors!
+¡Gracias a todos nuestros colaboradores!
 
 <a href="https://github.com/themanojdesai/python-a2a/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=themanojdesai/python-a2a" />
 </a>
 
-Want to contribute? Check out our [contributing guide](https://python-a2a.readthedocs.io/en/latest/contributing.html).
+¿Quiere contribuir? Consulte nuestra [guía de contribución](https://python-a2a.readthedocs.io/en/latest/contributing.html).
 
-## 🤝 Community & Support
+## 🤝 Comunidad y soporte
 
-- **[GitHub Issues](https://github.com/themanojdesai/python-a2a/issues)**: Report bugs or request features
-- **[GitHub Discussions](https://github.com/themanojdesai/python-a2a/discussions)**: Ask questions and share ideas
-- **[Contributing Guide](https://python-a2a.readthedocs.io/en/latest/contributing.html)**: Learn how to contribute to the project
-- **[ReadTheDocs](https://python-a2a.readthedocs.io/en/latest/)**: Visit our documentation site
+- **[Problemas de GitHub](https://github.com/themanojdesai/python-a2a/issues)**: Informe errores o solicite características
+- **[Discusiones de GitHub](https://github.com/themanojdesai/python-a2a/discussions)**: Haga preguntas y comparta ideas
+- **[Guía de contribución](https://python-a2a.readthedocs.io/en/latest/contributing.html)**: Aprenda cómo contribuir al proyecto
+- **[ReadTheDocs](https://python-a2a.readthedocs.io/en/latest/)**: Visite nuestro sitio de documentación
 
-## 📝 Citing this Project
+## 📝 Citar este proyecto
 
-If you use Python A2A in your research or academic work, please cite it as:
+Si usa Python A2A en sus trabajos de investigación o académicos, por favor cite como:
 
 ```
 @software{desai2025pythona2a,
@@ -796,24 +796,24 @@ If you use Python A2A in your research or academic work, please cite it as:
 }
 ```
 
-## ⭐ Star This Repository
+## ⭐ Estrelle este repositorio
 
-If you find this library useful, please consider giving it a star on GitHub! It helps others discover the project and motivates further development.
+Si encuentra esta biblioteca útil, por favor considere darle una estrella en GitHub. ¡Ayuda a que otros la descubran y motiva el desarrollo futuro!
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/themanojdesai/python-a2a?style=social)](https://github.com/themanojdesai/python-a2a/stargazers)
 
-### Star History
+### Historial de estrellas
 
 [![Star History Chart](https://api.star-history.com/svg?repos=themanojdesai/python-a2a&type=Date)](https://star-history.com/#themanojdesai/python-a2a&Date)
 
-## 🙏 Acknowledgements
+## 🙏 Agradecimientos
 
-- The [Google A2A team](https://github.com/google/A2A) for creating the A2A protocol
-- The [Contextual AI team](https://contextual.ai/) for the Model Context Protocol
-- The [LangChain team](https://github.com/langchain-ai) for their powerful LLM framework
-- All our [contributors](https://github.com/themanojdesai/python-a2a/graphs/contributors) for their valuable input
+- Al equipo de [Google A2A](https://github.com/google/A2A) por crear el protocolo A2A
+- Al equipo de [Contextual AI](https://contextual.ai/) por el Protocolo de Contexto del Modelo
+- Al equipo de [LangChain](https://github.com/langchain-ai) por su marco de LLM potente
+- A todos nuestros [colaboradores](https://github.com/themanojdesai/python-a2a/graphs/contributors) por sus valiosos comentarios
 
-## 👨‍💻 Author
+## 👨‍💻 Autor
 
 **Manoj Desai**
 
@@ -821,10 +821,10 @@ If you find this library useful, please consider giving it a star on GitHub! It 
 - LinkedIn: [themanojdesai](https://www.linkedin.com/in/themanojdesai/)
 - Medium: [@the_manoj_desai](https://medium.com/@the_manoj_desai)
 
-## 📄 License
+## 📄 Licencia
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Este proyecto está bajo la licencia MIT - vea el archivo [LICENSE](LICENSE) para más detalles.
 
 ---
 
-Made with ❤️ by [Manoj Desai](https://github.com/themanojdesai)
+Creado con ❤️ por [Manoj Desai](https://github.com/themanojdesai)
