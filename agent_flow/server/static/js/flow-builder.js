@@ -6,6 +6,142 @@ document.addEventListener('DOMContentLoaded', function() {
     const newAgentModal = document.getElementById('new-agent-modal');
     const connectionTooltip = document.getElementById('connection-tooltip');
     const emptyCanvasHelp = document.getElementById('empty-canvas-help');
+
+    // Mark non-OpenAI agents and all tools as "coming soon"
+    const markComingSoonFeatures = () => {
+        // Apply to agent types (except OpenAI)
+        const agentCards = document.querySelectorAll('.agent-card');
+        agentCards.forEach(card => {
+            if (card.getAttribute('data-type') !== 'openai') {
+                card.classList.add('feature-showcase');
+
+                // Add the badge with icon
+                const badge = document.createElement('div');
+                badge.className = 'feature-badge';
+                badge.textContent = 'Under Development';
+                card.appendChild(badge);
+
+                // Add a subtle hover title
+                card.setAttribute('title', 'This feature is currently in development');
+            }
+        });
+
+        // Apply to all tools
+        const toolCards = document.querySelectorAll('.tool-card');
+        toolCards.forEach(card => {
+            card.classList.add('feature-showcase');
+
+            // Add the badge with icon
+            const badge = document.createElement('div');
+            badge.className = 'feature-badge';
+            badge.textContent = 'Under Development';
+            card.appendChild(badge);
+
+            // Add a subtle hover title
+            card.setAttribute('title', 'This feature is currently in development');
+        });
+
+        // Style the "New" button for tools with a more elegant approach
+        const createToolBtn = document.getElementById('create-tool-btn');
+        if (createToolBtn) {
+            createToolBtn.style.opacity = '0.7';
+            createToolBtn.style.pointerEvents = 'none';
+            createToolBtn.style.position = 'relative';
+            createToolBtn.style.overflow = 'hidden';
+            createToolBtn.setAttribute('title', 'This feature is currently in development');
+
+            // Add a subtle shine effect
+            createToolBtn.style.background = 'linear-gradient(45deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.05))';
+            createToolBtn.style.border = '1px solid rgba(139, 92, 246, 0.2)';
+            createToolBtn.style.borderRadius = '4px';
+            createToolBtn.style.padding = '2px 8px';
+
+            // Add a small indicator
+            const indicator = document.createElement('span');
+            indicator.style.fontSize = '8px';
+            indicator.style.opacity = '0.8';
+            indicator.style.marginLeft = '5px';
+            indicator.style.letterSpacing = '0.5px';
+            indicator.style.fontWeight = '600';
+            indicator.style.display = 'inline-flex';
+            indicator.style.alignItems = 'center';
+            indicator.style.gap = '3px';
+
+            // Add a small clock icon using SVG
+            const iconSpan = document.createElement('span');
+            iconSpan.style.display = 'inline-block';
+            iconSpan.style.width = '8px';
+            iconSpan.style.height = '8px';
+            iconSpan.style.marginRight = '2px';
+            iconSpan.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="rgba(59, 130, 246, 0.8)" style="width:100%;height:100%">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+            </svg>`;
+            iconSpan.style.animation = 'pulseEffect 2s infinite';
+
+            indicator.appendChild(iconSpan);
+            indicator.appendChild(document.createTextNode('Coming Soon'));
+
+            // Clear and set new content
+            const existingHtml = createToolBtn.innerHTML;
+            createToolBtn.innerHTML = existingHtml.split('<span')[0]; // Remove any existing span
+            createToolBtn.appendChild(indicator);
+        }
+
+        // In the new agent modal, style other options elegantly
+        const newAgentTypeSelect = document.getElementById('new-agent-type');
+        if (newAgentTypeSelect) {
+            Array.from(newAgentTypeSelect.options).forEach(option => {
+                if (option.value !== 'openai') {
+                    option.disabled = true;
+                    option.style.color = 'rgba(160, 160, 160, 0.6)';
+                    option.style.fontStyle = 'italic';
+                    option.text = option.text + ' (Under Development)';
+                }
+            });
+
+            // Add custom styling to the select element
+            newAgentTypeSelect.addEventListener('mouseenter', function() {
+                const tooltip = document.createElement('div');
+                tooltip.style.position = 'absolute';
+                tooltip.style.bottom = '-30px';
+                tooltip.style.left = '0';
+                tooltip.style.fontSize = '10px';
+                tooltip.style.color = 'rgba(167, 139, 250, 0.9)';
+                tooltip.style.padding = '4px 8px';
+                tooltip.style.borderRadius = '4px';
+                tooltip.style.background = 'rgba(18, 18, 18, 0.8)';
+                tooltip.style.zIndex = '100';
+                tooltip.style.whiteSpace = 'nowrap';
+                tooltip.textContent = 'Additional agent types are currently under development';
+                tooltip.style.transition = 'opacity 0.3s ease';
+                tooltip.style.opacity = '0';
+
+                // Remove any existing tooltip
+                const existingTooltip = document.querySelector('.agent-type-tooltip');
+                if (existingTooltip) existingTooltip.remove();
+
+                tooltip.classList.add('agent-type-tooltip');
+                newAgentTypeSelect.parentNode.appendChild(tooltip);
+
+                setTimeout(() => {
+                    tooltip.style.opacity = '1';
+                }, 50);
+            });
+
+            newAgentTypeSelect.addEventListener('mouseleave', function() {
+                const tooltip = document.querySelector('.agent-type-tooltip');
+                if (tooltip) {
+                    tooltip.style.opacity = '0';
+                    setTimeout(() => {
+                        tooltip.remove();
+                    }, 300);
+                }
+            });
+        }
+    };
+
+    // Call the function to mark features as coming soon
+    markComingSoonFeatures();
     
     // Global variables
     let nodeCounter = 0;
