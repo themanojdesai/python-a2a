@@ -600,7 +600,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 routingStrategy: 'keyword',
                 outputPorts: 2,
                 keywordPatterns: [
-                    { keyword: 'default', port: 0 }
+                    { keyword: '.*', port: 0, originalType: 'regex', originalValue: '.*' },  // Match everything as a default pattern for port 0
+                    { keyword: '.*question.*', port: 1, originalType: 'regex', originalValue: '.*question.*' }  // Example pattern for port 1
                 ],
                 portWeights: { 0: 1.0, 1: 1.0 },
                 contentTypeMappings: [
@@ -1174,17 +1175,99 @@ document.addEventListener('DOMContentLoaded', function() {
                         const patterns = config.keywordPatterns || [];
                         if (patterns.length > 0) {
                             patterns.forEach(pattern => {
-                                addKeywordPatternRow(patternsContainer, pattern.keyword, pattern.port);
+                                // If this is a pattern saved with our newer format, use the original values
+                                if (pattern.originalType && pattern.originalValue) {
+                                    addKeywordPatternRow(patternsContainer, pattern.originalValue, pattern.port, pattern.originalType);
+                                } else {
+                                    // For backwards compatibility with older patterns, guess the pattern type
+                                    let patternType = 'contains';
+                                    const keyword = pattern.keyword;
+
+                                    // Try to detect the pattern type
+                                    if (keyword.startsWith('^') && keyword.endsWith('$')) {
+                                        patternType = 'exactMatch';
+                                    } else if (keyword.startsWith('^')) {
+                                        patternType = 'startsWith';
+                                    } else if (keyword.endsWith('$')) {
+                                        patternType = 'endsWith';
+                                    } else if (keyword.includes('*') || keyword.includes('?') || keyword.includes('[')) {
+                                        patternType = 'regex';
+                                    }
+
+                                    addKeywordPatternRow(patternsContainer, keyword, pattern.port, patternType);
+                                }
                             });
                         } else {
-                            addKeywordPatternRow(patternsContainer, '', 0);
+                            // Add default patterns for all output ports
+                        let numPorts = 2; // Default minimum
+
+                        // Get the actual number of output ports from the node
+                        if (selectedNode && selectedNode.config && selectedNode.config.outputPorts) {
+                            numPorts = Math.max(numPorts, selectedNode.config.outputPorts);
+                        }
+
+                        // Update the node to have this many output ports
+                        if (selectedNode && selectedNode.config) {
+                            selectedNode.config.outputPorts = numPorts;
+
+                            // This is a critical function to ensure patterns match output ports
+                            // We call this explicitly to ensure consistency
+                            ensurePatternsMatchOutputPorts(selectedNode);
+                        }
+
+                        // Add a pattern for each output port
+                        for (let i = 0; i < numPorts; i++) {
+                            const patternType = i % 5 === 0 ? 'regex' :
+                                              i % 5 === 1 ? 'contains' :
+                                              i % 5 === 2 ? 'startsWith' :
+                                              i % 5 === 3 ? 'endsWith' : 'exactMatch';
+
+                            const pattern = i === 0 ? '.*' : // Default catch-all for first port
+                                           patternType === 'regex' ? `.*pattern${i}.*` :
+                                           patternType === 'contains' ? `keyword${i}` :
+                                           patternType === 'startsWith' ? `start${i}` :
+                                           patternType === 'endsWith' ? `end${i}` : `exact${i}`;
+
+                            addKeywordPatternRow(patternsContainer, pattern, i, patternType);
+                        }
                         }
 
                         // Set up "Add Pattern" button
                         const addPatternBtn = document.getElementById('add-keyword-pattern');
                         if (addPatternBtn) {
                             addPatternBtn.onclick = function() {
-                                addKeywordPatternRow(patternsContainer, '', 0);
+                                if (!selectedNode || selectedNode.type !== 'router') return;
+
+                                // Get the current pattern count to determine the next port number
+                                const currentPatterns = patternsContainer.querySelectorAll('.keyword-pattern-row');
+                                const nextPortNumber = currentPatterns.length;
+
+                                // Create a new output port
+                                addNewOutputPort();
+
+                                // Add the row with a random pattern type for variety
+                                const patternTypes = ['contains', 'startsWith', 'endsWith', 'exactMatch', 'regex'];
+                                const randomType = patternTypes[Math.floor(Math.random() * patternTypes.length)];
+                                addKeywordPatternRow(patternsContainer, '', nextPortNumber, randomType);
+
+                                // Ensure all dropdowns are up-to-date with correct port numbers
+                                rebuildAllPortDropdowns();
+
+                                // Add a nice animation effect
+                                const newRow = patternsContainer.lastElementChild;
+                                newRow.style.transform = 'translateY(10px)';
+                                newRow.style.opacity = '0';
+
+                                // Trigger animation
+                                setTimeout(() => {
+                                    newRow.style.transition = 'all 0.3s ease';
+                                    newRow.style.transform = 'translateY(0)';
+                                    newRow.style.opacity = '1';
+
+                                    // Focus on the input field
+                                    const input = newRow.querySelector('.pattern-input');
+                                    if (input) input.focus();
+                                }, 10);
                             };
                         }
                     }
@@ -1254,42 +1337,852 @@ document.addEventListener('DOMContentLoaded', function() {
      * @param {string} keyword - The keyword to match
      * @param {number} port - The port to route to
      */
-    function addKeywordPatternRow(container, keyword, port) {
-        const row = document.createElement('div');
-        row.className = 'pattern-row';
+    /**
+     * Returns an array of output ports that are already selected in existing patterns
+     * so they can be disabled in new pattern dropdowns
+     */
+    function getSelectedPorts() {
+        const selectedPorts = [];
+        const patterns = document.querySelectorAll('.keyword-pattern-row');
 
-        // Create unique ID for the remove button
-        const rowId = Date.now() + Math.random().toString(36).substring(2, 9);
+        patterns.forEach(pattern => {
+            const select = pattern.querySelector('select.port-select');
+            if (select && select.value) {
+                selectedPorts.push(parseInt(select.value));
+            }
+        });
 
-        // Get number of output ports for select options
+        return selectedPorts;
+    }
+
+    /**
+     * Refreshes all port dropdowns to correctly show disabled options
+     */
+    function refreshAllPortDropdowns() {
+        const selectedPorts = getSelectedPorts();
+        const allSelects = document.querySelectorAll('select.port-select');
+
+        allSelects.forEach(select => {
+            // Remember the current value
+            const currentValue = select.value;
+
+            // For each option, determine if it should be disabled
+            Array.from(select.options).forEach(option => {
+                const optionValue = parseInt(option.value);
+                option.disabled = optionValue !== parseInt(currentValue) && selectedPorts.includes(optionValue);
+            });
+        });
+    }
+
+    /**
+     * Add a new output port to the router node
+     * @returns {number} The new port number
+     */
+    function addNewOutputPort() {
+        if (!selectedNode || selectedNode.type !== 'router') return 0;
+
+        // Get the current number of output ports
         let outputPorts = 2; // Default
-        if (selectedNode && selectedNode.config && selectedNode.config.outputPorts) {
+        if (selectedNode.config && selectedNode.config.outputPorts) {
             outputPorts = selectedNode.config.outputPorts;
         }
 
-        // Create port options
-        let portOptions = '';
-        for (let i = 0; i < outputPorts; i++) {
-            portOptions += `<option value="${i}" ${port === i ? 'selected' : ''}>Output ${i+1}</option>`;
+        // Update the node data with the new port count
+        selectedNode.config.outputPorts = outputPorts + 1;
+
+        // Get the router node element
+        const nodeElement = selectedNode.element;
+
+        // Add a new output port visually
+        if (nodeElement) {
+            const outputPortsContainer = nodeElement.querySelector('.output-ports-container');
+            if (outputPortsContainer) {
+                const newPortNumber = outputPorts; // 0-based index
+                const newPortElement = document.createElement('div');
+                newPortElement.className = 'output-port';
+                newPortElement.setAttribute('data-port-number', newPortNumber);
+                newPortElement.innerHTML = `
+                    <span class="port-label">Output ${newPortNumber + 1}</span>
+                    <div class="port port-right" data-port-type="output" data-port-number="${newPortNumber}"></div>
+                `;
+
+                // Add the new port to the container
+                outputPortsContainer.appendChild(newPortElement);
+
+                // Initialize port event listeners
+                initNodeEvents(nodeElement, selectedNode);
+
+                // Update connections
+                updateConnections();
+            }
         }
 
+        // Return the new port number (0-based)
+        return outputPorts;
+    }
+
+    /**
+     * Removes an output port from a router node
+     * @param {number} portNumber - The 0-based port number to remove
+     * @returns {boolean} - Whether the port was successfully removed
+     */
+    function removeOutputPort(portNumber) {
+        if (!selectedNode || selectedNode.type !== 'router' || !selectedNode.config) return false;
+
+        // Get the current number of output ports
+        let outputPorts = 2; // Default minimum
+        if (selectedNode.config.outputPorts) {
+            outputPorts = selectedNode.config.outputPorts;
+        }
+
+        // Don't allow removing if we only have 2 ports (minimum required)
+        if (outputPorts <= 2) {
+            showNotification('warning', 'Router nodes require at least 2 output ports', 3000);
+            return false;
+        }
+
+        // Get the router node element
+        const nodeElement = selectedNode.element;
+        if (!nodeElement) return false;
+
+        // Find the output port element to remove
+        const outputPortsContainer = nodeElement.querySelector('.output-ports-container');
+        if (!outputPortsContainer) return false;
+
+        // Find the port with the matching port number
+        const portElement = outputPortsContainer.querySelector(`.output-port[data-port-number="${portNumber}"]`);
+        if (!portElement) return false;
+
+        // Remove the port element
+        outputPortsContainer.removeChild(portElement);
+
+        // Update port numbers for all ports that come after the removed one
+        const laterPorts = outputPortsContainer.querySelectorAll(`.output-port[data-port-number]`);
+        laterPorts.forEach(port => {
+            const currentPortNumber = parseInt(port.getAttribute('data-port-number'));
+            if (currentPortNumber > portNumber) {
+                // Decrement the port number
+                const newPortNumber = currentPortNumber - 1;
+                port.setAttribute('data-port-number', newPortNumber);
+
+                // Update the label and port element
+                const label = port.querySelector('.port-label');
+                if (label) {
+                    label.textContent = `Output ${newPortNumber + 1}`;
+                }
+
+                const portDiv = port.querySelector('.port');
+                if (portDiv) {
+                    portDiv.setAttribute('data-port-number', newPortNumber);
+                }
+            }
+        });
+
+        // Update the node data with the new port count
+        selectedNode.config.outputPorts = outputPorts - 1;
+
+        // Also update pattern-port mapping in the config
+        if (selectedNode.config && selectedNode.config.keywordPatterns) {
+            // Remove the pattern that points to this port
+            const patternIndex = selectedNode.config.keywordPatterns.findIndex(p => p.port === portNumber);
+            if (patternIndex !== -1) {
+                selectedNode.config.keywordPatterns.splice(patternIndex, 1);
+            }
+
+            // Update port numbers for patterns that point to higher port numbers
+            selectedNode.config.keywordPatterns.forEach(pattern => {
+                if (pattern.port > portNumber) {
+                    pattern.port -= 1;
+                }
+            });
+        }
+
+        // Remove any connections to this port
+        if (connections) {
+            const connectionsToRemove = [];
+            connections.forEach(connection => {
+                if (connection.sourceNode === selectedNode.id && connection.sourcePort === portNumber) {
+                    connectionsToRemove.push(connection);
+                }
+            });
+
+            // Remove the connections
+            connectionsToRemove.forEach(connection => {
+                const index = connections.indexOf(connection);
+                if (index !== -1) {
+                    connections.splice(index, 1);
+                }
+
+                // Remove the SVG path if it exists
+                if (connection.path) {
+                    connection.path.remove();
+                }
+            });
+
+            // Update connection port numbers for connections after the removed port
+            connections.forEach(connection => {
+                if (connection.sourceNode === selectedNode.id && connection.sourcePort > portNumber) {
+                    connection.sourcePort--;
+                }
+            });
+        }
+
+        return true;
+    }
+
+    /**
+     * Synchronizes the UI patterns with the node configuration
+     * @param {HTMLElement} container - The patterns container
+     * @returns {Array} The updated patterns array
+     */
+    function syncPatternsFromUI(container) {
+        if (!container || !selectedNode || !selectedNode.config) return [];
+
+        // Rebuild the patterns array from the UI
+        const patterns = [];
+        const patternRows = container.querySelectorAll('.keyword-pattern-row');
+
+        // First, update all the ports to match their row index for consistency
+        patternRows.forEach((patternRow, rowIndex) => {
+            const portSelect = patternRow.querySelector('.port-select');
+            const selectedOption = patternRow.querySelector('.selected-option span');
+
+            if (portSelect) {
+                // Always assign consecutive port numbers based on row index
+                portSelect.value = rowIndex;
+
+                // Update the visual display too
+                if (selectedOption) {
+                    selectedOption.textContent = `Output ${rowIndex + 1}`;
+                }
+            }
+        });
+
+        // Now build the patterns array with the updated port numbers
+        patternRows.forEach((patternRow, rowIndex) => {
+            const patternInput = patternRow.querySelector('.pattern-input');
+            const portSelect = patternRow.querySelector('.port-select');
+            const patternType = patternRow.getAttribute('data-pattern-type') || 'contains';
+
+            if (patternInput && portSelect) {
+                patterns.push({
+                    keyword: patternInput.value,
+                    // Use the row index directly to ensure consistent numbering
+                    port: rowIndex,
+                    originalType: patternType,
+                    originalValue: patternInput.value
+                });
+            }
+        });
+
+        // Update the node's configuration
+        selectedNode.config.keywordPatterns = patterns;
+
+        // Update the output port count to match the pattern count
+        if (patterns.length > 0) {
+            selectedNode.config.outputPorts = Math.max(2, patterns.length);
+
+            // Update the visual output ports in the node
+            updateRouterOutputPorts(selectedNode, patterns.length);
+        }
+
+        return patterns;
+    }
+
+    /**
+     * Updates the router node's output ports to match the given count
+     * @param {Object} node - The node object to update
+     * @param {number} count - The new number of output ports
+     */
+    function updateRouterOutputPorts(node, count) {
+        if (!node || node.type !== 'router' || !node.element) return;
+
+        // Get current output ports
+        const nodeElement = node.element;
+        const outputPortsContainer = nodeElement.querySelector('.output-ports-container');
+        if (!outputPortsContainer) return;
+
+        // Get current port count
+        const currentPorts = outputPortsContainer.querySelectorAll('.output-port').length;
+
+        // Make sure we have at least 2 ports
+        count = Math.max(2, count);
+
+        // If we already have the right number, do nothing
+        if (currentPorts === count) return;
+
+        // If we need to add ports
+        if (currentPorts < count) {
+            for (let i = currentPorts; i < count; i++) {
+                const newPortElement = document.createElement('div');
+                newPortElement.className = 'output-port';
+                newPortElement.setAttribute('data-port-number', i);
+                newPortElement.innerHTML = `
+                    <span class="port-label">Output ${i + 1}</span>
+                    <div class="port port-right" data-port-type="output" data-port-number="${i}"></div>
+                `;
+                outputPortsContainer.appendChild(newPortElement);
+            }
+        }
+        // If we need to remove ports
+        else if (currentPorts > count) {
+            // Remove excess ports starting from the highest port number
+            for (let i = currentPorts - 1; i >= count; i--) {
+                const portElement = outputPortsContainer.querySelector(`.output-port[data-port-number="${i}"]`);
+                if (portElement) {
+                    outputPortsContainer.removeChild(portElement);
+                }
+            }
+        }
+
+        // Update the node's config
+        node.config.outputPorts = count;
+    }
+
+    /**
+     * Completely rebuilds all port dropdown selects and their custom UI
+     * This ensures port numbers are correct and consecutive
+     */
+    function rebuildAllPortDropdowns() {
+        // Only proceed if we have a selected node
+        if (!selectedNode || selectedNode.type !== 'router') return;
+
+        // Get all pattern rows
+        const patternRows = document.querySelectorAll('.keyword-pattern-row');
+
+        // Important: Use pattern count instead of outputPorts
+        // This ensures we only show options for the actual patterns we have
+        const patternCount = patternRows.length;
+
+        // Remove any open custom dropdowns to avoid stale options
+        document.querySelectorAll('.port-select-dropdown').forEach(dropdown => {
+            dropdown.remove();
+        });
+
+        patternRows.forEach((row, rowIndex) => {
+            // Get the port select element
+            const selectElement = row.querySelector('.port-select');
+            if (!selectElement) return;
+
+            // Get the custom selected option element
+            const selectedOptionElement = row.querySelector('.selected-option');
+            if (!selectedOptionElement) return;
+
+            // Clear and rebuild the select options
+            selectElement.innerHTML = '';
+
+            // Only show options for existing patterns
+            // This is the key change to fix deleted options still showing
+            for (let i = 0; i < patternCount; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Output ${i + 1}`;
+
+                // Only disable if this port is already selected in another row
+                const isDisabled = i !== rowIndex && isPortSelectedInAnotherRow(i, rowIndex);
+                if (isDisabled) {
+                    option.disabled = true;
+                }
+
+                selectElement.appendChild(option);
+            }
+
+            // Always set the select value to match its row index
+            // This ensures consistent port numbering
+            selectElement.value = rowIndex;
+
+            // Update the custom UI to show the selected port
+            if (selectedOptionElement.querySelector('span')) {
+                selectedOptionElement.querySelector('span').textContent = `Output ${rowIndex + 1}`;
+            }
+        });
+    }
+
+    /**
+     * Checks if a port is already selected in another pattern row
+     * @param {number} port - The port number to check
+     * @param {number} currentRowIndex - The index of the current row to exclude from check
+     * @returns {boolean} - Whether the port is selected elsewhere
+     */
+    function isPortSelectedInAnotherRow(port, currentRowIndex) {
+        const patternRows = document.querySelectorAll('.keyword-pattern-row');
+
+        for (let i = 0; i < patternRows.length; i++) {
+            // Skip checking the current row
+            if (i === currentRowIndex) continue;
+
+            const select = patternRows[i].querySelector('.port-select');
+            if (select && parseInt(select.value) === port) {
+                return true; // This port is used in another row
+            }
+        }
+
+        return false; // Port is not used in any other row
+    }
+
+    /**
+     * Ensures that the number of patterns in a router node matches the number of output ports
+     * This is critical for maintaining consistent behavior
+     */
+    function ensurePatternsMatchOutputPorts(node) {
+        if (!node || node.type !== 'router' || !node.config) return;
+
+        // Get the current number of output ports
+        const outputPorts = Math.max(2, node.config.outputPorts || 2);
+
+        // Get or create the patterns array if it doesn't exist
+        if (!node.config.keywordPatterns) {
+            node.config.keywordPatterns = [];
+        }
+
+        // Ensure we have exactly one pattern per output port
+        if (node.config.keywordPatterns.length !== outputPorts) {
+            // If we have too few patterns, add new ones
+            if (node.config.keywordPatterns.length < outputPorts) {
+                for (let i = node.config.keywordPatterns.length; i < outputPorts; i++) {
+                    // Create a pattern for each missing port
+                    const patternType = i % 5 === 0 ? 'regex' :
+                                        i % 5 === 1 ? 'contains' :
+                                        i % 5 === 2 ? 'startsWith' :
+                                        i % 5 === 3 ? 'endsWith' : 'exactMatch';
+
+                    const pattern = i === 0 ? '.*' : // Default catch-all for first port
+                                    patternType === 'regex' ? `.*pattern${i}.*` :
+                                    patternType === 'contains' ? `keyword${i}` :
+                                    patternType === 'startsWith' ? `start${i}` :
+                                    patternType === 'endsWith' ? `end${i}` : `exact${i}`;
+
+                    node.config.keywordPatterns.push({
+                        keyword: pattern,
+                        port: i,
+                        // Adding new format properties
+                        originalType: patternType,
+                        originalValue: pattern
+                    });
+                }
+            }
+            // If we have too many patterns, remove the excess
+            else if (node.config.keywordPatterns.length > outputPorts) {
+                node.config.keywordPatterns = node.config.keywordPatterns.slice(0, outputPorts);
+            }
+
+            // Update the node's output port count to match
+            node.config.outputPorts = outputPorts;
+        }
+    }
+
+    /**
+     * Creates a keyword pattern row with pattern type selector
+     */
+    function addKeywordPatternRow(container, keyword, port, patternType = 'contains') {
+        // Check if this is the first pattern and hide the empty state if needed
+        const emptyState = document.getElementById('empty-patterns-placeholder');
+        if (emptyState && emptyState.style.display !== 'none') {
+            emptyState.style.display = 'none';
+        }
+
+        // If adding a new pattern with ADD NEW PATTERN button, create a new output port
+        if (!keyword && port === 0 && container.querySelectorAll('.keyword-pattern-row').length > 0) {
+            port = addNewOutputPort();
+        }
+
+        const row = document.createElement('div');
+        row.className = 'keyword-pattern-row';
+        row.setAttribute('data-pattern-type', patternType);
+
+        // Create unique ID for the row and elements
+        const rowId = Date.now() + Math.random().toString(36).substring(2, 9);
+        const selectId = `port-select-${rowId}`;
+        const inputId = `pattern-input-${rowId}`;
+        const typeSelectId = `pattern-type-${rowId}`;
+
+        // Get number of output ports for select options - ensure at least 2
+        let outputPorts = 2; // Default
+        if (selectedNode && selectedNode.config && selectedNode.config.outputPorts) {
+            outputPorts = Math.max(2, selectedNode.config.outputPorts);
+
+            // Update the node config if needed to ensure at least 2 ports
+            if (selectedNode.config.outputPorts < 2) {
+                selectedNode.config.outputPorts = 2;
+            }
+        }
+
+        // Get already selected ports to disable them in the dropdown
+        const selectedPorts = getSelectedPorts();
+
+        // Create initial selected port text
+        const selectedPortText = `Output ${port + 1}`;
+
+        // Set placeholder based on pattern type
+        let placeholderText = "";
+        switch (patternType) {
+            case 'contains':
+                placeholderText = "e.g., weather";
+                break;
+            case 'startsWith':
+                placeholderText = "e.g., flight";
+                break;
+            case 'endsWith':
+                placeholderText = "e.g., info";
+                break;
+            case 'exactMatch':
+                placeholderText = "e.g., help me";
+                break;
+            case 'regex':
+                placeholderText = "e.g., .*question.*";
+                break;
+            default:
+                placeholderText = "e.g., weather";
+        }
+
+        // If a keyword was passed, use it as value
+        const keywordValue = keyword || '';
+
         row.innerHTML = `
-            <input type="text" class="form-control pattern-input" placeholder="Keyword or regex pattern" value="${keyword || ''}">
-            <select class="form-control port-select">
-                ${portOptions}
-            </select>
-            <button class="remove-pattern-btn" data-row-id="${rowId}"><i class="bi bi-x"></i></button>
+            <div class="pattern-fields-container">
+                <select id="${typeSelectId}" class="pattern-type-select" style="height: 40px;">
+                    <option value="contains" ${patternType === 'contains' ? 'selected' : ''}>Contains</option>
+                    <option value="startsWith" ${patternType === 'startsWith' ? 'selected' : ''}>Starts with</option>
+                    <option value="endsWith" ${patternType === 'endsWith' ? 'selected' : ''}>Ends with</option>
+                    <option value="exactMatch" ${patternType === 'exactMatch' ? 'selected' : ''}>Exact match</option>
+                    <option value="regex" ${patternType === 'regex' ? 'selected' : ''}>Regex</option>
+                </select>
+                <input id="${inputId}" type="text" class="pattern-input" placeholder="${placeholderText}" value="${keywordValue}" style="height: 40px;">
+            </div>
+            <div class="custom-select" style="height: 40px;">
+                <select id="${selectId}" class="port-select">
+                    ${Array(outputPorts).fill().map((_, i) => {
+                        const isDisabled = i !== port && selectedPorts.includes(i);
+                        return `<option value="${i}" ${port === i ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}>Output ${i+1}</option>`;
+                    }).join('')}
+                </select>
+                <div class="selected-option" data-select-id="${selectId}" style="height: 40px;">
+                    <span>${selectedPortText}</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+            </div>
+            <button class="remove-pattern-btn" data-row-id="${rowId}" title="Remove Pattern"><i class="bi bi-x-lg"></i></button>
         `;
 
         // Add row to container
         container.appendChild(row);
 
-        // Set up remove button
+        // Update pattern count
+        updatePatternCount();
+
+        // Set up pattern type change
+        const typeSelect = row.querySelector(`#${typeSelectId}`);
+        if (typeSelect) {
+            typeSelect.addEventListener('change', function() {
+                const newType = this.value;
+                row.setAttribute('data-pattern-type', newType);
+
+                // Update the placeholder based on type
+                const input = row.querySelector('.pattern-input');
+                if (input) {
+                    switch (newType) {
+                        case 'contains':
+                            input.placeholder = "e.g., weather";
+                            break;
+                        case 'startsWith':
+                            input.placeholder = "e.g., flight";
+                            break;
+                        case 'endsWith':
+                            input.placeholder = "e.g., info";
+                            break;
+                        case 'exactMatch':
+                            input.placeholder = "e.g., help me";
+                            break;
+                        case 'regex':
+                            input.placeholder = "e.g., .*question.*";
+                            break;
+                    }
+                }
+            });
+        }
+
+        // Set up remove button with simplified functionality that directly manages the UI
         const removeBtn = row.querySelector('.remove-pattern-btn');
         if (removeBtn) {
             removeBtn.onclick = function() {
-                container.removeChild(row);
+                // Simple direct approach for removing patterns
+                // Get the current port number this pattern is routing to
+                const portSelect = row.querySelector('.port-select');
+                const portNumber = portSelect ? parseInt(portSelect.value) : -1;
+
+                // Only remove if there's more than 1 pattern (always keep at least one pattern)
+                if (container.querySelectorAll('.keyword-pattern-row').length > 1) {
+                    // Remove pattern row without checking port number constraints
+                    // Remember port number for later
+                    const portToRemove = portNumber;
+
+                    // Always remove the pattern row
+                    container.removeChild(row);
+                    updatePatternCount();
+
+                    // Always update the configuration
+                    if (selectedNode && selectedNode.config) {
+                        // Build patterns from remaining UI rows
+                        const patterns = [];
+                        container.querySelectorAll('.keyword-pattern-row').forEach(patternRow => {
+                            const input = patternRow.querySelector('.pattern-input');
+                            const select = patternRow.querySelector('.port-select');
+                            const type = patternRow.getAttribute('data-pattern-type') || 'contains';
+
+                            if (input && select) {
+                                patterns.push({
+                                    keyword: input.value,
+                                    port: parseInt(select.value),
+                                    originalType: type,
+                                    originalValue: input.value
+                                });
+                            }
+                        });
+
+                        // Update config and output port count
+                        selectedNode.config.keywordPatterns = patterns;
+                        selectedNode.config.outputPorts = Math.max(2, patterns.length);
+
+                        // Find and remove the associated port from the UI
+                        const nodeElement = selectedNode.element;
+                        if (nodeElement && portToRemove !== -1) {
+                            const portsContainer = nodeElement.querySelector('.output-ports-container');
+                            if (portsContainer) {
+                                // Try to find and remove the port
+                                const portElement = portsContainer.querySelector(`.output-port[data-port-number="${portToRemove}"]`);
+                                if (portElement) {
+                                    portsContainer.removeChild(portElement);
+                                }
+                            }
+                        }
+                    }
+
+                    // Update connections
+                    if (window.connections && portToRemove !== -1) {
+                        // Remove connections to this port
+                        window.connections = window.connections.filter(conn => {
+                            if (conn.sourceNode === selectedNode.id && conn.sourcePort === portToRemove) {
+                                // Remove the visual connection
+                                if (conn.path) {
+                                    conn.path.remove();
+                                }
+                                return false; // remove this connection
+                            }
+                            return true; // keep other connections
+                        });
+                    }
+
+                    // Fix port numbering in the node UI
+                    if (selectedNode && selectedNode.element) {
+                        const nodeElement = selectedNode.element;
+                        const portsContainer = nodeElement.querySelector('.output-ports-container');
+                        if (portsContainer) {
+                            // Update port numbers on all port elements to be consecutive
+                            const allPorts = Array.from(portsContainer.querySelectorAll('.output-port'));
+
+                            // Sort by current port number
+                            allPorts.sort((a, b) => {
+                                const aNum = parseInt(a.getAttribute('data-port-number'));
+                                const bNum = parseInt(b.getAttribute('data-port-number'));
+                                return aNum - bNum;
+                            });
+
+                            // Renumber them consecutively
+                            allPorts.forEach((port, index) => {
+                                // Update port attribute
+                                port.setAttribute('data-port-number', index);
+
+                                // Update port label
+                                const label = port.querySelector('.port-label');
+                                if (label) {
+                                    label.textContent = `Output ${index + 1}`;
+                                }
+
+                                // Update port dot
+                                const portDot = port.querySelector('.port[data-port-type="output"]');
+                                if (portDot) {
+                                    portDot.setAttribute('data-port-number', index);
+                                }
+                            });
+                        }
+                    }
+
+                    // Update patterns in the config to match the renumbered ports
+                    if (selectedNode && selectedNode.config && selectedNode.config.keywordPatterns) {
+                        // Get the current pattern rows
+                        const patternRows = container.querySelectorAll('.keyword-pattern-row');
+
+                        // When removing patterns and ports, we need to renumber the select options
+                        // in all pattern rows to ensure consecutive port numbers
+                        patternRows.forEach((patternRow, rowIndex) => {
+                            const select = patternRow.querySelector('.port-select');
+                            if (select) {
+                                // Get the current selected option text (e.g., "Output 3")
+                                const value = parseInt(select.value);
+
+                                // Update the value to match its row index
+                                select.value = rowIndex;
+
+                                // Update the corresponding pattern in the config
+                                if (selectedNode.config.keywordPatterns[rowIndex]) {
+                                    selectedNode.config.keywordPatterns[rowIndex].port = rowIndex;
+                                }
+                            }
+                        });
+                    }
+
+                    // Rebuild the dropdowns completely to ensure correct options
+                    rebuildAllPortDropdowns();
+
+                    // Update connections to match the new port numbering
+                    if (window.connections) {
+                        // Adjust connections to the new port numbers
+                        window.connections.forEach(conn => {
+                            if (conn.sourceNode === selectedNode.id) {
+                                // Find the actual port number from the node's UI
+                                const nodeElement = selectedNode.element;
+                                if (nodeElement) {
+                                    const portElements = nodeElement.querySelectorAll('.port[data-port-type="output"]');
+                                    // Set the source port to match the actual port number
+                                    const portCount = portElements.length;
+                                    if (conn.sourcePort >= portCount) {
+                                        conn.sourcePort = portCount - 1;
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    // Update connections after renumbering
+                    if (typeof updateConnections === 'function') {
+                        updateConnections();
+                    }
+                } else {
+                    // Display a small notification that we need at least one pattern
+                    showNotification('warning', 'Router nodes require at least one pattern', 3000);
+                }
             };
+        }
+
+        // Set up custom select handler
+        const selectElement = row.querySelector(`#${selectId}`);
+        const selectedOption = row.querySelector('.selected-option');
+        if (selectElement && selectedOption) {
+            // Create custom dropdown when clicking on the selected option
+            selectedOption.addEventListener('click', function(e) {
+                e.stopPropagation();
+
+                // Remove any existing dropdowns
+                document.querySelectorAll('.port-select-dropdown').forEach(dropdown => {
+                    dropdown.remove();
+                });
+
+                // Create dropdown
+                const dropdown = document.createElement('div');
+                dropdown.className = 'port-select-dropdown';
+
+                // Position the dropdown with offset to account for the scrolling and margins
+                const rect = selectedOption.getBoundingClientRect();
+                dropdown.style.top = (rect.top + rect.height + 4) + 'px';
+                dropdown.style.left = rect.left + 'px';
+                dropdown.style.width = 'auto';        // Allow auto width for better content display
+                dropdown.style.minWidth = '200px';    // Ensure minimum width
+                dropdown.style.maxWidth = '250px';    // Cap the maximum width
+                dropdown.style.maxHeight = '280px';   // Taller dropdown for more content
+                dropdown.style.overflowY = 'auto';    // Scrollable if needed
+
+                // Add dropdown header
+                const header = document.createElement('div');
+                header.className = 'port-select-dropdown-header';
+                header.textContent = 'Select Output';
+                dropdown.appendChild(header);
+
+                // Get the number of pattern rows (this is the key change - using pattern count instead of output ports)
+                const patternRows = document.querySelectorAll('.keyword-pattern-row');
+                const patternCount = patternRows.length;
+
+                // This ensures we only show options for actual patterns that exist
+                let effectiveOutputCount = patternCount;
+
+                // Ensure we update the selectElement if needed
+                if (effectiveOutputCount > outputPorts) {
+                    // Add new options to the select
+                    for (let i = outputPorts; i < effectiveOutputCount; i++) {
+                        const newOption = document.createElement('option');
+                        newOption.value = i;
+                        newOption.textContent = `Output ${i+1}`;
+                        selectElement.appendChild(newOption);
+                    }
+                    outputPorts = effectiveOutputCount;
+                }
+
+                // Add options - now using the pattern count instead of output ports
+                for (let i = 0; i < patternCount; i++) {
+                    const option = document.createElement('div');
+                    const isDisabled = i !== parseInt(selectElement.value) && selectedPorts.includes(i);
+                    option.className = `port-select-option ${isDisabled ? 'disabled' : ''}`;
+                    if (selectElement.value == i) {
+                        option.classList.add('selected');
+                    }
+
+                    option.innerHTML = `
+                        <i class="bi bi-check-circle-fill"></i>
+                        <div class="port-select-option-label">
+                            <span class="port-name">Output ${i+1}</span>
+                            <span class="port-desc">Messages matching this pattern will be routed to output port ${i+1}</span>
+                        </div>
+                    `;
+
+                    if (!isDisabled) {
+                        option.addEventListener('click', function() {
+                            selectElement.value = i;
+                            selectedOption.querySelector('span').textContent = `Output ${i+1}`;
+                            dropdown.remove();
+
+                            // Refresh all dropdowns to update disabled states
+                            refreshAllPortDropdowns();
+
+                            // Dispatch change event
+                            const event = new Event('change');
+                            selectElement.dispatchEvent(event);
+                        });
+                    }
+
+                    dropdown.appendChild(option);
+                }
+
+                // Add dropdown to document
+                document.body.appendChild(dropdown);
+
+                // Close dropdown when clicking elsewhere
+                const closeDropdown = function() {
+                    dropdown.remove();
+                    document.removeEventListener('click', closeDropdown);
+                };
+
+                setTimeout(() => {
+                    document.addEventListener('click', closeDropdown);
+                }, 0);
+            });
+
+            // Update the visual state when the underlying select changes
+            selectElement.addEventListener('change', function() {
+                const value = parseInt(this.value);
+                selectedOption.querySelector('span').textContent = `Output ${value+1}`;
+            });
+        }
+    }
+
+    /**
+     * Update the pattern count display in the keyword patterns header
+     */
+    function updatePatternCount() {
+        const container = document.getElementById('keyword-patterns-container');
+        const countElement = document.querySelector('.pattern-count');
+
+        if (container && countElement) {
+            const count = container.querySelectorAll('.keyword-pattern-row').length;
+            countElement.textContent = count === 1 ? '1 pattern' : `${count} patterns`;
         }
     }
 
@@ -1483,14 +2376,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 case 'keyword':
                     const patterns = [];
-                    document.querySelectorAll('.pattern-row').forEach(row => {
+                    document.querySelectorAll('.keyword-pattern-row').forEach(row => {
                         const keywordInput = row.querySelector('.pattern-input');
                         const portSelect = row.querySelector('.port-select');
+                        const patternType = row.getAttribute('data-pattern-type') || 'contains';
 
                         if (keywordInput && portSelect && keywordInput.value.trim() !== '') {
+                            // Get the raw keyword value
+                            let keywordValue = keywordInput.value.trim();
+
+                            // Convert the pattern based on its type
+                            let pattern = keywordValue;
+
+                            // Only auto-convert if not using regex mode
+                            if (patternType !== 'regex') {
+                                // Escape special regex characters to prevent injection
+                                const escapeRegex = (string) => {
+                                    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                };
+
+                                // Convert based on pattern type
+                                switch (patternType) {
+                                    case 'contains':
+                                        pattern = escapeRegex(keywordValue);
+                                        break;
+                                    case 'startsWith':
+                                        pattern = '^' + escapeRegex(keywordValue);
+                                        break;
+                                    case 'endsWith':
+                                        pattern = escapeRegex(keywordValue) + '$';
+                                        break;
+                                    case 'exactMatch':
+                                        pattern = '^' + escapeRegex(keywordValue) + '$';
+                                        break;
+                                }
+                            }
+
+                            // Add the pattern to the list
                             patterns.push({
-                                keyword: keywordInput.value,
-                                port: parseInt(portSelect.value, 10)
+                                keyword: pattern,
+                                port: parseInt(portSelect.value, 10),
+                                originalType: patternType,
+                                originalValue: keywordValue
                             });
                         }
                     });
@@ -1499,6 +2426,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         validationErrors.push('At least one keyword pattern is required');
                     } else {
                         selectedNode.config.keywordPatterns = patterns;
+
+                        // Also update the number of output ports to match the pattern count
+                        // This ensures the router always has the right number of ports
+                        const patternCount = patterns.length;
+                        selectedNode.config.outputPorts = Math.max(2, patternCount);
+
+                        // Update the visual output ports in the node
+                        updateRouterOutputPorts(selectedNode, patternCount);
                     }
                     break;
 
@@ -1592,10 +2527,16 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Show success notification
             showNotification(`${selectedNode.config.name} configuration updated`, 'success');
+
+            // Update all connections after router configuration changes
+            if (selectedNode.type === 'router') {
+                // Ensure connections are redrawn with updated port positions
+                updateConnections();
+            }
         } else {
             // Tool-specific updates will be implemented in the next phase
         }
-        
+
         hideConfigPanel();
     }
     

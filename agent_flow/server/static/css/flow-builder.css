@@ -1894,3 +1894,699 @@ body {
 .text-danger {
   color: var(--danger);
 }
+
+/* Modern Router UI Styles */
+/* Complete redesign of router patterns for a premium look and feel */
+.router-pattern-section {
+  margin-top: 30px;
+  position: relative;
+}
+
+.keyword-pattern-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+  background-color: rgba(30, 30, 30, 0.5);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(5px);
+  flex-wrap: wrap;
+}
+
+.keyword-pattern-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  background: linear-gradient(to bottom, #8b5cf6, #6366f1);
+  opacity: 0.6;
+  transition: all 0.3s ease;
+  border-radius: 4px 0 0 4px;
+}
+
+.keyword-pattern-row:hover {
+  background-color: rgba(38, 38, 38, 0.6);
+  border-color: rgba(139, 92, 246, 0.4);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.keyword-pattern-row:hover::before {
+  opacity: 1;
+  width: 6px;
+}
+
+/* Pattern row main container - wider to accommodate pattern type */
+.pattern-fields-container {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  align-items: center;
+  min-width: 100px;
+  height: 40px !important;
+  margin: 0;
+}
+
+/* Pattern type dropdown */
+.pattern-type-select {
+  background-color: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 6px;
+  color: #a78bfa;
+  padding: 4px 10px;
+  width: 110px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238b5cf6' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.pattern-type-select:hover, .pattern-type-select:focus {
+  background-color: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.4);
+  outline: none;
+}
+
+/* Keyword input styling */
+.keyword-pattern-row input.pattern-input {
+  background-color: rgba(12, 12, 12, 0.5);
+  border: 1px solid rgba(64, 64, 64, 0.4);
+  color: white;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-family: 'Roboto Mono', monospace;
+  letter-spacing: 0.02em;
+  flex: 1;
+  min-width: 100px;
+  height: 34px !important;
+  transition: all 0.25s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.keyword-pattern-row input.pattern-input:focus {
+  border-color: #8b5cf6;
+  background-color: rgba(12, 12, 12, 0.8);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  outline: none;
+}
+
+.keyword-pattern-row input.pattern-input::placeholder {
+  color: rgba(160, 160, 160, 0.6);
+  font-style: italic;
+}
+
+/* Special pattern indicators for visual feedback */
+.keyword-pattern-row[data-pattern-type="contains"] input.pattern-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238b5cf6' viewBox='0 0 16 16'%3E%3Cpath d='M1.5 1a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-13zm2.207 7.5l3.197 3.196a.5.5 0 0 0 .708 0l4.5-4.5a.5.5 0 0 0-.708-.708L7.5 10.293 4.303 7.096a.5.5 0 0 0-.707.708z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+.keyword-pattern-row[data-pattern-type="startsWith"] input.pattern-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238b5cf6' viewBox='0 0 16 16'%3E%3Cpath d='M12.136.326A1.5 1.5 0 0 1 14 1.78V3h.5A1.5 1.5 0 0 1 16 4.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 13.5v-9a1.5 1.5 0 0 1 1.432-1.499L12.136.326zM2 3h12v1.5a.5.5 0 0 1-.5.5h-12a.5.5 0 0 1-.5-.5V3z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+.keyword-pattern-row[data-pattern-type="endsWith"] input.pattern-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238b5cf6' viewBox='0 0 16 16'%3E%3Cpath d='M1.293 1.293a1 1 0 0 1 1.414 0L8 6.586l5.293-5.293a1 1 0 1 1 1.414 1.414L9.414 8l5.293 5.293a1 1 0 0 1-1.414 1.414L8 9.414l-5.293 5.293a1 1 0 0 1-1.414-1.414L6.586 8 1.293 2.707a1 1 0 0 1 0-1.414z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+.keyword-pattern-row[data-pattern-type="exactMatch"] input.pattern-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238b5cf6' viewBox='0 0 16 16'%3E%3Cpath d='M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z'/%3E%3Cpath d='M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+.keyword-pattern-row[data-pattern-type="regex"] input.pattern-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238b5cf6' viewBox='0 0 16 16'%3E%3Cpath d='M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z'/%3E%3Cpath d='M6.854 4.646a.5.5 0 0 1 0 .708L4.207 8l2.647 2.646a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708 0zm2.292 0a.5.5 0 0 0 0 .708L11.793 8l-2.647 2.646a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+/* Enhanced Custom Select Styling */
+.custom-select {
+  position: relative;
+  width: 110px;
+  flex-shrink: 0;
+  margin-right: 5px;
+  height: 34px !important;
+}
+
+.custom-select::before {
+  content: "Route to:";
+  position: absolute;
+  left: 0;
+  bottom: 38px;
+  font-size: 10px;
+  color: rgba(167, 139, 250, 0.8);
+  font-weight: 500;
+  padding: 0 2px;
+  background-color: rgba(30, 30, 30, 0.95);
+  border-radius: 2px;
+}
+
+.selected-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #a78bfa;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 4px 10px;
+  height: 34px !important;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.selected-option::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, rgba(139, 92, 246, 0.05), transparent);
+  pointer-events: none;
+}
+
+.selected-option:hover {
+  background-color: rgba(139, 92, 246, 0.3);
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(139, 92, 246, 0.3);
+  transform: translateY(-1px);
+}
+
+.selected-option span {
+  font-weight: 600;
+  position: relative;
+}
+
+.selected-option span::before {
+  content: "▾";
+  position: absolute;
+  right: -18px;
+  top: 0;
+  font-size: 14px;
+  opacity: 0.8;
+  transition: transform 0.2s ease;
+}
+
+.selected-option:hover span::before {
+  transform: translateY(3px);
+}
+
+.selected-option i {
+  font-size: 14px;
+  transition: transform 0.3s ease;
+  margin-left: 6px;
+  color: rgba(167, 139, 250, 0.9);
+}
+
+.selected-option:hover i {
+  transform: rotate(180deg);
+}
+
+/* Premium dropdown styling */
+.port-select-dropdown {
+  position: fixed;
+  background-color: rgba(18, 18, 18, 0.95);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(139, 92, 246, 0.4);
+  backdrop-filter: blur(10px);
+  min-width: 180px;
+  width: auto;
+  margin-top: 8px;
+  animation: dropdownAppear 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.port-select-dropdown::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  background-color: rgba(18, 18, 18, 0.95);
+  box-shadow: -1px -1px 0 0 rgba(139, 92, 246, 0.3);
+  transform: translateX(-50%) rotate(45deg);
+  z-index: -1;
+}
+
+.port-select-dropdown::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(139, 92, 246, 0.5), transparent);
+}
+
+@keyframes dropdownAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.port-select-dropdown-header {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(64, 64, 64, 0.3);
+  text-align: center;
+  font-weight: 600;
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.port-select-option {
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  border-left: 2px solid transparent;
+  position: relative;
+  font-size: 13px;
+}
+
+.port-select-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+.port-select-option:not(.disabled):hover {
+  background-color: rgba(139, 92, 246, 0.15);
+  border-left-color: rgba(139, 92, 246, 0.5);
+}
+
+.port-select-option.selected {
+  background-color: rgba(139, 92, 246, 0.25);
+  color: #c4b5fd;
+  font-weight: 600;
+  border-left-color: #8b5cf6;
+  border-left-width: 3px;
+  box-shadow: inset 0 0 10px rgba(139, 92, 246, 0.1);
+}
+
+.port-select-option::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 10px;
+  right: 10px;
+  height: 1px;
+  background-color: rgba(64, 64, 64, 0.15);
+}
+
+.port-select-option:last-child::after {
+  display: none;
+}
+
+.port-select-option i {
+  color: #8b5cf6;
+  opacity: 0;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  min-width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.port-select-option.selected i {
+  opacity: 1;
+  color: #a78bfa;
+  filter: drop-shadow(0 0 2px rgba(139, 92, 246, 0.5));
+}
+
+.port-select-option-label {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.port-select-option-label .port-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.port-select-option-label .port-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* Delete button styling */
+.keyword-pattern-row .remove-pattern-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-size: 16px;
+}
+
+.keyword-pattern-row .remove-pattern-btn:hover {
+  background-color: rgba(239, 68, 68, 0.9);
+  color: white;
+  transform: scale(1.05) rotate(90deg);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+
+/* Add Pattern Button Styling */
+#add-keyword-pattern {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #a78bfa;
+  font-weight: 500;
+  border: 1px dashed rgba(139, 92, 246, 0.3);
+  border-radius: 10px;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  margin-top: 16px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+#add-keyword-pattern::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent, rgba(139, 92, 246, 0.05), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+#add-keyword-pattern:hover {
+  background-color: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.6);
+  transform: translateY(-2px);
+}
+
+#add-keyword-pattern:hover::before {
+  transform: translateX(100%);
+}
+
+#add-keyword-pattern i {
+  font-size: 18px;
+  margin-right: 2px;
+  transition: transform 0.3s ease;
+}
+
+#add-keyword-pattern:hover i {
+  transform: rotate(180deg);
+}
+
+/* Patterns container styling */
+#keyword-patterns-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+  padding: 20px;
+  background-color: rgba(18, 18, 18, 0.3);
+  border-radius: 14px;
+  position: relative;
+  border: 1px solid rgba(64, 64, 64, 0.2);
+}
+
+.patterns-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.patterns-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #a78bfa;
+  margin: 0;
+}
+
+.patterns-header .pattern-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background-color: rgba(139, 92, 246, 0.1);
+  padding: 4px 8px;
+  border-radius: 12px;
+}
+
+.patterns-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+/* Router strategy section styling */
+#router-strategy-container {
+  position: relative;
+  padding: 20px;
+  background-color: rgba(18, 18, 18, 0.3);
+  border-radius: 14px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(64, 64, 64, 0.2);
+}
+
+.strategy-header {
+  margin-bottom: 16px;
+}
+
+.strategy-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #a78bfa;
+  margin: 0 0 8px 0;
+}
+
+#router-strategy {
+  background-color: rgba(12, 12, 12, 0.5);
+  border: 1px solid rgba(64, 64, 64, 0.4);
+  color: white;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  transition: all 0.25s ease;
+  width: 100%;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238b5cf6' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+#router-strategy:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3);
+  outline: none;
+}
+
+#router-strategy option {
+  background-color: var(--bg-darker);
+  color: var(--text-primary);
+  padding: 8px;
+}
+
+#router-strategy option:disabled {
+  color: var(--text-secondary);
+}
+
+.strategy-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 10px;
+  font-style: italic;
+  line-height: 1.5;
+  border-left: 2px solid rgba(139, 92, 246, 0.3);
+  padding-left: 12px;
+}
+
+/* Empty state for patterns */
+.empty-patterns {
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--text-secondary);
+  font-style: italic;
+  background-color: rgba(12, 12, 12, 0.3);
+  border-radius: 8px;
+  border: 1px dashed rgba(64, 64, 64, 0.3);
+}
+
+.empty-patterns i {
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: rgba(139, 92, 246, 0.4);
+}
+
+/* Hide real select element but keep it for form submission */
+.port-select {
+  opacity: 0;
+  position: absolute;
+  pointer-events: none;
+}
+
+.keyword-pattern-row .remove-pattern-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.keyword-pattern-row .remove-pattern-btn:hover {
+  background-color: var(--danger);
+  color: white;
+  transform: scale(1.05);
+}
+
+#add-keyword-pattern {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+  font-weight: 500;
+  border: 1px dashed rgba(139, 92, 246, 0.5);
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 16px;
+  width: 100%;
+}
+
+#add-keyword-pattern:hover {
+  background-color: rgba(139, 92, 246, 0.2);
+  transform: scale(1.01);
+}
+
+#add-keyword-pattern i {
+  font-size: 16px;
+  margin-right: 2px;
+}
+
+#keyword-patterns-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  border-radius: 12px;
+  padding: 16px;
+  background-color: rgba(38, 38, 38, 0.4);
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.strategy-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  font-style: italic;
+  padding-left: 2px;
+  opacity: 0.8;
+}
+
+/* Add a slight highlight around the router configuration section */
+#router-config {
+  position: relative;
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px dashed var(--border);
+}
+
+#router-strategy-container {
+  position: relative;
+  padding: 16px;
+  background-color: rgba(139, 92, 246, 0.08);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+#router-strategy-container::before {
+  content: "Router Configuration";
+  position: absolute;
+  top: -10px;
+  left: 12px;
+  background-color: var(--bg-lighter);
+  padding: 0 8px;
+  font-size: 12px;
+  color: #8b5cf6;
+  font-weight: 600;
+}
+
+/* Make keyword pattern inputs more readable */
+.keyword-pattern-row input {
+  font-family: 'Roboto Mono', monospace;
+  letter-spacing: 0.03em;
+}

@@ -273,14 +273,17 @@
                     
                     <!-- Router Config -->
                     <div id="router-config" class="agent-specific-config">
-                        <div class="form-group">
-                            <label for="router-strategy">Routing Strategy</label>
-                            <select id="router-strategy" class="form-control">
-                                <option value="ai">AI-based Routing</option>
+                        <div id="router-strategy-container">
+                            <div class="strategy-header">
+                                <h4>Routing Strategy</h4>
+                            </div>
+                            <select id="router-strategy">
                                 <option value="keyword">Keyword Routing</option>
-                                <option value="random">Random Routing</option>
-                                <option value="content-type">Content-type Routing</option>
+                                <option value="ai" disabled>AI-based Routing (Coming Soon)</option>
+                                <option value="random" disabled>Random Routing (Coming Soon)</option>
+                                <option value="content-type" disabled>Content-type Routing (Coming Soon)</option>
                             </select>
+                            <p class="strategy-description">Routes messages to different outputs based on keywords found in the content. The router will analyze incoming messages and direct them to specific outputs based on the patterns you define below.</p>
                         </div>
 
                         <!-- AI Routing Config -->
@@ -292,13 +295,21 @@
                         </div>
 
                         <!-- Keyword Routing Config -->
-                        <div id="keyword-routing-config" class="strategy-specific-config">
+                        <div id="keyword-routing-config" class="strategy-specific-config router-pattern-section">
                             <div class="form-group">
-                                <label>Keyword Patterns</label>
+                                <div class="patterns-header">
+                                    <h4>Keyword Patterns</h4>
+                                    <span class="pattern-count">0 patterns</span>
+                                </div>
+                                <p class="patterns-description">Define keywords or regex patterns that will trigger specific output routes. If a message contains any of these patterns, it will be routed to the corresponding output.</p>
                                 <div id="keyword-patterns-container">
                                     <!-- Patterns will be added here dynamically -->
+                                    <div class="empty-patterns" id="empty-patterns-placeholder">
+                                        <i class="bi bi-signpost-split"></i>
+                                        <p>No patterns defined yet. Add a pattern to begin routing messages.</p>
+                                    </div>
                                 </div>
-                                <button id="add-keyword-pattern" class="small-btn">+ Add Pattern</button>
+                                <button id="add-keyword-pattern"><i class="bi bi-plus-circle"></i> Add New Pattern</button>
                             </div>
                         </div>
 
