@@ -175,7 +175,7 @@ def main():
     
     print("\n=== What's Next? ===")
     print("1. Connect to this server using 'simple_client.py':")
-    print(f"    python simple_client.py http://localhost:{port}")
+    print(f"  python simple_client.py --external http://localhost:{port}")
     print("2. Try 'function_calling.py' to add function calling capability")
     print("3. Explore more examples to build more powerful agents")
     
