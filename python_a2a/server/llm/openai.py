@@ -34,6 +34,7 @@ class OpenAIA2AServer(BaseA2AServer):
         self,
         api_key: str,
         model: str = "gpt-4",
+        base_url: Optional[str] = 'https://api.openai.com/v1',
         temperature: float = 0.7,
         system_prompt: Optional[str] = None,
         functions: Optional[List[Dict[str, Any]]] = None
@@ -59,15 +60,16 @@ class OpenAIA2AServer(BaseA2AServer):
         
         self.api_key = api_key
         self.model = model
+        self.base_url = base_url
         self.temperature = temperature
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
         self.functions = functions
         self.tools = self._convert_functions_to_tools() if functions else None
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key,base_url=base_url)
         
         # Create an async client for streaming
         if AsyncOpenAI is not None:
-            self.async_client = AsyncOpenAI(api_key=api_key)
+            self.async_client = AsyncOpenAI(api_key=api_key,base_url=base_url)
         else:
             self.async_client = None
             
