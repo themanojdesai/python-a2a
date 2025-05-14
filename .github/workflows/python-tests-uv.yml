@@ -33,7 +33,7 @@ jobs:
       run: |
         uv venv
         . .venv/bin/activate
-        uv install -e ".[dev]"
+        uv add -e ".[dev]"
       shell: bash
         
     - name: Lint with flake8

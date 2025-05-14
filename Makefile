@@ -5,7 +5,7 @@ setup:
 	@echo "Setting up development environment with UV..."
 	@command -v uv >/dev/null 2>&1 || (echo "UV not found. Installing UV..." && curl -LsSf https://astral.sh/uv/install.sh | sh)
 	@uv venv
-	@. .venv/bin/activate && uv install -e ".[dev]"
+	@. .venv/bin/activate && uv add -e ".[dev]"
 	@echo "Development environment set up successfully!"
 
 # Clean up Python artifacts and build directories
@@ -64,7 +64,7 @@ publish: build
 # Install in development mode with UV
 dev-install:
 	@echo "Installing in development mode with UV..."
-	@uv install -e ".[dev]"
+	@uv add -e ".[dev]"
 	@echo "Development installation complete!"
 
 # Run example program
