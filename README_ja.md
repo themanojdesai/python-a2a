@@ -103,7 +103,7 @@ pip install "python-a2a[all]"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 基本パッケージをインストール
-uv install python-a2a
+uv add python-a2a
 ```
 
 ### 開発インストール
