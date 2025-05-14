@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/themanojdesai-python-a2a-badge.png)](https://mseep.ai/app/themanojdesai-python-a2a)
+
 # Python A2A
 
 <div align="center">
