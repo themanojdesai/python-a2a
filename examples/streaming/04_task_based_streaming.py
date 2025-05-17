@@ -655,6 +655,11 @@ class TaskStreamClient:
                 # Track updates
                 self.updates_received += 1
                 
+                print(f"Raw update {self.updates_received} artifacts:")
+                for i, artifact in enumerate(task_update.artifacts or []):
+                    print(f"  Artifact {i} type: {artifact.get('type', 'MISSING')}")
+                    print(f"  Artifact {i} raw: {json.dumps(artifact)[:200]}...")
+                
                 # Store latest update
                 latest_update = task_update
                 
@@ -705,6 +710,7 @@ class TaskStreamClient:
             print(status_line)
         
         # Process artifacts
+        print(f"Task for processing artifact: {task}")
         artifacts = task.artifacts or []
         for artifact in artifacts:
             await self._process_artifact(artifact)
@@ -763,6 +769,16 @@ class TaskStreamClient:
                 print(f"{text}")
             else:
                 # Partial result
+                print(f"\n{CYAN}Partial Result:{RESET}")
+                print(f"{text}")
+        
+        elif "parts" in artifact and isinstance(artifact["parts"], list):
+            # Handle artifacts with parts but no type
+            text = ""
+            for part in artifact["parts"]:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text += part.get("text", "")
+            if text:
                 print(f"\n{CYAN}Partial Result:{RESET}")
                 print(f"{text}")
         
