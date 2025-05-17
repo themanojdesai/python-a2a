@@ -739,7 +739,8 @@ class StreamingClient(BaseA2AClient):
                                 if event_type == "update" or event_type == "complete":
                                     if isinstance(data_obj, dict):
                                         # Parse as a Task
-                                        current_task = Task.from_dict(data_obj)
+                                        task_data = data_obj.get("task", data_obj)
+                                        current_task = Task.from_dict(task_data)
                                         yield current_task
                                         
                                         # If this is a complete event, we're done
