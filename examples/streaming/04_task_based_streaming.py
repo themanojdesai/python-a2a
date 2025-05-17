@@ -356,6 +356,21 @@ class TaskStreamingServer(BaseA2AServer):
         print(f"[Server] Processing task {task_id}")
         print(f"[Server] Query: {query[:50]}...")
         
+        task.status = TaskStatus(state=TaskState.SUBMITTED)
+        
+        print(f"[Server] Task {task_id}: Yielding SUBMITTED state")
+        yield Task(
+            id=task.id,
+            status=TaskStatus(
+                state=task.status.state,
+                message=task.status.message.copy() if task.status.message else None,
+                timestamp=task.status.timestamp
+            ),
+            message=task.message,
+            session_id=task.session_id,
+            artifacts=task.artifacts.copy() if task.artifacts else []
+        )
+        
         # Update task status to waiting (analogous to in_progress)
         task.status = TaskStatus(state=TaskState.WAITING)
         
