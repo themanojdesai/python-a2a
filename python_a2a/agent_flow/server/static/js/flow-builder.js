@@ -7,12 +7,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const connectionTooltip = document.getElementById('connection-tooltip');
     const emptyCanvasHelp = document.getElementById('empty-canvas-help');
 
-    // Mark non-OpenAI agents and all tools as "coming soon"
+    // Mark non-OpenAI or Ollama agents and all tools as "coming soon"
     const markComingSoonFeatures = () => {
-        // Apply to agent types (except OpenAI)
+        // Apply to agent types (except OpenAI & Ollama)
         const agentCards = document.querySelectorAll('.agent-card');
         agentCards.forEach(card => {
-            if (card.getAttribute('data-type') !== 'openai') {
+            if (!['openai', 'ollama'].includes(card.getAttribute('data-type'))) {
                 card.classList.add('feature-showcase');
 
                 // Add the badge with icon
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const newAgentTypeSelect = document.getElementById('new-agent-type');
         if (newAgentTypeSelect) {
             Array.from(newAgentTypeSelect.options).forEach(option => {
-                if (option.value !== 'openai') {
+                if (!['openai', 'ollama'].includes(option.value)) {
                     option.disabled = true;
                     option.style.color = 'rgba(160, 160, 160, 0.6)';
                     option.style.fontStyle = 'italic';
@@ -478,6 +478,9 @@ document.addEventListener('DOMContentLoaded', function() {
             switch (cardData.agentType) {
                 case 'openai':
                     typeName = 'OpenAI';
+                    break;
+                case 'ollama':
+                    typeName = 'Ollama';
                     break;
                 case 'anthropic':
                     typeName = 'Claude';
@@ -1413,6 +1416,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('openai-api-key').value = nodeData.config.apiKey || '';
                 document.getElementById('openai-model').value = nodeData.config.model || 'gpt-4o';
                 document.getElementById('openai-system-message').value = nodeData.config.systemMessage || 'You are a helpful AI assistant.';
+            } else if (nodeData.subType === 'ollama') {
+                document.getElementById('ollama-api-url').value = nodeData.config.apiUrl || '';
+                document.getElementById('ollama-api-key').value = nodeData.config.apiKey || '';
+                document.getElementById('ollama-model').value = nodeData.config.model || 'deepseek-r1:latest';
+                document.getElementById('ollama-system-message').value = nodeData.config.systemMessage || 'You are a helpful AI assistant.';
             } else if (nodeData.subType === 'anthropic') {
                 document.getElementById('anthropic-api-key').value = nodeData.config.apiKey || '';
                 document.getElementById('anthropic-model').value = nodeData.config.model || 'claude-3-opus';
@@ -2599,6 +2607,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     selectedNode.config.model = model;
                     selectedNode.config.systemMessage = systemMessage;
                 }
+            } else if (selectedNode.subType === 'ollama') {
+                const apiUrl = document.getElementById('ollama-api-url').value;
+                const apiKey = document.getElementById('ollama-api-key').value;
+                const model = document.getElementById('ollama-model').value;
+                const systemMessage = document.getElementById('ollama-system-message').value;
+                
+                if (!apiUrl || apiUrl.trim() === '') {
+                    validationErrors.push('Ollama API url is required');
+                }
+
+                if (!apiKey || apiKey.trim() === '') {
+                    validationErrors.push('Ollama API Key is required');
+                }
+                
+                if (!model) {
+                    validationErrors.push('Please define a model');
+                }
+                
+                // Store values if validation passes
+                if (validationErrors.length === 0) {
+                    selectedNode.config.apiUrl = apiUrl;
+                    selectedNode.config.apiKey = apiKey;
+                    selectedNode.config.model = model;
+                    selectedNode.config.systemMessage = systemMessage;
+                }
             } else if (selectedNode.subType === 'anthropic') {
                 const apiKey = document.getElementById('anthropic-api-key').value;
                 const model = document.getElementById('anthropic-model').value;
@@ -2824,6 +2857,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (selectedNode.subType === 'openai' && selectedNode.config.model) {
                     modelText = selectedNode.config.model;
+                } else if (selectedNode.subType === 'ollama' && selectedNode.config.model) {
+                    modelText = selectedNode.config.model;
                 } else if (selectedNode.subType === 'anthropic' && selectedNode.config.model) {
                     modelText = selectedNode.config.model;
                 } else if (selectedNode.subType === 'bedrock' && selectedNode.config.model) {
@@ -2889,6 +2924,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         <option value="gpt-4-turbo">GPT-4 Turbo</option>
                         <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
                     </select>
+                </div>
+            `;
+        } else if (agentType === 'ollama') {
+            configHtml = `
+                <div class="form-group">
+                    <label for="new-ollama-api-url">Ollama API url</label>
+                    <input type="text" id="new-ollama-api-url" class="form-control" placeholder="http://localhost:11434">
+                </div>
+                <div class="form-group">
+                    <label for="new-ollama-api-key">Ollama API Key</label>
+                    <input type="password" id="new-ollama-api-key" class="form-control" placeholder="sk-...">
+                </div>
+                <div class="form-group">
+                    <label for="new-ollama-model">Model</label>
+                    <input type="text" id="new-ollama-api-model" class="form-control" placeholder="deepseek-r1:latest">
                 </div>
             `;
         } else if (agentType === 'anthropic') {
@@ -2982,6 +3032,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (agentType === 'openai') {
             nodeData.config.apiKey = document.getElementById('new-openai-api-key')?.value || '';
             nodeData.config.model = document.getElementById('new-openai-model')?.value || 'gpt-4o';
+        } else if (agentType === 'ollama') {
+            nodeData.config.apiUrl = document.getElementById('new-ollama-api-url')?.value || '';
+            nodeData.config.apiKey = document.getElementById('new-ollama-api-key')?.value || '';
+            nodeData.config.model = document.getElementById('new-ollama-model')?.value || 'deepseek-r1:latest';
         } else if (agentType === 'anthropic') {
             nodeData.config.apiKey = document.getElementById('new-anthropic-api-key')?.value || '';
             nodeData.config.model = document.getElementById('new-anthropic-model')?.value || 'claude-3-opus';
@@ -3008,6 +3062,8 @@ document.addEventListener('DOMContentLoaded', function() {
             let modelText = 'Not configured';
             
             if (agentType === 'openai' && nodeData.config.model) {
+                modelText = nodeData.config.model;
+            }if (agentType === 'ollama' && nodeData.config.model) {
                 modelText = nodeData.config.model;
             } else if (agentType === 'anthropic' && nodeData.config.model) {
                 modelText = nodeData.config.model;
@@ -3334,13 +3390,17 @@ document.addEventListener('DOMContentLoaded', function() {
         // Validate each agent node has necessary configuration
         const unconfiguredAgents = [];
         agentNodes.forEach(agent => {
-            // Only check OpenAI agents since others are marked as "under development"
-            if (agent.subType === 'openai') {
+            // Only check OpenAI & Ollama agents since others are marked as "under development"
+            if (['openai', 'ollama'].includes(agent.subType)) {
                 // Check if the agent has the required configuration
                 if (!agent.config ||
                     !agent.config.apiKey ||
                     !agent.config.model) {
-                    unconfiguredAgents.push(agent);
+                    if (agent.subType === 'ollama' && !agent.config.apiUrl) {
+                        unconfiguredAgents.push(agent);
+                    } else {
+                        unconfiguredAgents.push(agent);
+                    }
                 }
             }
         });
@@ -3561,6 +3621,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Validate agent configuration
                 if (agentType === 'openai' && (!config.apiKey || !config.model)) {
+                    return false;
+                }
+                else if (agentType === 'ollama' && (!config.apiUrl || !config.apiKey || !config.model)) {
                     return false;
                 }
                 else if (agentType === 'anthropic' && (!config.apiKey || !config.model)) {
@@ -4695,6 +4758,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     if (!config.model) {
                         errors.push(`OpenAI agent ${config.name || 'Unnamed'} is missing model selection`);
+                    }
+                }
+                else if (agentType === 'ollama') {
+                    if (!config.apiUrl || config.apiUrl.trim() === '') {
+                        errors.push(`Ollama agent ${config.name || 'Unnamed'} is missing API url`);
+                    }
+                    if (!config.apiKey || config.apiKey.trim() === '') {
+                        errors.push(`Ollama agent ${config.name || 'Unnamed'} is missing API key`);
+                    }
+                    if (!config.model) {
+                        errors.push(`Ollama agent ${config.name || 'Unnamed'} is missing model definition`);
                     }
                 }
                 else if (agentType === 'anthropic') {
