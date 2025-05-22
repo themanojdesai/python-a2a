@@ -58,7 +58,7 @@ The A2A protocol establishes a standard communication format that enables AI age
 - **MCP Integration**: First-class support for Model Context Protocol for powerful tool-using agents
 - **Enterprise Ready**: Built for production environments with robust error handling and validation
 - **Framework Agnostic**: Works with any Python framework (Flask, FastAPI, Django, etc.)
-- **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, AWS Bedrock, and more
+- **LLM Provider Flexibility**: Native integrations with OpenAI, Anthropic, AWS Bedrock, Ollama, and more
 - **Minimal Dependencies**: Core functionality requires only the `requests` library
 - **Excellent Developer Experience**: Comprehensive documentation, type hints, and examples
 
@@ -86,6 +86,9 @@ pip install "python-a2a[anthropic]"
 
 # For AWS-Bedrock integration
 pip install "python-a2a[bedrock]"
+
+# For Ollama integration  
+pip install "python-a2a[ollama]"
 
 # For MCP support (Model Context Protocol)
 pip install "python-a2a[mcp]"
