@@ -33,6 +33,12 @@ class RegistryAgent(BaseA2AServer):
         Args:
             agent_card: Agent card for this agent
         """
+        # Call parent constructor first
+        super().__init__()
+        
+        # Store the agent card
+        self.agent_card = agent_card
+        
         # Make sure the agent card has registry capabilities
         if not hasattr(agent_card, "capabilities"):
             agent_card.capabilities = {}
@@ -47,9 +53,6 @@ class RegistryAgent(BaseA2AServer):
         self.last_seen: Dict[str, float] = {}
         self._pruning_thread = None
         self._shutdown_event = threading.Event()
-        
-        # Call parent constructor
-        super().__init__(agent_card=agent_card)
     
     def handle_message(self, message):
         """Handle incoming messages."""
