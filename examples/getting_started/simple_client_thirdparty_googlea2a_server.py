@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 """
 Simple A2A Client Example
 
