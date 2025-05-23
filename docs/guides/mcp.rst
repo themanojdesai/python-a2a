@@ -14,6 +14,46 @@ The Model Context Protocol (MCP) is a standardized way for AI agents to access e
 
 Python A2A provides comprehensive support for MCP through the ``FastMCP`` implementation and the ``A2AMCPAgent`` class.
 
+Key Feature: Easy MCP Attachment
+-------------------------------
+
+**One of the unique features of python-a2a is the ability to easily attach any MCP server to agents**, giving them instant access to tools and capabilities. This works with:
+
+- Remote MCP servers (via SSE/HTTP transport)
+- Local MCP servers (via stdio transport)
+- FastMCP servers (in-process Python tools)
+- Any standard MCP-compliant server
+
+Quick Example
+~~~~~~~~~~~~
+
+.. code-block:: python
+
+    from python_a2a.mcp import A2AMCPAgent
+    
+    # Create an agent with multiple MCP servers attached
+    agent = A2AMCPAgent(
+        name="Super Assistant",
+        description="An AI assistant with many tools",
+        mcp_servers={
+            # Remote MCP server (SSE transport)
+            "weather": "https://weather-mcp.example.com",
+            
+            # Local command-based MCP server (stdio transport)
+            "filesystem": {
+                "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/home"]
+            },
+            
+            # Another stdio server
+            "database": {
+                "command": ["mcp-server-sqlite", "mydata.db"]
+            }
+        }
+    )
+    
+    # The agent now has access to all tools from these MCP servers!
+    # Tools are automatically discovered and can be called by the agent
+
 Creating an MCP Server
 --------------------
 

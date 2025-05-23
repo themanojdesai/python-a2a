@@ -424,6 +424,24 @@ EXAMPLE_CATEGORIES = {
                 "api_env_var": "OPENAI_API_KEY",
                 "server_example": True
             },
+            {
+                "name": "mcp_client_example",
+                "file": "mcp_client_example.py",
+                "description": "MCP client example with transports",
+                "args": ["--test"],
+                "success_markers": ["MCP Client Example", "Experience the Magic", "MCP functionality test completed"],
+                "timeout": 10,
+                "requires_api_key": False
+            },
+            {
+                "name": "agent_with_mcp_tools",
+                "file": "agent_with_mcp_tools.py",
+                "description": "Creating agents with MCP tools",
+                "args": ["--help"],
+                "success_markers": ["usage:", "agents with MCP tools"],
+                "timeout": 5,
+                "requires_api_key": False
+            },
         ]
     },
     "langchain": {

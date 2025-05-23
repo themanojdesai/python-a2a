@@ -40,6 +40,9 @@ from .proxy import create_proxy_server
 # Transport for easy imports
 from .transport import create_fastapi_app
 
+# Additional error class from client
+from .client import JSONRPCError
+
 __all__ = [
     # Client classes
     "MCPClient",
@@ -54,6 +57,7 @@ __all__ = [
     "MCPConnectionError", 
     "MCPTimeoutError", 
     "MCPToolError",
+    "JSONRPCError",
     
     # FastMCP classes
     "FastMCP",

@@ -29,6 +29,10 @@ The A2A protocol establishes a standard communication format that enables AI age
 
 ## 📋 What's New in v0.5.X
 
+- **🔌 MCP v2.0 Complete Rewrite**: Rebuilt MCP implementation from scratch following JSON-RPC 2.0 specification
+- **🚀 Real-World MCP Examples**: Production-ready examples with actual services (no mocks!) including Zerodha Kite integration
+- **🛡️ Enterprise MCP Support**: Robust transport abstraction supporting stdio and SSE for production deployments
+- **🔄 Backward Compatible Migration**: Seamless upgrade path from previous MCP implementations
 - **Agent Flow UI**: Visual workflow editor for building and managing agent networks with drag-and-drop interface
 - **Agent Discovery**: Built-in support for agent registry and discovery with full Google A2A protocol compatibility
 - **LangChain Integration**: Seamless integration with LangChain's tools and agents
@@ -780,15 +784,193 @@ Python A2A can be used to build a wide range of AI systems:
 - **Educational Workflows**: Design step-by-step learning processes with feedback loops
 - **Visual Learning**: Use the Agent Flow UI to teach agent concepts through interactive visualization
 
+## 🔌 Enhanced MCP (Model Context Protocol) Support
+
+Python A2A features a completely redesigned MCP implementation that provides robust, production-ready integration with MCP servers and tools. Our MCP support has been rebuilt from the ground up to follow the official JSON-RPC 2.0 specification.
+
+### 🚀 What's New in MCP v2.0
+
+- **Proper JSON-RPC 2.0 Implementation**: Complete rewrite to follow the official MCP specification
+- **Transport Abstraction**: Support for both stdio and Server-Sent Events (SSE) transports
+- **Backward Compatibility**: Seamless migration from previous MCP implementations
+- **Real-World Examples**: Production-ready examples with actual services (no mocks!)
+- **Enterprise Integration**: Support for external MCP servers like Zerodha Kite MCP
+
+### 🏗️ Architecture Overview
+
+```python
+from python_a2a.mcp import MCPClient, FastMCPAgent
+
+# The new MCPClient follows JSON-RPC 2.0 specification
+client = MCPClient(
+    url="https://mcp-server.example.com/sse",  # SSE transport
+    transport="sse"
+)
+
+# Or use stdio transport for local servers
+client = MCPClient(
+    command=["python", "local_mcp_server.py"],
+    transport="stdio"
+)
+
+# FastMCPAgent provides easy integration with A2A agents
+class MyAgent(A2AServer, FastMCPAgent):
+    def __init__(self):
+        # Agent setup
+        super().__init__(agent_card=my_card)
+        
+        # MCP server configuration
+        mcp_config = {
+            "tools_server": {
+                "url": "https://tools.example.com/sse",
+                "transport": "sse"
+            },
+            "data_server": {
+                "command": ["python", "data_server.py"],
+                "transport": "stdio"
+            }
+        }
+        FastMCPAgent.__init__(self, mcp_servers=mcp_config)
+```
+
+### 🌟 Key Improvements
+
+#### 1. **Proper Protocol Implementation**
+- **JSON-RPC 2.0 Compliant**: Full implementation of the official MCP specification
+- **Initialization Handshake**: Proper `initialize` → `initialized` flow
+- **Error Handling**: Comprehensive error handling following JSON-RPC standards
+- **Request/Response Mapping**: Accurate message correlation and response handling
+
+#### 2. **Transport Layer Abstraction**
+```python
+# Support for multiple transport mechanisms
+from python_a2a.mcp.client_transport import StdioTransport, SSETransport
+
+# Stdio transport for local processes
+stdio_transport = StdioTransport(command=["go", "run", "server.go"])
+
+# SSE transport for remote servers
+sse_transport = SSETransport(
+    url="https://api.example.com/mcp/sse",
+    headers={"Authorization": "Bearer token"}
+)
+```
+
+#### 3. **Real-World Integration Examples**
+- **Zerodha Kite MCP**: Complete trading assistant with real portfolio analysis
+- **No Mock Data**: All examples use actual MCP servers and real data
+- **Production Ready**: Examples designed for real-world deployment
+
+### 📈 Zerodha Kite MCP Integration
+
+Our flagship MCP example integrates with Zerodha's official Kite MCP server for real trading analysis:
+
+```python
+# examples/mcp/kite_mcp_example.py
+from python_a2a.mcp import FastMCPAgent
+
+class KiteTradingAssistant(A2AServer, FastMCPAgent):
+    def __init__(self):
+        # Setup with official Zerodha Kite MCP server
+        kite_config = {
+            "kite": {
+                "url": "https://mcp.kite.trade/sse",
+                "transport": "sse"
+            }
+        }
+        FastMCPAgent.__init__(self, mcp_servers=kite_config)
+    
+    def handle_message(self, message):
+        # Real portfolio analysis using live Kite data
+        if "portfolio" in message.content.text.lower():
+            holdings = asyncio.run(self.call_mcp_tool("kite", "get_holdings"))
+            return self._analyze_portfolio(holdings)  # Real data analysis
+```
+
+**Features:**
+- 📊 Real-time portfolio analysis
+- 📈 Live market data integration  
+- 💡 Personalized investment insights
+- 🔒 Read-only access for security
+- 🌐 Official Zerodha MCP server support
+
+### 🛠️ Migration Guide
+
+#### From Old MCP Implementation:
+```python
+# Old way (REST-based, deprecated)
+client = MCPClient("http://localhost:8000")
+result = client.call_tool("my_tool", param="value")
+
+# New way (JSON-RPC 2.0 compliant)
+client = MCPClient(
+    url="http://localhost:8000/sse",
+    transport="sse"
+)
+async with client:
+    result = await client.call_tool("my_tool", param="value")
+```
+
+#### Key Changes:
+- **Async/Await**: All MCP operations are now async for better performance
+- **Context Managers**: Proper resource management with async context managers
+- **Transport Specification**: Explicit transport configuration required
+- **Error Handling**: Enhanced error handling with specific MCP exception types
+
+### 🔧 Advanced MCP Features
+
+#### Tool Discovery and Validation
+```python
+# Discover available tools from MCP server
+tools = await client.list_tools()
+for tool in tools:
+    print(f"Tool: {tool['name']} - {tool['description']}")
+
+# Validate tool parameters before calling
+tool_info = await client.get_tool_info("calculator")
+required_params = tool_info["inputSchema"]["required"]
+```
+
+#### Multi-Server Management
+```python
+# Connect to multiple MCP servers simultaneously
+mcp_config = {
+    "calculator": {"command": ["python", "calc_server.py"]},
+    "database": {"url": "https://db.example.com/mcp/sse"},
+    "files": {"command": ["node", "file_server.js"]}
+}
+
+class MultiToolAgent(A2AServer, FastMCPAgent):
+    def __init__(self):
+        FastMCPAgent.__init__(self, mcp_servers=mcp_config)
+    
+    async def solve_complex_task(self, query):
+        # Use tools from different servers
+        calc_result = await self.call_mcp_tool("calculator", "add", a=5, b=3)
+        data = await self.call_mcp_tool("database", "query", sql="SELECT * FROM users")
+        file_content = await self.call_mcp_tool("files", "read", path="/config.json")
+        
+        return self._combine_results(calc_result, data, file_content)
+```
+
+### 📚 Additional Resources
+
+- **[MCP Examples Directory](examples/mcp/)**: Complete examples including Kite integration
+- **[MCP Documentation](docs/guides/mcp.rst)**: Comprehensive MCP implementation guide
+- **[Migration Guide](docs/migration/mcp_v2.md)**: Step-by-step migration from v1 to v2
+- **[Best Practices](docs/best_practices/mcp.md)**: Production deployment guidelines
+
 ## 🛠️ Real-World Examples
 
 Check out the [`examples/`](https://github.com/themanojdesai/python-a2a/tree/main/examples) directory for real-world examples, including:
 
+- **[Zerodha Kite MCP Integration](examples/mcp/kite_mcp_example.py)**: Real trading assistant with live portfolio analysis
+- **[Advanced MCP Client](examples/mcp/mcp_client_example.py)**: Feature-rich MCP client with built-in tools and natural language processing
+- **[MCP Agent Integration](examples/mcp/agent_with_mcp_tools.py)**: Seamlessly attach MCP servers to A2A agents
 - Multi-agent customer support systems
 - LLM-powered research assistants with tool access
 - Real-time streaming implementations
 - LangChain integration examples
-- MCP server implementations for various tools
 - Workflow orchestration examples
 - Agent network management
 

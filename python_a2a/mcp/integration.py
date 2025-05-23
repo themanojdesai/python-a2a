@@ -32,7 +32,7 @@ class FastMCPAgent:
         Initialize FastMCP integration.
         
         Args:
-            mcp_servers: Dictionary mapping server names to URLs, FastMCP instances, or MCPClient instances
+            mcp_servers: Dictionary mapping server names to URLs, FastMCP instances, MCPClient instances, or dictionaries for stdio transport
             max_concurrent_calls: Maximum number of concurrent MCP tool calls
         """
         self.mcp_servers = {}
@@ -46,7 +46,7 @@ class FastMCPAgent:
     def add_mcp_server(
         self, 
         name: str, 
-        server: Union[str, FastMCP, MCPClient],
+        server: Union[str, FastMCP, MCPClient, Dict[str, Any]],
         **client_kwargs
     ) -> None:
         """
@@ -54,15 +54,35 @@ class FastMCPAgent:
         
         Args:
             name: Name to identify the server
-            server: URL, FastMCP instance, or MCPClient instance
-            **client_kwargs: Additional arguments for MCPClient if server is a URL
+            server: URL, FastMCP instance, MCPClient instance, or config dict
+            **client_kwargs: Additional arguments for MCPClient
         """
         self.mcp_servers[name] = server
         
         # Create or use appropriate client
         if isinstance(server, str):
-            # URL, create a client
-            self.mcp_clients[name] = MCPClient(server, **client_kwargs)
+            # URL - create MCPClient (now supports both SSE and stdio)
+            self.mcp_clients[name] = MCPClient(server_url=server, **client_kwargs)
+        elif isinstance(server, dict):
+            # Configuration dictionary
+            server_config = server.copy()  # Make a copy to avoid modifying the original
+            
+            if 'command' in server_config:
+                # Stdio transport
+                command = server_config.pop('command')
+                # Merge server config with client_kwargs
+                merged_kwargs = {**server_config, **client_kwargs}
+                self.mcp_clients[name] = MCPClient(command=command, **merged_kwargs)
+            elif 'url' in server_config:
+                # SSE transport
+                url = server_config.pop('url')
+                # Remove transport key if present (it's handled by MCPClient internally)
+                server_config.pop('transport', None)
+                # Merge server config with client_kwargs
+                merged_kwargs = {**server_config, **client_kwargs}
+                self.mcp_clients[name] = MCPClient(server_url=url, **merged_kwargs)
+            else:
+                raise ValueError(f"Invalid server configuration: {server}")
         elif isinstance(server, FastMCP):
             # FastMCP instance, use directly
             self.mcp_clients[name] = None  # No client needed

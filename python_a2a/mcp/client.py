@@ -1,210 +1,272 @@
 """
 Client for communicating with MCP servers.
+
+This implementation follows the Model Context Protocol specification,
+using JSON-RPC 2.0 as the wire protocol with support for stdio and SSE transports.
 """
 
 import asyncio
-import httpx
-import json
 import logging
 from typing import Any, Dict, List, Optional, Union, Callable
 from datetime import datetime, timedelta
+from dataclasses import dataclass
+
+from .client_transport import Transport, create_transport
 
 logger = logging.getLogger(__name__)
+
 
 class MCPError(Exception):
     """Base error for MCP-related issues"""
     pass
 
+
 class MCPConnectionError(MCPError):
     """Error connecting to MCP server"""
     pass
+
 
 class MCPTimeoutError(MCPError):
     """Timeout during MCP request"""
     pass
 
+
 class MCPToolError(MCPError):
     """Error executing an MCP tool"""
     pass
 
-class MCPTools:
-    """Container for MCP tool information with cache management"""
-    
-    def __init__(self, tools: List[Dict[str, Any]], 
-                 timestamp: Optional[datetime] = None,
-                 ttl: int = 3600):  # Default TTL of 1 hour
-        """
-        Initialize tools container
-        
-        Args:
-            tools: List of tool definitions
-            timestamp: When the tools were fetched
-            ttl: Time-to-live in seconds
-        """
-        self.tools = tools
-        self.timestamp = timestamp or datetime.now()
-        self.ttl = ttl
-    
-    def is_stale(self) -> bool:
-        """Check if the cached tools are stale"""
-        return datetime.now() > self.timestamp + timedelta(seconds=self.ttl)
+
+class JSONRPCError(MCPError):
+    """JSON-RPC protocol error"""
+    def __init__(self, code: int, message: str, data: Any = None):
+        self.code = code
+        self.message = message
+        self.data = data
+        super().__init__(f"JSON-RPC Error {code}: {message}")
+
+
+@dataclass
+class ServerInfo:
+    """MCP server information"""
+    name: str
+    version: str
+    protocol_version: str
+    capabilities: Dict[str, Any]
+
 
 class MCPClient:
-    """Client for interacting with MCP servers with enhanced features"""
+    """
+    Client for interacting with MCP servers.
+    
+    This client implements the Model Context Protocol using JSON-RPC 2.0
+    with support for both stdio and SSE transports.
+    """
     
     def __init__(
         self, 
-        server_url: str, 
+        server_url: Optional[str] = None,
+        command: Optional[List[str]] = None,
         timeout: int = 30,
+        headers: Optional[Dict[str, str]] = None,
+        # Legacy parameters for backward compatibility
         max_retries: int = 3,
         retry_delay: float = 1.0,
-        headers: Optional[Dict[str, str]] = None,
         auth: Optional[Dict[str, Any]] = None,
-        tools_ttl: int = 3600  # 1 hour cache TTL by default
+        tools_ttl: int = 3600
     ):
         """
-        Initialize an MCP client
+        Initialize an MCP client.
         
         Args:
-            server_url: URL of the MCP server
+            server_url: URL for SSE transport (mutually exclusive with command)
+            command: Command for stdio transport (mutually exclusive with server_url)
             timeout: Request timeout in seconds
-            max_retries: Maximum number of retry attempts
-            retry_delay: Initial delay between retries (will be exponentially increased)
-            headers: Optional HTTP headers for requests
-            auth: Optional authentication configuration
+            headers: Optional HTTP headers for SSE transport
+            max_retries: Maximum number of retry attempts (legacy, not used)
+            retry_delay: Initial delay between retries (legacy, not used)
+            auth: Optional authentication configuration (legacy, applied to headers)
             tools_ttl: Time-to-live for tools cache in seconds
         """
-        self.server_url = server_url.rstrip("/")
+        # Handle legacy auth parameter
+        if auth and headers is None:
+            headers = {}
+        if auth:
+            headers = self._apply_auth(auth, headers or {})
+        
+        # Create transport
+        self.transport = create_transport(
+            url=server_url,
+            command=command,
+            headers=headers
+        )
+        
+        # State
+        self.initialized = False
+        self.server_info = None
+        self._request_id = 0
+        self._tools_cache = None
+        self._tools_cache_time = None
+        self.tools_ttl = tools_ttl
+        
+        # Store original parameters for legacy compatibility
+        self.server_url = server_url
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.headers = headers or {}
         self.auth = auth
-        self.tools_ttl = tools_ttl
         
-        # Set up default headers
-        if "Content-Type" not in self.headers:
-            self.headers["Content-Type"] = "application/json"
-        if "Accept" not in self.headers:
-            self.headers["Accept"] = "application/json"
-        
-        # Create HTTP client with limits for production use
-        self.client = httpx.AsyncClient(
-            timeout=timeout,
-            headers=self.headers,
-            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
-        )
-        
-        # Set up authentication if provided
-        if auth:
-            self._setup_auth(auth)
-        
-        # Tools cache
-        self._tools_cache = None
-        
-    def _setup_auth(self, auth: Dict[str, Any]):
-        """
-        Set up authentication for the client
-        
-        Args:
-            auth: Authentication configuration
-        """
+        # For async context manager
+        self._connected = False
+    
+    def _apply_auth(self, auth: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, str]:
+        """Apply legacy auth configuration to headers."""
         auth_type = auth.get("type", "").lower()
         
-        if auth_type == "basic":
-            username = auth.get("username", "")
-            password = auth.get("password", "")
-            self.client.auth = (username, password)
-        
-        elif auth_type == "bearer":
+        if auth_type == "bearer":
             token = auth.get("token", "")
-            self.headers["Authorization"] = f"Bearer {token}"
-            self.client = httpx.AsyncClient(
-                timeout=self.timeout,
-                headers=self.headers,
-                limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
-            )
-        
+            headers["Authorization"] = f"Bearer {token}"
         elif auth_type == "api_key":
             key = auth.get("key", "")
             key_name = auth.get("key_name", "X-API-Key")
             location = auth.get("location", "header")
-            
             if location == "header":
-                self.headers[key_name] = key
-                self.client = httpx.AsyncClient(
-                    timeout=self.timeout,
-                    headers=self.headers,
-                    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
-                )
-            elif location == "query":
-                self.client.params = {key_name: key}
+                headers[key_name] = key
         
+        return headers
+    
+    def _next_id(self) -> int:
+        """Generate next request ID."""
+        self._request_id += 1
+        return self._request_id
+    
+    async def _ensure_connected(self):
+        """Ensure client is connected and initialized."""
+        if not self._connected:
+            await self.connect()
+        if not self.initialized:
+            await self._initialize()
+    
+    async def connect(self):
+        """Connect to the MCP server."""
+        if not self._connected:
+            await self.transport.connect()
+            self._connected = True
+            logger.info("Connected to MCP server")
+    
+    async def _initialize(self):
+        """Perform MCP initialization handshake."""
+        # Send initialize request
+        response = await self._send_request("initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {},
+                "resources": {},
+                "prompts": {}
+            },
+            "clientInfo": {
+                "name": "python-a2a",
+                "version": "1.0.0"
+            }
+        })
+        
+        # Extract server info
+        if "error" in response:
+            raise JSONRPCError(
+                response["error"]["code"],
+                response["error"]["message"],
+                response["error"].get("data")
+            )
+        
+        result = response.get("result", {})
+        self.server_info = ServerInfo(
+            name=result.get("serverInfo", {}).get("name", "Unknown"),
+            version=result.get("serverInfo", {}).get("version", "Unknown"),
+            protocol_version=result.get("protocolVersion", "Unknown"),
+            capabilities=result.get("capabilities", {})
+        )
+        
+        # Send initialized notification
+        await self._send_notification("initialized", {})
+        
+        self.initialized = True
+        logger.info(f"Initialized connection to MCP server: {self.server_info.name}")
+    
+    async def _send_request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Send a JSON-RPC request and wait for response."""
+        request = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": method,
+            "params": params
+        }
+        
+        try:
+            response = await self.transport.send_request(request)
+            return response
+        except Exception as e:
+            logger.error(f"Error sending request {method}: {e}")
+            raise MCPConnectionError(f"Failed to send request: {str(e)}")
+    
+    async def _send_notification(self, method: str, params: Dict[str, Any]):
+        """Send a JSON-RPC notification (no response expected)."""
+        notification = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params
+        }
+        
+        try:
+            await self.transport.send_notification(notification)
+        except Exception as e:
+            logger.error(f"Error sending notification {method}: {e}")
+            raise MCPConnectionError(f"Failed to send notification: {str(e)}")
+    
     async def close(self):
-        """Close the underlying HTTP client"""
-        await self.client.aclose()
-        
+        """Close the connection to the MCP server."""
+        if self._connected:
+            await self.transport.disconnect()
+            self._connected = False
+            self.initialized = False
+            logger.info("Closed connection to MCP server")
+    
     async def get_tools(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
-        Get available tools from the MCP server
+        Get available tools from the MCP server.
         
         Args:
             force_refresh: Force a refresh of the tools cache
             
         Returns:
             List of available tools with their metadata
-            
-        Raises:
-            MCPConnectionError: If connection to the server fails
-            MCPTimeoutError: If the request times out
-            MCPError: For other errors
         """
-        # Return cached tools if available and not stale
-        if self._tools_cache is not None and not force_refresh:
-            if not self._tools_cache.is_stale():
-                return self._tools_cache.tools
-            logger.debug("Tools cache is stale, refreshing")
+        # Ensure connected
+        await self._ensure_connected()
         
-        retry_count = 0
-        delay = self.retry_delay
+        # Check cache
+        if not force_refresh and self._tools_cache is not None:
+            cache_age = (datetime.now() - self._tools_cache_time).total_seconds()
+            if cache_age < self.tools_ttl:
+                return self._tools_cache
         
-        while retry_count <= self.max_retries:
-            try:
-                response = await self.client.get(f"{self.server_url}/tools")
-                response.raise_for_status()
-                
-                tools = response.json()
-                self._tools_cache = MCPTools(tools, ttl=self.tools_ttl)
-                return tools
-                
-            except httpx.TimeoutException as e:
-                retry_count += 1
-                if retry_count > self.max_retries:
-                    logger.error(f"Timeout getting tools from MCP server after {self.max_retries} retries")
-                    raise MCPTimeoutError(f"Timeout getting tools from MCP server: {str(e)}")
-                
-                logger.warning(f"Timeout getting tools from MCP server, retrying ({retry_count}/{self.max_retries})")
-                await asyncio.sleep(delay)
-                delay *= 2  # Exponential backoff
-                
-            except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error getting tools from MCP server: {e}")
-                raise MCPConnectionError(f"HTTP error getting tools from MCP server: {e.response.status_code} - {e.response.text}")
-                
-            except httpx.RequestError as e:
-                retry_count += 1
-                if retry_count > self.max_retries:
-                    logger.error(f"Request error getting tools from MCP server after {self.max_retries} retries")
-                    raise MCPConnectionError(f"Request error getting tools from MCP server: {str(e)}")
-                
-                logger.warning(f"Request error getting tools from MCP server, retrying ({retry_count}/{self.max_retries})")
-                await asyncio.sleep(delay)
-                delay *= 2  # Exponential backoff
-                
-            except Exception as e:
-                logger.error(f"Unexpected error getting tools from MCP server: {e}")
-                raise MCPError(f"Failed to get tools from MCP server: {str(e)}")
-            
+        # Request tools
+        response = await self._send_request("tools/list", {})
+        
+        if "error" in response:
+            raise JSONRPCError(
+                response["error"]["code"],
+                response["error"]["message"],
+                response["error"].get("data")
+            )
+        
+        tools = response.get("result", {}).get("tools", [])
+        
+        # Cache tools
+        self._tools_cache = tools
+        self._tools_cache_time = datetime.now()
+        
+        return tools
+    
     async def call_tool(
         self, 
         tool_name: str, 
@@ -213,192 +275,160 @@ class MCPClient:
         **params
     ) -> Any:
         """
-        Call a tool on the MCP server
+        Call a tool on the MCP server.
         
         Args:
             tool_name: Name of the tool to call
-            stream: Whether to stream the response
-            callback: Callback function for streaming responses
+            stream: Whether to stream the response (not implemented)
+            callback: Callback function for streaming responses (not implemented)
             **params: Parameters to pass to the tool
             
         Returns:
             Result from the tool
-            
-        Raises:
-            MCPConnectionError: If connection to the server fails
-            MCPTimeoutError: If the request times out
-            MCPToolError: If the tool execution fails
-            MCPError: For other errors
         """
-        retry_count = 0
-        delay = self.retry_delay
+        # Ensure connected
+        await self._ensure_connected()
         
-        while retry_count <= self.max_retries:
-            try:
-                if stream and callback:
-                    return await self._stream_tool_call(tool_name, callback, **params)
-                
-                # FIXED: Changed URL pattern from /tool/{tool_name} to /tools/{tool_name} (plural)
-                response = await self.client.post(
-                    f"{self.server_url}/tools/{tool_name}",
-                    json=params
-                )
-                response.raise_for_status()
-                
-                result = response.json()
-                
-                # Check for error in the response
-                if isinstance(result, dict) and result.get("isError", False):
-                    error_msg = "Unknown error"
-                    if "content" in result and isinstance(result["content"], list):
-                        for item in result["content"]:
-                            if item.get("type") == "text":
-                                error_msg = item.get("text", error_msg)
-                                break
-                    raise MCPToolError(f"Tool execution error: {error_msg}")
-                
-                # Process result based on MCP format
-                if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
-                    # Extract text content from MCP response format
-                    text_content = []
-                    for item in result["content"]:
-                        if item.get("type") == "text":
-                            text_content.append(item.get("text", ""))
-                    return "\n".join(text_content)
-                
-                # Return raw result if not a standard format
-                return result
-                
-            except httpx.TimeoutException as e:
-                retry_count += 1
-                if retry_count > self.max_retries:
-                    logger.error(f"Timeout calling MCP tool {tool_name} after {self.max_retries} retries")
-                    raise MCPTimeoutError(f"Timeout calling MCP tool {tool_name}: {str(e)}")
-                
-                logger.warning(f"Timeout calling MCP tool {tool_name}, retrying ({retry_count}/{self.max_retries})")
-                await asyncio.sleep(delay)
-                delay *= 2  # Exponential backoff
-                
-            except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error calling MCP tool {tool_name}: {e}")
-                raise MCPToolError(f"HTTP error calling MCP tool {tool_name}: {e.response.status_code} - {e.response.text}")
-                
-            except httpx.RequestError as e:
-                retry_count += 1
-                if retry_count > self.max_retries:
-                    logger.error(f"Request error calling MCP tool {tool_name} after {self.max_retries} retries")
-                    raise MCPConnectionError(f"Request error calling MCP tool {tool_name}: {str(e)}")
-                
-                logger.warning(f"Request error calling MCP tool {tool_name}, retrying ({retry_count}/{self.max_retries})")
-                await asyncio.sleep(delay)
-                delay *= 2  # Exponential backoff
-                
-            except MCPToolError:
-                # Don't retry tool execution errors
-                raise
-                
-            except Exception as e:
-                logger.error(f"Unexpected error calling MCP tool {tool_name}: {e}")
-                raise MCPError(f"Failed to call MCP tool {tool_name}: {str(e)}")
+        # Note: Streaming is not yet implemented in this version
+        if stream:
+            logger.warning("Streaming is not yet implemented, using regular call")
+        
+        # Send tool call request
+        response = await self._send_request("tools/call", {
+            "name": tool_name,
+            "arguments": params
+        })
+        
+        if "error" in response:
+            raise JSONRPCError(
+                response["error"]["code"],
+                response["error"]["message"],
+                response["error"].get("data")
+            )
+        
+        # Extract content from response
+        result = response.get("result", {})
+        content = result.get("content", [])
+        
+        # If single text content, return just the text
+        if len(content) == 1 and content[0].get("type") == "text":
+            return content[0].get("text", "")
+        
+        # Otherwise return the full content array
+        return content
     
-    async def _stream_tool_call(
-        self, 
-        tool_name: str, 
-        callback: Callable[[str], None],
-        **params
-    ) -> str:
-        """
-        Stream a tool call response
+    async def list_resources(self) -> List[Dict[str, Any]]:
+        """List available resources from the MCP server."""
+        await self._ensure_connected()
         
-        Args:
-            tool_name: Name of the tool to call
-            callback: Function to call with each chunk of the response
-            **params: Parameters to pass to the tool
-            
-        Returns:
-            Complete response as a string
-        """
-        full_response = []
+        response = await self._send_request("resources/list", {})
         
-        # FIXED: Changed URL pattern from /tool/{tool_name} to /tools/{tool_name} (plural)
-        async with self.client.stream(
-            "POST",
-            f"{self.server_url}/tools/{tool_name}",
-            json=params
-        ) as response:
-            response.raise_for_status()
-            
-            async for chunk in response.aiter_bytes():
-                chunk_str = chunk.decode("utf-8")
-                full_response.append(chunk_str)
-                callback(chunk_str)
-                
-        return "".join(full_response)
+        if "error" in response:
+            raise JSONRPCError(
+                response["error"]["code"],
+                response["error"]["message"],
+                response["error"].get("data")
+            )
+        
+        return response.get("result", {}).get("resources", [])
     
+    async def read_resource(self, uri: str) -> Any:
+        """Read a resource from the MCP server."""
+        await self._ensure_connected()
+        
+        response = await self._send_request("resources/read", {
+            "uri": uri
+        })
+        
+        if "error" in response:
+            raise JSONRPCError(
+                response["error"]["code"],
+                response["error"]["message"],
+                response["error"].get("data")
+            )
+        
+        # Extract content
+        result = response.get("result", {})
+        contents = result.get("contents", [])
+        
+        if contents:
+            # Get the first resource's content
+            resource_content = contents[0].get("content", [])
+            if len(resource_content) == 1 and resource_content[0].get("type") == "text":
+                return resource_content[0].get("text", "")
+        
+        return contents
+    
+    async def get_prompt(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Get a prompt from the MCP server."""
+        await self._ensure_connected()
+        
+        response = await self._send_request("prompts/get", {
+            "name": name,
+            "arguments": arguments or {}
+        })
+        
+        if "error" in response:
+            raise JSONRPCError(
+                response["error"]["code"],
+                response["error"]["message"],
+                response["error"].get("data")
+            )
+        
+        return response.get("result", {}).get("messages", [])
+    
+    # Legacy sync methods for backward compatibility
     def call_tool_sync(self, tool_name: str, **params) -> Any:
-        """
-        Call a tool synchronously
-        
-        Args:
-            tool_name: Name of the tool to call
-            **params: Parameters to pass to the tool
-            
-        Returns:
-            Result from the tool
-            
-        Raises:
-            MCPError: For any errors
-        """
+        """Call a tool synchronously (legacy method)."""
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.call_tool(tool_name, **params))
     
     def get_tools_sync(self) -> List[Dict[str, Any]]:
-        """
-        Get available tools synchronously
-        
-        Returns:
-            List of available tools with their metadata
-            
-        Raises:
-            MCPError: For any errors
-        """
+        """Get available tools synchronously (legacy method)."""
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.get_tools())
-            
+    
     def get_function_specs(self) -> List[Dict[str, Any]]:
         """
-        Get tool specifications in function-calling format
+        Get tool specifications in function-calling format (legacy method).
         
         Returns:
             List of specifications suitable for function calling
         """
-        if self._tools_cache is None:
-            return []
-            
+        tools = self.get_tools_sync()
         function_specs = []
         
-        for tool in self._tools_cache.tools:
+        for tool in tools:
             # Convert MCP tool spec to function spec format
             spec = {
                 "name": tool["name"],
                 "description": tool.get("description", ""),
-                "parameters": {
+                "parameters": tool.get("inputSchema", {
                     "type": "object",
                     "properties": {},
                     "required": []
-                }
+                })
             }
-            
-            # Add parameters
-            for param in tool.get("parameters", []):
-                spec["parameters"]["properties"][param["name"]] = {
-                    "type": param.get("type", "string"),
-                    "description": param.get("description", "")
-                }
-                
-                if param.get("required", False):
-                    spec["parameters"]["required"].append(param["name"])
-                    
             function_specs.append(spec)
-            
+        
         return function_specs
+    
+    # Context manager support
+    async def __aenter__(self):
+        """Async context manager entry."""
+        await self.connect()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.close()
+    
+    # Legacy method for backward compatibility
+    async def _stream_tool_call(self, tool_name: str, callback: Callable[[str], None], **params) -> str:
+        """Legacy streaming method - not implemented."""
+        logger.warning("Streaming is not implemented in the new MCP client")
+        result = await self.call_tool(tool_name, **params)
+        if isinstance(result, str):
+            callback(result)
+            return result
+        return str(result)

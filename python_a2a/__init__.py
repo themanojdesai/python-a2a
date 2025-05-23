@@ -106,7 +106,6 @@ from .mcp.client import (
     MCPConnectionError,
     MCPTimeoutError,
     MCPToolError,
-    MCPTools,
 )
 from .mcp.agent import MCPEnabledAgent
 from .mcp.fastmcp import (
@@ -282,7 +281,6 @@ __all__ = [
     "MCPConnectionError",
     "MCPTimeoutError",
     "MCPToolError",
-    "MCPTools",
     "MCPEnabledAgent",
     "FastMCP",
     "MCPResponse",
