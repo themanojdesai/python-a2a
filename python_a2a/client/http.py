@@ -42,7 +42,7 @@ class A2AClient(BaseA2AClient):
         self.headers = headers or {}
         self.timeout = timeout
         self._use_google_a2a = google_a2a_compatible
-        self._protocol_detected = False  # True after we've detected the protocol type
+        self._protocol_detected = google_a2a_compatible  # True after we've detected the protocol type
         
         # Always include content type for JSON
         if "Content-Type" not in self.headers:
@@ -437,10 +437,25 @@ class A2AClient(BaseA2AClient):
         if self._use_google_a2a or self._protocol_detected:
             for endpoint in endpoints_to_try:
                 try:
-                    # Google A2A format
+                    # Get the message in Google A2A format
+                    message_data = message.to_google_a2a()
+                    
+                    # Ensure messageId is at the top level
+                    if "metadata" in message_data and "message_id" in message_data["metadata"]:
+                        message_data["messageId"] = message_data["metadata"]["message_id"]
+                    
+                    request_data = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "message/send",
+                        "params": {
+                            "message": message_data
+                        }
+                    }
+                    
                     response = requests.post(
                         endpoint,
-                        json=message.to_google_a2a(),
+                        json=request_data,
                         headers=self.headers,
                         timeout=self.timeout
                     )
