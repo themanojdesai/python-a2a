@@ -230,9 +230,20 @@ def main():
                     # Call the function
                     if function_name in self.functions:
                         result = self.functions[function_name](**params)
-                        response = f"Function result: {result}"
+                        task.artifacts = [{
+                            "parts": [{
+                                "type": "function_response",
+                                "name": function_name,
+                                "content": {
+                                    "result": result
+                                }
+                            }]
+                        }]
                     else:
                         response = f"Unknown function: {function_name}"
+                        task.artifacts = [{
+                            "parts": [{"type": "text", "text": response}]
+                        }]
                 else:
                     # Extract text from message
                     content = message_data.get("content", {})
@@ -266,12 +277,12 @@ def main():
                             task.artifacts = [{
                                 "parts": [{
                                     "type": "function_call",
-                                    "function": "calculate",
-                                    "args": {
-                                        "operation": operation,
-                                        "a": a,
-                                        "b": b
-                                    }
+                                    "name": "calculate",
+                                    "parameters": [
+                                        {"name": "operation", "value": operation},
+                                        {"name": "a", "value": a},
+                                        {"name": "b", "value": b}
+                                    ]
                                 }]
                             }]
                             task.status = TaskStatus(state=TaskState.COMPLETED)
@@ -306,12 +317,12 @@ def main():
                                 task.artifacts = [{
                                     "parts": [{
                                         "type": "function_call",
-                                        "function": "convert",
-                                        "args": {
-                                            "value": value,
-                                            "from_unit": from_unit,
-                                            "to_unit": to_unit
-                                        }
+                                        "name": "convert",
+                                        "parameters": [
+                                            {"name": "value", "value": value},
+                                            {"name": "from_unit", "value": from_unit},
+                                            {"name": "to_unit", "value": to_unit}
+                                        ]
                                     }]
                                 }]
                                 task.status = TaskStatus(state=TaskState.COMPLETED)
@@ -326,8 +337,8 @@ def main():
                         task.artifacts = [{
                             "parts": [{
                                 "type": "function_call",
-                                "function": "get_time",
-                                "args": {}
+                                "name": "get_time",
+                                "parameters": []
                             }]
                         }]
                         task.status = TaskStatus(state=TaskState.COMPLETED)
