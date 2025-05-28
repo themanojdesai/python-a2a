@@ -29,6 +29,7 @@ class OllamaA2AServer(OpenAIA2AServer):
         self,
         api_url: str,
         model: str,
+        api_key: str = "ollama",
         temperature: float = 0.7,
         system_prompt: Optional[str] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
@@ -76,8 +77,8 @@ class OllamaA2AServer(OpenAIA2AServer):
 
         # Create an async client for streaming
         if AsyncOpenAI is not None:
-            self.client = OpenAI(base_url=f"{api_url}/v1", api_key="ollama")
-            self.async_client = AsyncOpenAI(base_url=f"{api_url}/v1", api_key="ollama")
+            self.client = OpenAI(base_url=f"{api_url}/v1", api_key=api_key)
+            self.async_client = AsyncOpenAI(base_url=f"{api_url}/v1", api_key=api_key)
         else:
             self.async_client = None
 
