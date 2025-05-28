@@ -62,6 +62,7 @@ class OllamaA2AServer(OpenAIA2AServer):
 
         # Initialize OpenAI compatible client
         self.__api_url = api_url
+        self.function_role = "tool"  # Ollama uses "tool" as the function role
 
         try:
             self.__models = self.list_models()

@@ -67,6 +67,7 @@ class OpenAIA2AServer(BaseA2AServer):
         self.temperature = temperature
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
         self.functions = functions
+        self.function_role = "function"  # Default role for function responses
         self.tools = self._convert_functions_to_tools() if functions else None
 
         # Handle support for Ollama setup
@@ -136,7 +137,7 @@ class OpenAIA2AServer(BaseA2AServer):
                 # This is critical for function calling to work properly
                 openai_messages.append(
                     {
-                        "role": "function",
+                        "role": self.function_role,
                         "name": message.content.name,
                         "content": json.dumps(message.content.response),
                     }
@@ -193,7 +194,7 @@ class OpenAIA2AServer(BaseA2AServer):
                 elif message.content.type == "function_response":
                     self._conversation_state[conversation_id].append(
                         {
-                            "role": "function",
+                            "role": self.function_role,
                             "name": message.content.name,
                             "content": json.dumps(message.content.response),
                         }
@@ -464,7 +465,7 @@ class OpenAIA2AServer(BaseA2AServer):
                     # Format function response for OpenAI
                     self._conversation_state[conversation_id].append(
                         {
-                            "role": "function",
+                            "role": self.function_role,
                             "name": msg.content.name,
                             "content": json.dumps(msg.content.response),
                         }
