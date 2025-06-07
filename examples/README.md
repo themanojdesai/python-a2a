@@ -71,12 +71,15 @@ Build and manage networks of cooperating agents:
 | [Smart Routing](agent_network/smart_routing.py) | Route queries to specialized agents | AI-driven query analysis and routing |
 | [Agent Discovery](agent_network/agent_discovery.py) | Automatically discover available agents | Dynamic agent network management |
 
-### Model Context Protocol (MCP) Tools
+### Model Context Protocol (MCP) Integration
 
-Add external tool capabilities to your agents:
+Add external tool capabilities to your agents with the new provider architecture:
 
 | Example | Description | Key Learning |
 |---------|-------------|--------------|
+| [GitHub MCP Provider](mcp/github_example.py) | Complete GitHub integration | Repository management, issues, pull requests via GitHub MCP server |
+| [Browserbase MCP Provider](mcp/browserbase_example.py) | Browser automation and web scraping | Cloud-based browser automation with Browserbase MCP server |
+| [Filesystem MCP Provider](mcp/filesystem_example.py) | Secure file operations | Sandboxed file management via Filesystem MCP server |
 | [MCP Tools](mcp/mcp_tools.py) | Create MCP-compatible tools | Defining tools for AI agents |
 | [MCP Agent](mcp/mcp_agent.py) | Build agents that use MCP tools | Connecting agents to tools |
 | [OpenAI MCP Agent](mcp/openai_mcp_agent.py) | OpenAI agent with MCP tools | Combining OpenAI with external tools |
@@ -121,6 +124,9 @@ Tools to enhance your development workflow:
 - **I want to execute tasks concurrently**: [Parallel Workflow](agent_network/parallel_workflow.py)
 - **I need to create agent workflows**: [Basic Workflow](agent_network/basic_workflow.py)
 - **I want to discover agents automatically**: [Agent Discovery](agent_network/agent_discovery.py)
+- **I need GitHub integration for my agent**: [GitHub MCP Provider](mcp/github_example.py)
+- **I want browser automation capabilities**: [Browserbase MCP Provider](mcp/browserbase_example.py)
+- **I need secure file operations**: [Filesystem MCP Provider](mcp/filesystem_example.py)
 - **I need to add external tools to my agent**: [MCP Tools](mcp/mcp_tools.py)
 - **I want to build a complete application**: [Weather Assistant](applications/weather_assistant.py)
 

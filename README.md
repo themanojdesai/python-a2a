@@ -30,7 +30,8 @@ The A2A protocol establishes a standard communication format that enables AI age
 ## 📋 What's New in v0.5.X
 
 - **🔌 MCP v2.0 Complete Rewrite**: Rebuilt MCP implementation from scratch following JSON-RPC 2.0 specification
-- **🚀 Real-World MCP Examples**: Production-ready examples with actual services (no mocks!) including Zerodha Kite integration
+- **🏗️ Provider Architecture**: New provider-based architecture for external MCP servers with GitHub, Browserbase, and Filesystem providers
+- **🚀 Real-World MCP Examples**: Production-ready examples with actual services (no mocks!) including GitHub, browser automation, and file management
 - **🛡️ Enterprise MCP Support**: Robust transport abstraction supporting stdio and SSE for production deployments
 - **🔄 Backward Compatible Migration**: Seamless upgrade path from previous MCP implementations
 - **Agent Flow UI**: Visual workflow editor for building and managing agent networks with drag-and-drop interface
@@ -786,51 +787,48 @@ Python A2A can be used to build a wide range of AI systems:
 
 ## 🔌 Enhanced MCP (Model Context Protocol) Support
 
-Python A2A features a completely redesigned MCP implementation that provides robust, production-ready integration with MCP servers and tools. Our MCP support has been rebuilt from the ground up to follow the official JSON-RPC 2.0 specification.
+Python A2A features a completely redesigned MCP implementation that provides robust, production-ready integration with MCP servers and tools. Our MCP support has been rebuilt from the ground up to follow the official JSON-RPC 2.0 specification with a clean provider architecture.
 
 ### 🚀 What's New in MCP v2.0
 
+- **Provider Architecture**: Clean separation between external MCP server providers and internal tools
+- **GitHub MCP Provider**: Complete GitHub API integration via official GitHub MCP server
+- **Browserbase MCP Provider**: Browser automation and web scraping capabilities  
+- **Filesystem MCP Provider**: File operations and directory management
 - **Proper JSON-RPC 2.0 Implementation**: Complete rewrite to follow the official MCP specification
 - **Transport Abstraction**: Support for both stdio and Server-Sent Events (SSE) transports
 - **Backward Compatibility**: Seamless migration from previous MCP implementations
 - **Real-World Examples**: Production-ready examples with actual services (no mocks!)
-- **Enterprise Integration**: Support for external MCP servers like Zerodha Kite MCP
 
-### 🏗️ Architecture Overview
+### 🏗️ Provider Architecture Overview
 
 ```python
-from python_a2a.mcp import MCPClient, FastMCPAgent
+from python_a2a.mcp.providers import GitHubMCPServer, BrowserbaseMCPServer, FilesystemMCPServer
 
-# The new MCPClient follows JSON-RPC 2.0 specification
-client = MCPClient(
-    url="https://mcp-server.example.com/sse",  # SSE transport
-    transport="sse"
-)
+# GitHub Provider - Connect to GitHub MCP server
+async with GitHubMCPServer(token="your-github-token") as github:
+    # Complete GitHub API operations
+    user = await github.get_authenticated_user()
+    repos = await github.search_repositories("language:python")
+    issue = await github.create_issue("owner", "repo", "Title", "Body")
 
-# Or use stdio transport for local servers
-client = MCPClient(
-    command=["python", "local_mcp_server.py"],
-    transport="stdio"
-)
+# Browserbase Provider - Browser automation
+async with BrowserbaseMCPServer(
+    api_key="your-api-key", 
+    project_id="your-project-id"
+) as browser:
+    await browser.navigate("https://example.com")
+    screenshot = await browser.take_screenshot()
+    snapshot = await browser.create_snapshot()
+    await browser.click_element("Login button", "element_ref_from_snapshot")
 
-# FastMCPAgent provides easy integration with A2A agents
-class MyAgent(A2AServer, FastMCPAgent):
-    def __init__(self):
-        # Agent setup
-        super().__init__(agent_card=my_card)
-        
-        # MCP server configuration
-        mcp_config = {
-            "tools_server": {
-                "url": "https://tools.example.com/sse",
-                "transport": "sse"
-            },
-            "data_server": {
-                "command": ["python", "data_server.py"],
-                "transport": "stdio"
-            }
-        }
-        FastMCPAgent.__init__(self, mcp_servers=mcp_config)
+# Filesystem Provider - File operations
+async with FilesystemMCPServer(
+    allowed_directories=["/tmp", "/home/user/data"]
+) as fs:
+    content = await fs.read_file("/tmp/data.txt")
+    await fs.write_file("/tmp/output.txt", "Hello World")
+    files = await fs.list_directory("/tmp")
 ```
 
 ### 🌟 Key Improvements
@@ -861,61 +859,112 @@ sse_transport = SSETransport(
 - **No Mock Data**: All examples use actual MCP servers and real data
 - **Production Ready**: Examples designed for real-world deployment
 
-### 📈 Zerodha Kite MCP Integration
+### 🌟 Production-Ready MCP Providers
 
-Our flagship MCP example integrates with Zerodha's official Kite MCP server for real trading analysis:
+#### GitHub MCP Provider
+Complete GitHub integration via the official GitHub MCP server:
 
 ```python
-# examples/mcp/kite_mcp_example.py
-from python_a2a.mcp import FastMCPAgent
+from python_a2a.mcp.providers import GitHubMCPServer
 
-class KiteTradingAssistant(A2AServer, FastMCPAgent):
-    def __init__(self):
-        # Setup with official Zerodha Kite MCP server
-        kite_config = {
-            "kite": {
-                "url": "https://mcp.kite.trade/sse",
-                "transport": "sse"
-            }
-        }
-        FastMCPAgent.__init__(self, mcp_servers=kite_config)
+# Production-ready GitHub operations
+async with GitHubMCPServer(token="ghp_your_token") as github:
+    # Repository management
+    repo = await github.create_repository("my-project", "A new project")
+    branches = await github.list_branches("owner", "repo")
     
-    def handle_message(self, message):
-        # Real portfolio analysis using live Kite data
-        if "portfolio" in message.content.text.lower():
-            holdings = asyncio.run(self.call_mcp_tool("kite", "get_holdings"))
-            return self._analyze_portfolio(holdings)  # Real data analysis
+    # Issue tracking
+    issues = await github.list_issues("owner", "repo", state="open")
+    issue = await github.create_issue("owner", "repo", "Bug Report", "Description")
+    
+    # Pull request workflow
+    pr = await github.create_pull_request(
+        "owner", "repo", "Feature: Add new API", "feature", "main"
+    )
+    
+    # File operations
+    content = await github.get_file_contents("owner", "repo", "README.md")
+    await github.create_or_update_file(
+        "owner", "repo", "docs/api.md", "# API Documentation", "Add API docs"
+    )
 ```
 
-**Features:**
-- 📊 Real-time portfolio analysis
-- 📈 Live market data integration  
-- 💡 Personalized investment insights
-- 🔒 Read-only access for security
-- 🌐 Official Zerodha MCP server support
+#### Browserbase MCP Provider
+Browser automation and web scraping:
+
+```python
+from python_a2a.mcp.providers import BrowserbaseMCPServer
+
+# Production-ready browser automation
+async with BrowserbaseMCPServer(
+    api_key="your-api-key",
+    project_id="your-project"
+) as browser:
+    # Navigation and interaction
+    await browser.navigate("https://example.com")
+    
+    # Take screenshots and snapshots
+    screenshot = await browser.take_screenshot()
+    snapshot = await browser.create_snapshot()
+    
+    # Element interactions (requires snapshot refs)
+    await browser.click_element("Submit button", "ref_from_snapshot")
+    await browser.type_text("Email input", "ref_from_snapshot", "user@example.com")
+    
+    # Data extraction
+    title = await browser.get_text("h1")
+    page_content = await browser.get_text("body")
+```
+
+#### Filesystem MCP Provider
+Secure file operations with sandboxing:
+
+```python
+from python_a2a.mcp.providers import FilesystemMCPServer
+
+# Production-ready file operations
+async with FilesystemMCPServer(
+    allowed_directories=["/app/data", "/tmp/uploads"]
+) as fs:
+    # File operations
+    content = await fs.read_file("/app/data/config.json")
+    await fs.write_file("/tmp/output.txt", "Processed data")
+    
+    # Directory management
+    files = await fs.list_directory("/app/data")
+    await fs.create_directory("/tmp/new_folder")
+    
+    # Search and metadata
+    matches = await fs.search_files("/app/data", "*.json")
+    info = await fs.get_file_info("/app/data/large_file.csv")
+    
+    # Bulk operations
+    multiple_files = await fs.read_multiple_files([
+        "/app/data/file1.txt", "/app/data/file2.txt"
+    ])
+```
 
 ### 🛠️ Migration Guide
 
-#### From Old MCP Implementation:
+#### From Previous MCP Implementation:
 ```python
-# Old way (REST-based, deprecated)
-client = MCPClient("http://localhost:8000")
-result = client.call_tool("my_tool", param="value")
+# Old way (servers_*.py pattern)
+from python_a2a.mcp.servers_github import GitHubMCPServer  # Deprecated
 
-# New way (JSON-RPC 2.0 compliant)
-client = MCPClient(
-    url="http://localhost:8000/sse",
-    transport="sse"
-)
-async with client:
-    result = await client.call_tool("my_tool", param="value")
+# New way (provider architecture)
+from python_a2a.mcp.providers import GitHubMCPServer
+
+# Usage remains the same, but with better architecture
+async with GitHubMCPServer(token="your-token") as github:
+    result = await github.get_authenticated_user()
 ```
 
-#### Key Changes:
-- **Async/Await**: All MCP operations are now async for better performance
+#### Architecture Improvements:
+- **Provider Pattern**: Clean separation between external MCP servers (providers) and internal tools
+- **Type Safety**: Full type hints and comprehensive error handling
 - **Context Managers**: Proper resource management with async context managers
-- **Transport Specification**: Explicit transport configuration required
-- **Error Handling**: Enhanced error handling with specific MCP exception types
+- **Production Ready**: Designed for enterprise deployment with comprehensive logging
+- **Extensible**: Easy to add new MCP providers following the BaseProvider pattern
 
 ### 🔧 Advanced MCP Features
 
@@ -955,16 +1004,19 @@ class MultiToolAgent(A2AServer, FastMCPAgent):
 
 ### 📚 Additional Resources
 
-- **[MCP Examples Directory](examples/mcp/)**: Complete examples including Kite integration
+- **[MCP Examples Directory](examples/mcp/)**: Complete examples with GitHub, Browserbase, and Filesystem providers
 - **[MCP Documentation](docs/guides/mcp.rst)**: Comprehensive MCP implementation guide
-- **[Migration Guide](docs/migration/mcp_v2.md)**: Step-by-step migration from v1 to v2
-- **[Best Practices](docs/best_practices/mcp.md)**: Production deployment guidelines
+- **[Provider Examples](examples/mcp/github_example.py)**: Real-world GitHub integration examples
+- **[Browser Automation Examples](examples/mcp/browserbase_example.py)**: Complete browser automation workflows
+- **[File Management Examples](examples/mcp/filesystem_example.py)**: Secure file operation examples
 
 ## 🛠️ Real-World Examples
 
 Check out the [`examples/`](https://github.com/themanojdesai/python-a2a/tree/main/examples) directory for real-world examples, including:
 
-- **[Zerodha Kite MCP Integration](examples/mcp/kite_mcp_example.py)**: Real trading assistant with live portfolio analysis
+- **[GitHub MCP Provider](examples/mcp/github_example.py)**: Complete GitHub integration with repository management, issues, and pull requests
+- **[Browserbase MCP Provider](examples/mcp/browserbase_example.py)**: Browser automation, web scraping, and interactive testing
+- **[Filesystem MCP Provider](examples/mcp/filesystem_example.py)**: Secure file operations with sandboxing and permission management
 - **[Advanced MCP Client](examples/mcp/mcp_client_example.py)**: Feature-rich MCP client with built-in tools and natural language processing
 - **[MCP Agent Integration](examples/mcp/agent_with_mcp_tools.py)**: Seamlessly attach MCP servers to A2A agents
 - Multi-agent customer support systems
