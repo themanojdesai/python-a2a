@@ -1,10 +1,17 @@
+# =============================================================================
+# Python A2A .gitignore - Production Grade
+# =============================================================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-
+.build-env
+.build-env/*
+.test-env
+.test-env/*
 # Distribution / packaging
 build/
 develop-eggs/
@@ -18,29 +25,47 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
+.nox/
 .coverage
 .coverage.*
 .cache
 nosetests.xml
 coverage.xml
 *.cover
+*.py,cover
 .hypothesis/
 .pytest_cache/
 pytest-report.xml
 junit/
-.nox/
+test-results/
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-# Sphinx documentation
+# Documentation builds (Sphinx & others)
 docs/_build/
+docs/_static/
+docs/_templates/
 docs/api/
+docs/build/
+_build/
+.doctrees/
+site/
 
 # Virtual environments
 env/
@@ -49,14 +74,36 @@ ENV/
 env.bak/
 venv.bak/
 .env
+.venv/
+pyvenv.cfg
 
-# IDE and Editor folders
+# Modern Python package managers
+# UV
+.uv/
+uv.lock
+
+# Poetry
+poetry.lock
+.venv
+
+# Pipenv
+Pipfile.lock
+
+# pip-tools
+requirements*.txt.lock
+
+# IDE and Editor files
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 .DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 .spyderproject
 .spyproject
 .ropeproject
@@ -64,34 +111,344 @@ venv.bak/
 .project
 .pydevproject
 .settings/
+*.sublime-project
+*.sublime-workspace
 
 # Jupyter Notebooks
-.ipynb_checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
 
-# Project specific
-logs/
-*.log
-*.db
-*.sqlite3
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# =============================================================================
+# Project Specific Ignores
+# =============================================================================
+
+# Logs and databases
+logs/
+*.log
+*.log.*
+*.db
+*.sqlite3
+*.sqlite
 
 # Local development settings
 local_settings.py
 
-# Secrets
+# API Keys and Secrets
 secrets.json
-.env
 credentials.json
 token.json
+.env.*
+!.env.example
+config/secrets/
+.secrets/
 
-# Generated files
+# Generated files and outputs
 /generated/
 output/
 results/
-**/.claude/settings.local.json
+temp/
+tmp/
+.tmp/
 
+# MCP Server Artifacts
+mcp_servers/
+.mcp/
+*.mcp.log
+mcp-server-*/
+
+# Example Generated Files
+examples/*/output/
+examples/*/temp/
+examples/*/logs/
+examples/*/screenshots/
+*.screenshot.png
+*.screenshot.jpg
+browserbase_screenshot.*
+browserbase_snapshot.*
+*.backup.txt
+*_backup.*
+
+# Test artifacts
+test_output/
+test_results/
+.coverage_html/
+coverage_html_report/
+
+# Profiling files
+*.prof
+*.pstats
+
+# Benchmark results
+benchmarks/results/
+.benchmarks/
+
+# Backup and temporary files
+*.bak
+*.backup
+*.tmp
+*.temp
+*~
+.#*
+#*#
+
+# OS generated files
+.DS_Store?
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+
+# Windows
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+
+# Claude Code specific
+**/.claude/settings.local.json
 *CLAUDE*
 *-wiki-*
+
+# CI/CD artifacts
+.github/workflows/cache/
+.circleci/
+.travis.yml.bak
+.appveyor.yml.bak
+
+# Docker
+.dockerignore.bak
+docker-compose.override.yml
+.docker/
+
+# Kubernetes
+k8s/secrets/
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+
+# npm (for MCP servers that use Node.js)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Local development tools
+.tool-versions
+.nvmrc.local
+
+# Performance and monitoring
+newrelic.ini
+.new_relic_agent.log
+
+# Machine learning artifacts
+models/
+*.model
+*.pkl
+*.joblib
+checkpoints/
+tensorboard_logs/
+
+# Data files (for examples and tests)
+data/local/
+data/temp/
+*.csv.local
+*.json.local
+*.xml.local
+
+# Compiled translations
+*.mo
+
+# Static files (if using web frameworks)
+staticfiles/
+static_root/
+media_root/
+
+# File uploads (if applicable)
+uploads/
+user_uploads/
+
+# Search index files
+whoosh_index/
+
+# Cache directories
+.cache/
+.parcel-cache/
+
+# Editor directories and files
+.fleet/
+.vscode-server/
+
+# Local Netlify folder
+.netlify
+
+# TypeScript (for any TS in the project)
+*.tsbuildinfo
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.test
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# =============================================================================
+# Project Build and Release Artifacts
+# =============================================================================
+
+# Release builds
+release/
+releases/
+
+# Wheels
+wheelhouse/
+
+# Documentation assets
+docs/source/_static/generated/
+
+# Auto-generated API docs
+docs/source/api/generated/
+
+# Sphinx builds
+docs/source/_build/
+
+# Translation files
+*.pot
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# =============================================================================
+# Security and Compliance
+# =============================================================================
+
+# Never commit these patterns
+*password*
+*secret*
+*token*
+*key*.json
+*key*.pem
+*key*.p12
+*key*.pfx
+*.p8
+*.pem
+!public*.pem
+private*
+.ssh/
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+
+# AWS
+.aws/credentials
+.aws/config
+
+# Google Cloud
+*service-account*.json
+*gcp-key*.json
+
+# Azure
+.azure/
+
+# HashiCorp
+.vault-token
+consul.json
+
+# =============================================================================
+# End of .gitignore
+# =============================================================================
