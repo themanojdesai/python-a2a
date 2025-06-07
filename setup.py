@@ -15,7 +15,7 @@ except:
 
 setup(
     name="python-a2a",
-    version="0.5.6",
+    version="0.5.7",
     author="Manoj Desai",
     author_email="themanojdesai@gmail.com",
     description="A comprehensive Python library for Google's Agent-to-Agent (A2A) protocol",
