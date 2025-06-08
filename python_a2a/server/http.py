@@ -144,11 +144,21 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
         accept_header = request.headers.get('Accept', '')
         format_param = request.args.get('format', '')
         
-        # Return JSON if explicitly requested or doesn't look like a browser
-        if format_param == 'json' or (
-            'application/json' in accept_header and 
-            not any(browser in user_agent.lower() for browser in ['mozilla', 'chrome', 'safari', 'edge'])
-        ):
+        # Return JSON if:
+        # 1. Explicitly requested via format parameter
+        # 2. Accept header prefers JSON
+        # 3. User agent doesn't look like a browser (API clients)
+        # 4. User agent contains 'python' (Python HTTP clients)
+        is_api_client = (
+            format_param == 'json' or
+            'application/json' in accept_header or
+            not any(browser in user_agent.lower() for browser in ['mozilla', 'chrome', 'safari', 'edge']) or
+            'python' in user_agent.lower() or
+            'requests' in user_agent.lower() or
+            not user_agent  # No user agent (API clients often omit this)
+        )
+        
+        if is_api_client:
             return jsonify(agent_data)
         
         # Otherwise serve HTML with pretty JSON visualization
@@ -165,6 +175,11 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
     @app.route("/agent.json", methods=["GET"])
     def enhanced_root_agent_json():
         """Root agent.json endpoint"""
+        return enhanced_a2a_agent_json()
+    
+    @app.route("/.well-known/agent.json", methods=["GET"])
+    def enhanced_wellknown_agent_json():
+        """A2A standard well-known agent.json endpoint"""
         return enhanced_a2a_agent_json()
     
     # Critical: Register the streaming route if the agent supports streaming

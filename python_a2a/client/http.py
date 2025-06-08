@@ -119,45 +119,17 @@ class A2AClient(BaseA2AClient):
         return {}
     
     def _fetch_agent_card(self):
-        """Fetch the agent card from the well-known URL"""
-        # Try standard A2A endpoint first
-        try:
-            card_url = f"{self.endpoint_url}/agent.json"
-            
-            # Add Accept header to prefer JSON
-            headers = dict(self.headers)
-            headers["Accept"] = "application/json"
-            
-            # Make the request
-            response = requests.get(card_url, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
-            
-            # Check content type to handle HTML responses
-            content_type = response.headers.get("Content-Type", "").lower()
-            
-            if "json" in content_type:
-                # JSON response
-                card_data = response.json()
-            elif "html" in content_type:
-                # HTML response - extract JSON
-                card_data = self._extract_json_from_html(response.text)
-                if not card_data:
-                    raise ValueError("Could not extract JSON from HTML response")
-            else:
-                # Try parsing as JSON anyway
-                try:
-                    card_data = response.json()
-                except json.JSONDecodeError:
-                    # Try to extract JSON from the response text
-                    card_data = self._extract_json_from_html(response.text)
-                    if not card_data:
-                        raise ValueError(f"Unexpected content type: {content_type}")
-                        
-        except Exception:
-            # Try alternate endpoint
+        """Fetch the agent card from the well-known URL, following A2A protocol standards"""
+        # Try endpoints in order of A2A protocol preference
+        endpoints = [
+            f"{self.endpoint_url}/.well-known/agent.json",  # A2A standard endpoint
+            f"{self.endpoint_url}/agent.json",              # Alternative endpoint
+            f"{self.endpoint_url}/a2a/agent.json"           # Legacy endpoint
+        ]
+        
+        last_error = None
+        for card_url in endpoints:
             try:
-                card_url = f"{self.endpoint_url}/a2a/agent.json"
-                
                 # Add Accept header to prefer JSON
                 headers = dict(self.headers)
                 headers["Accept"] = "application/json"
@@ -186,11 +158,19 @@ class A2AClient(BaseA2AClient):
                         card_data = self._extract_json_from_html(response.text)
                         if not card_data:
                             raise ValueError(f"Unexpected content type: {content_type}")
+                
+                # If we get here, we successfully retrieved the agent card
+                break
+                            
             except Exception as e:
-                # If both fail, create a minimal card and continue
-                raise A2AConnectionError(
-                    f"Failed to fetch agent card: {str(e)}"
-                ) from e
+                last_error = e
+                # Continue to next endpoint
+                continue
+        else:
+            # All endpoints failed - raise connection error
+            raise A2AConnectionError(
+                f"Failed to fetch agent card from any endpoint: {str(last_error)}"
+            ) from last_error
         
         # Check for protocol hints in the agent card
         if "capabilities" in card_data:
@@ -274,13 +254,16 @@ class A2AClient(BaseA2AClient):
             A2AConnectionError: If connection to the agent fails
             A2AResponseError: If the agent returns an invalid response
         """
-        # Try possible endpoints in order of preference
+        # Try endpoints in a more logical order with fewer variations
+        base_url = self.endpoint_url.rstrip("/")
         endpoints_to_try = [
-            self.endpoint_url,                  # Try the exact URL first
-            self.endpoint_url.rstrip("/"),      # URL without trailing slash
-            f"{self.endpoint_url.rstrip('/')}/a2a",  # Try /a2a endpoint
-            f"{self.endpoint_url.rstrip('/')}/tasks/send"  # Try direct tasks endpoint
+            base_url,                          # Agent's main endpoint first
+            f"{base_url}/a2a"                  # A2A specific endpoint if main fails
         ]
+        
+        # Only add tasks/send if this looks like a task-specific endpoint
+        if not base_url.endswith(("/a2a", "/tasks", "/send")):
+            endpoints_to_try.append(f"{base_url}/tasks/send")
         
         # Deduplicate endpoints
         endpoints_to_try = list(dict.fromkeys(endpoints_to_try))
@@ -773,6 +756,7 @@ class A2AClient(BaseA2AClient):
         """
         # Use the override if provided, otherwise use the standard endpoint
         base_url = endpoint_override if endpoint_override else self.endpoint_url
+        base_url = base_url.rstrip("/")
         
         # Prepare JSON-RPC request
         request_data = {
@@ -782,15 +766,22 @@ class A2AClient(BaseA2AClient):
             "params": task.to_dict()
         }
         
-        try:
-            # Try the standard endpoint first
-            endpoint_tried = False
+        # Try endpoints in order of preference
+        task_endpoints = []
+        
+        # If the base URL already ends with a task-related path, use it directly
+        if base_url.endswith(("/tasks/send", "/a2a/tasks/send")):
+            task_endpoints.append(base_url)
+        else:
+            # For normal agent endpoints, try task-specific paths
+            task_endpoints.extend([
+                f"{base_url}/tasks/send",
+                f"{base_url}/a2a/tasks/send"
+            ])
+        
+        last_error = None
+        for endpoint in task_endpoints:
             try:
-                endpoint = f"{base_url}/tasks/send"
-                if endpoint.endswith("/tasks/send/tasks/send"):
-                    # Avoid doubled path
-                    endpoint = endpoint.replace("/tasks/send/tasks/send", "/tasks/send")
-                    
                 response = requests.post(
                     endpoint,
                     json=request_data,
@@ -798,101 +789,74 @@ class A2AClient(BaseA2AClient):
                     timeout=self.timeout
                 )
                 response.raise_for_status()
-                endpoint_tried = True
                 
-                # Check for content type
-                if "application/json" not in response.headers.get("Content-Type", "").lower():
+                # Check for content type and parse response
+                content_type = response.headers.get("Content-Type", "").lower()
+                if "application/json" in content_type:
+                    response_data = response.json()
+                else:
                     # Try to parse as JSON anyway
                     try:
                         response_data = response.json()
                     except json.JSONDecodeError:
-                        # If we can't parse as JSON, consider this a failure
                         raise ValueError("Response is not valid JSON")
-                else:
-                    response_data = response.json()
+                
+                # If we reach here, the request succeeded
+                break
                     
             except Exception as e:
-                if endpoint_tried:
-                    # If we've tried this endpoint and it failed with a response error,
-                    # take a different approach for alternate endpoint
-                    raise e
-                
-                # Try the alternate endpoint
-                endpoint = f"{base_url}/a2a/tasks/send"
-                if endpoint.endswith("/a2a/tasks/send/a2a/tasks/send"):
-                    # Avoid doubled path
-                    endpoint = endpoint.replace("/a2a/tasks/send/a2a/tasks/send", "/a2a/tasks/send")
+                last_error = e
+                continue
+        else:
+            # All task endpoints failed
+            if last_error:
+                raise last_error
+            else:
+                raise A2AConnectionError("No task endpoints available")
+        
+        # Parse the response
+        result = response_data.get("result", {})
+        
+        # If result is empty but we have a text response, create a task with it
+        if not result and isinstance(response_data, dict) and "text" in response_data:
+            # Create a simple task with text response
+            task.artifacts = [{
+                "parts": [{
+                    "type": "text",
+                    "text": response_data["text"]
+                }]
+            }]
+            task.status = TaskStatus(state=TaskState.COMPLETED)
+            return task
+        
+        # Convert to Task object or use raw result if parsing fails
+        try:
+            result_task = Task.from_dict(result)
+            
+            # Check if this might be Google A2A format
+            if result and isinstance(result, dict):
+                try:
+                    for artifact in result.get("artifacts", []):
+                        if "parts" in artifact and isinstance(artifact["parts"], list):
+                            for part in artifact["parts"]:
+                                if part.get("type") == "text" and "text" in part:
+                                    # This looks like Google A2A format
+                                    self._use_google_a2a = True
+                                    self._protocol_detected = True
+                                    break
+                except:
+                    pass
                     
-                response = requests.post(
-                    endpoint,
-                    json=request_data,
-                    headers=self.headers,
-                    timeout=self.timeout
-                )
-                response.raise_for_status()
-                
-                # Check for content type
-                if "application/json" not in response.headers.get("Content-Type", "").lower():
-                    # Try to parse as JSON anyway
-                    try:
-                        response_data = response.json()
-                    except json.JSONDecodeError:
-                        # If we can't parse as JSON, consider this a failure
-                        raise ValueError("Response is not valid JSON")
-                else:
-                    response_data = response.json()
-            
-            # Parse the response
-            result = response_data.get("result", {})
-            
-            # If result is empty but we have a text response, create a task with it
-            if not result and isinstance(response_data, dict) and "text" in response_data:
-                # Create a simple task with text response
-                task.artifacts = [{
-                    "parts": [{
-                        "type": "text",
-                        "text": response_data["text"]
-                    }]
+            return result_task
+        except Exception:
+            # Create a simple task with the raw result
+            task.artifacts = [{
+                "parts": [{
+                    "type": "text",
+                    "text": str(result)
                 }]
-                task.status = TaskStatus(state=TaskState.COMPLETED)
-                return task
-            
-            # Convert to Task object or use raw result if parsing fails
-            try:
-                result_task = Task.from_dict(result)
-                
-                # Check if this might be Google A2A format
-                if result and isinstance(result, dict):
-                    try:
-                        for artifact in result.get("artifacts", []):
-                            if "parts" in artifact and isinstance(artifact["parts"], list):
-                                for part in artifact["parts"]:
-                                    if part.get("type") == "text" and "text" in part:
-                                        # This looks like Google A2A format
-                                        self._use_google_a2a = True
-                                        self._protocol_detected = True
-                                        break
-                    except:
-                        pass
-                        
-                return result_task
-            except Exception:
-                # Create a simple task with the raw result
-                task.artifacts = [{
-                    "parts": [{
-                        "type": "text",
-                        "text": str(result)
-                    }]
-                }]
-                task.status = TaskStatus(state=TaskState.COMPLETED)
-                return task
-            
-        except Exception as e:
-            # Create an error task
-            task.status = TaskStatus(
-                state=TaskState.FAILED,
-                message={"error": str(e)}
-            )
+            }]
+            task.status = TaskStatus(state=TaskState.COMPLETED)
             return task
     
     def get_task(self, task_id, history_length=0):
