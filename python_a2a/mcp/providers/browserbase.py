@@ -86,34 +86,36 @@ class BrowserbaseMCPServer(BaseProvider):
     
     def _create_config(self) -> ServerConfig:
         """Create Browserbase MCP server configuration."""
+        # Environment variables
+        env = {
+            "BROWSERBASE_API_KEY": self.api_key,
+            "BROWSERBASE_PROJECT_ID": self.project_id
+        }
+        
+        # Build arguments list  
+        args = []
+        if self.context_id:
+            args.extend(["--contextId", self.context_id])
+        if self.enable_proxies:
+            args.append("--proxies")
+        if self.enable_stealth:
+            args.append("--advancedStealth")
+        if self.browser_width != 1280:
+            args.extend(["--browserWidth", str(self.browser_width)])
+        if self.browser_height != 720:
+            args.extend(["--browserHeight", str(self.browser_height)])
+        
         if self.use_npx:
-            # NPX configuration
-            args = ["@browserbasehq/mcp"]
-            env = {
-                "BROWSERBASE_API_KEY": self.api_key,
-                "BROWSERBASE_PROJECT_ID": self.project_id
-            }
-            
-            # Add optional flags
-            if self.context_id:
-                args.extend(["--contextId", self.context_id])
-            if self.enable_proxies:
-                args.append("--proxies")
-            if self.enable_stealth:
-                args.append("--advancedStealth")
-            if self.browser_width != 1280:
-                args.extend(["--browserWidth", str(self.browser_width)])
-            if self.browser_height != 720:
-                args.extend(["--browserHeight", str(self.browser_height)])
-            
-            return ServerConfig(command="npx", args=args, env=env)
+            # Use shared utility for robust npm/npx handling
+            return self._create_npm_server_config(
+                package_name="@browserbasehq/mcp",
+                args=args,
+                env=env,
+                use_npx=True,  # Browserbase works well with NPX
+                require_node=True
+            )
         else:
             # Direct execution (requires global installation)
-            args = []
-            env = {
-                "BROWSERBASE_API_KEY": self.api_key,
-                "BROWSERBASE_PROJECT_ID": self.project_id
-            }
             return ServerConfig(command="browserbase-mcp", args=args, env=env)
     
     def _get_provider_name(self) -> str:

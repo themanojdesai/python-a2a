@@ -1,9 +1,12 @@
 """
-MCP Transport Implementations - Standard stdio and HTTP transports.
+MCP Transport Implementations - stdio, HTTP and WebSocket transports.
 
 This module provides transport implementations for MCP following the 
-2025-03-26 specification. The stdio transport is the primary mechanism
-that MCP clients SHOULD support whenever possible.
+2025-03-26 specification. Supports both local and remote MCP servers:
+
+- StdioTransport: For local MCP servers via subprocess (primary)
+- HttpMCPTransport: For remote MCP servers via HTTP/HTTPS
+- WebSocketMCPTransport: For real-time remote MCP servers via WebSocket
 """
 
 import asyncio
@@ -13,8 +16,16 @@ import os
 import sys
 from typing import List, Optional, Dict, Any
 from pathlib import Path
+from urllib.parse import urljoin
 
 from .protocol import MCPConnectionError, MCPProtocolError
+
+# Optional HTTP dependencies
+try:
+    import aiohttp
+    HAS_AIOHTTP = True
+except ImportError:
+    HAS_AIOHTTP = False
 
 logger = logging.getLogger(__name__)
 
@@ -476,3 +487,358 @@ def create_server_stdio_transport() -> ServerStdioTransport:
         Configured server stdio transport
     """
     return ServerStdioTransport()
+
+
+# HTTP and WebSocket Transport Classes for Remote MCP Servers
+
+class HttpMCPTransport:
+    """
+    HTTP transport implementation for remote MCP servers.
+    
+    Connects to remote MCP servers via HTTP/HTTPS protocols.
+    Supports authentication, custom headers, and request/response handling.
+    """
+    
+    def __init__(self, 
+                 base_url: str,
+                 headers: Optional[Dict[str, str]] = None,
+                 auth_token: Optional[str] = None,
+                 api_key: Optional[str] = None,
+                 timeout: float = 30.0,
+                 verify_ssl: bool = True):
+        """
+        Initialize HTTP MCP transport.
+        
+        Args:
+            base_url: Base URL of the MCP server (e.g., "https://api.example.com/mcp")
+            headers: Additional HTTP headers to send with requests
+            auth_token: Bearer token for authentication
+            api_key: API key for authentication (added as X-API-Key header)
+            timeout: Request timeout in seconds
+            verify_ssl: Whether to verify SSL certificates
+        """
+        if not HAS_AIOHTTP:
+            raise ImportError(
+                "aiohttp is required for HTTP transport. Install with: pip install aiohttp"
+            )
+        
+        self.base_url = base_url.rstrip('/')
+        self.headers = headers or {}
+        self.timeout = aiohttp.ClientTimeout(total=timeout)
+        self.verify_ssl = verify_ssl
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._connected = False
+        self._response_queue = asyncio.Queue()
+        
+        # Set up authentication headers
+        if auth_token:
+            self.headers['Authorization'] = f'Bearer {auth_token}'
+        if api_key:
+            self.headers['X-API-Key'] = api_key
+        
+        # Ensure content type for JSON-RPC
+        self.headers.setdefault('Content-Type', 'application/json')
+        self.headers.setdefault('Accept', 'application/json')
+    
+    async def connect(self) -> None:
+        """Establish HTTP connection session."""
+        if self._connected:
+            return
+        
+        connector = aiohttp.TCPConnector(verify_ssl=self.verify_ssl)
+        self._session = aiohttp.ClientSession(
+            headers=self.headers,
+            timeout=self.timeout,
+            connector=connector
+        )
+        
+        # Test connection with a health check if available
+        try:
+            await self._health_check()
+            self._connected = True
+            logger.info(f"Connected to remote MCP server at {self.base_url}")
+        except Exception as e:
+            await self.disconnect()
+            raise MCPConnectionError(f"Failed to connect to remote MCP server: {e}") from e
+    
+    async def disconnect(self) -> None:
+        """Close HTTP connection session."""
+        if self._session:
+            await self._session.close()
+            self._session = None
+        self._connected = False
+        logger.info("Disconnected from HTTP MCP server")
+    
+    def is_connected(self) -> bool:
+        """Check if transport is connected."""
+        return self._connected and self._session is not None
+    
+    async def send(self, message: bytes) -> None:
+        """
+        Send JSON-RPC message via HTTP POST.
+        
+        Args:
+            message: JSON-RPC message as bytes
+        """
+        if not self._session:
+            raise MCPConnectionError("Not connected to MCP server")
+        
+        try:
+            # Parse the message to ensure it's valid JSON-RPC
+            message_data = json.loads(message.decode('utf-8'))
+            
+            # Determine endpoint based on JSON-RPC method
+            endpoint = self._get_endpoint_for_method(message_data.get('method', ''))
+            
+            # Send HTTP POST request
+            async with self._session.post(
+                urljoin(self.base_url, endpoint),
+                json=message_data
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise MCPConnectionError(f"HTTP {response.status}: {error_text}")
+                
+                # Store response for receive() call
+                response_data = await response.json()
+                response_bytes = json.dumps(response_data).encode('utf-8')
+                await self._response_queue.put(response_bytes)
+                
+        except Exception as e:
+            logger.error(f"Failed to send HTTP message: {e}")
+            raise MCPConnectionError(f"Send failed: {e}") from e
+    
+    async def receive(self) -> bytes:
+        """
+        Receive JSON-RPC response.
+        
+        Returns:
+            Response message as bytes
+        """
+        try:
+            response = await asyncio.wait_for(
+                self._response_queue.get(),
+                timeout=self.timeout.total if self.timeout else 30.0
+            )
+            return response
+        except asyncio.TimeoutError:
+            raise MCPConnectionError("Receive timeout")
+    
+    def _get_endpoint_for_method(self, method: str) -> str:
+        """Get appropriate endpoint for JSON-RPC method."""
+        # Map MCP methods to appropriate endpoints
+        if method in ['initialize', 'initialized']:
+            return '/mcp/init'
+        elif method.startswith('tools/'):
+            return '/mcp/tools'
+        elif method.startswith('resources/'):
+            return '/mcp/resources'
+        elif method.startswith('prompts/'):
+            return '/mcp/prompts'
+        else:
+            return '/mcp/rpc'  # Default endpoint
+    
+    async def _health_check(self) -> None:
+        """Perform health check on the MCP server."""
+        try:
+            # Try a simple OPTIONS or GET request to check server availability
+            async with self._session.options(self.base_url) as response:
+                if response.status >= 400:
+                    # If OPTIONS fails, try GET to root
+                    async with self._session.get(self.base_url) as get_response:
+                        if get_response.status >= 500:
+                            raise MCPConnectionError(f"Server error: {get_response.status}")
+        except aiohttp.ClientConnectorError as e:
+            raise MCPConnectionError(f"Cannot reach server: {e}")
+        except Exception as e:
+            logger.warning(f"Health check failed, proceeding anyway: {e}")
+            # Don't fail on health check issues, server might not support it
+
+
+class WebSocketMCPTransport:
+    """
+    WebSocket transport implementation for remote MCP servers.
+    
+    Provides real-time bidirectional communication for MCP servers
+    that support WebSocket connections.
+    """
+    
+    def __init__(self,
+                 ws_url: str,
+                 headers: Optional[Dict[str, str]] = None,
+                 auth_token: Optional[str] = None,
+                 api_key: Optional[str] = None,
+                 timeout: float = 30.0,
+                 heartbeat: Optional[float] = None):
+        """
+        Initialize WebSocket MCP transport.
+        
+        Args:
+            ws_url: WebSocket URL (e.g., "wss://api.example.com/mcp/ws")
+            headers: Additional headers for WebSocket handshake
+            auth_token: Bearer token for authentication
+            api_key: API key for authentication
+            timeout: Connection timeout in seconds
+            heartbeat: Heartbeat interval in seconds (None to disable)
+        """
+        if not HAS_AIOHTTP:
+            raise ImportError(
+                "aiohttp is required for WebSocket transport. Install with: pip install aiohttp"
+            )
+        
+        self.ws_url = ws_url
+        self.headers = headers or {}
+        self.timeout = timeout
+        self.heartbeat = heartbeat
+        self._websocket: Optional[aiohttp.ClientWebSocketResponse] = None
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._connected = False
+        self._message_queue = asyncio.Queue()
+        self._receive_task: Optional[asyncio.Task] = None
+        
+        # Set up authentication headers
+        if auth_token:
+            self.headers['Authorization'] = f'Bearer {auth_token}'
+        if api_key:
+            self.headers['X-API-Key'] = api_key
+    
+    async def connect(self) -> None:
+        """Establish WebSocket connection."""
+        if self._connected:
+            return
+        
+        try:
+            self._session = aiohttp.ClientSession()
+            
+            self._websocket = await self._session.ws_connect(
+                self.ws_url,
+                headers=self.headers,
+                timeout=self.timeout,
+                heartbeat=self.heartbeat
+            )
+            
+            # Start message receiving task
+            self._receive_task = asyncio.create_task(self._receive_loop())
+            
+            self._connected = True
+            logger.info(f"Connected to WebSocket MCP server at {self.ws_url}")
+            
+        except Exception as e:
+            await self.disconnect()
+            raise MCPConnectionError(f"Failed to connect to WebSocket MCP server: {e}") from e
+    
+    async def disconnect(self) -> None:
+        """Close WebSocket connection."""
+        self._connected = False
+        
+        # Cancel receive task
+        if self._receive_task:
+            self._receive_task.cancel()
+            try:
+                await self._receive_task
+            except asyncio.CancelledError:
+                pass
+            self._receive_task = None
+        
+        # Close WebSocket
+        if self._websocket:
+            await self._websocket.close()
+            self._websocket = None
+        
+        # Close session
+        if self._session:
+            await self._session.close()
+            self._session = None
+        
+        logger.info("Disconnected from WebSocket MCP server")
+    
+    def is_connected(self) -> bool:
+        """Check if transport is connected."""
+        return (self._connected and 
+                self._websocket is not None and 
+                not self._websocket.closed)
+    
+    async def send(self, message: bytes) -> None:
+        """
+        Send message via WebSocket.
+        
+        Args:
+            message: JSON-RPC message as bytes
+        """
+        if not self._websocket or self._websocket.closed:
+            raise MCPConnectionError("WebSocket not connected")
+        
+        try:
+            await self._websocket.send_str(message.decode('utf-8'))
+        except Exception as e:
+            logger.error(f"Failed to send WebSocket message: {e}")
+            raise MCPConnectionError(f"Send failed: {e}") from e
+    
+    async def receive(self) -> bytes:
+        """
+        Receive message from WebSocket.
+        
+        Returns:
+            Message as bytes
+        """
+        try:
+            message = await asyncio.wait_for(
+                self._message_queue.get(), 
+                timeout=self.timeout
+            )
+            
+            if isinstance(message, Exception):
+                raise message
+            
+            return message
+        except asyncio.TimeoutError:
+            raise MCPConnectionError("Receive timeout")
+    
+    async def _receive_loop(self) -> None:
+        """Background task to receive WebSocket messages."""
+        try:
+            async for msg in self._websocket:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    message_bytes = msg.data.encode('utf-8')
+                    await self._message_queue.put(message_bytes)
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    logger.error(f"WebSocket error: {self._websocket.exception()}")
+                    break
+                elif msg.type == aiohttp.WSMsgType.CLOSE:
+                    logger.info("WebSocket closed by server")
+                    break
+        except Exception as e:
+            logger.error(f"WebSocket receive loop failed: {e}")
+            await self._message_queue.put(MCPConnectionError(f"WebSocket receive failed: {e}"))
+        finally:
+            self._connected = False
+
+
+# Additional factory functions for remote transports
+
+def create_http_transport(base_url: str, **kwargs) -> HttpMCPTransport:
+    """
+    Create HTTP MCP transport for remote servers.
+    
+    Args:
+        base_url: Base URL of the remote MCP server
+        **kwargs: Additional arguments for HttpMCPTransport
+        
+    Returns:
+        Configured HTTP transport
+    """
+    return HttpMCPTransport(base_url, **kwargs)
+
+
+def create_websocket_transport(ws_url: str, **kwargs) -> WebSocketMCPTransport:
+    """
+    Create WebSocket MCP transport for remote servers.
+    
+    Args:
+        ws_url: WebSocket URL of the remote MCP server
+        **kwargs: Additional arguments for WebSocketMCPTransport
+        
+    Returns:
+        Configured WebSocket transport
+    """
+    return WebSocketMCPTransport(ws_url, **kwargs)

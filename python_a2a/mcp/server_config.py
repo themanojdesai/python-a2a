@@ -40,6 +40,7 @@ class ServerConfig:
     command: str
     args: List[str] = field(default_factory=list)
     env: Dict[str, str] = field(default_factory=dict)
+    package_name: Optional[str] = None  # For better error messages
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ServerConfig":
@@ -47,7 +48,8 @@ class ServerConfig:
         return cls(
             command=data["command"],
             args=data.get("args", []),
-            env=data.get("env", {})
+            env=data.get("env", {}),
+            package_name=data.get("package_name")
         )
     
     def to_dict(self) -> Dict[str, Any]:

@@ -111,8 +111,11 @@ from .server_config import (
     create_filesystem_config
 )
 
-# MCP providers for external servers
-from .providers import GitHubMCPServer, BrowserbaseMCPServer, FilesystemMCPServer
+# MCP providers for external servers (local only)
+from .providers import (
+    GitHubMCPServer, BrowserbaseMCPServer, FilesystemMCPServer, 
+    PuppeteerMCPServer, PlaywrightMCPServer
+)
 
 # Backward compatibility: Legacy integrations (DEPRECATED)
 try:
@@ -202,10 +205,12 @@ __all__ = [
     "create_github_config",
     "create_filesystem_config",
     
-    # High-level MCP providers
+    # High-level MCP providers (local)
     "GitHubMCPServer",
     "BrowserbaseMCPServer",
     "FilesystemMCPServer",
+    "PuppeteerMCPServer",
+    "PlaywrightMCPServer",
 ]
 
 # Add conditional exports for backward compatibility

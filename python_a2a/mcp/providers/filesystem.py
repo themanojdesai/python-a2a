@@ -60,13 +60,17 @@ class FilesystemMCPServer(BaseProvider):
     def _create_config(self) -> ServerConfig:
         """Create Filesystem MCP server configuration."""
         if self.use_npx:
-            # NPX configuration
-            args = ["-y", "@modelcontextprotocol/server-filesystem"] + self.allowed_directories
-            return ServerConfig(command="npx", args=args)
+            # Use shared utility for robust npm/npx handling
+            return self._create_npm_server_config(
+                package_name="@modelcontextprotocol/server-filesystem",
+                args=self.allowed_directories,
+                env={},
+                use_npx=True,  # Filesystem server works well with NPX
+                require_node=True
+            )
         else:
             # Direct execution (requires global installation)
-            args = self.allowed_directories
-            return ServerConfig(command="mcp-server-filesystem", args=args)
+            return ServerConfig(command="mcp-server-filesystem", args=self.allowed_directories)
     
     def _get_provider_name(self) -> str:
         """Get provider name."""

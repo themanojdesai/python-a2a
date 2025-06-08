@@ -77,15 +77,18 @@ class GitHubMCPServer(BaseProvider):
             
             return ServerConfig(command="docker", args=args, env=env)
         else:
-            # NPX configuration
+            # NPX configuration with auto-installation
             env = {"GITHUB_PERSONAL_ACCESS_TOKEN": self.token}
             if self.github_host:
                 env["GITHUB_HOST"] = self.github_host
             
-            return ServerConfig(
-                command="npx",
-                args=["-y", "@github/github-mcp-server"],
-                env=env
+            # Use shared utility for robust npm/npx handling
+            return self._create_npm_server_config(
+                package_name="@github/github-mcp-server",
+                args=[],
+                env=env,
+                use_npx=True,  # GitHub server works best with NPX
+                require_node=True
             )
     
     def _get_provider_name(self) -> str:

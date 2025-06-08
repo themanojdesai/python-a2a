@@ -27,6 +27,8 @@ Python A2A features a new provider architecture that offers:
 Available MCP Providers
 -----------------------
 
+Python A2A provides several production-ready MCP providers for common services:
+
 GitHub MCP Provider
 ~~~~~~~~~~~~~~~~~~
 
@@ -164,6 +166,111 @@ Secure file operations with sandboxing:
 - Metadata extraction and file information
 - Bulk operations for efficiency
 
+Playwright MCP Provider
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Advanced browser automation with Playwright for complex web interactions:
+
+.. code-block:: python
+
+    from python_a2a.mcp.providers import PlaywrightMCPServer
+    
+    # Using context manager (recommended)
+    async with PlaywrightMCPServer() as playwright:
+        # Navigation
+        await playwright.navigate("https://example.com")
+        
+        # Screenshots and page analysis
+        screenshot = await playwright.take_screenshot()
+        full_screenshot = await playwright.take_full_screenshot()
+        
+        # Element interaction
+        await playwright.click("button[type='submit']")
+        await playwright.type("input[name='email']", "user@example.com")
+        await playwright.press_key("Enter")
+        
+        # Advanced interactions
+        await playwright.hover("nav .dropdown")
+        await playwright.drag_and_drop("source", "target")
+        await playwright.scroll_down()
+        
+        # Data extraction
+        title = await playwright.get_title()
+        url = await playwright.get_url()
+        text = await playwright.get_text("h1")
+        html = await playwright.get_html("body")
+        
+        # Page evaluation
+        result = await playwright.evaluate_js("document.title")
+        
+        # Form handling
+        await playwright.select_option("select[name='country']", "US")
+        await playwright.check("input[type='checkbox']")
+        await playwright.upload_file("input[type='file']", "/path/to/file.pdf")
+        
+        # Waiting for elements/events
+        await playwright.wait_for_element("div.loaded")
+        await playwright.wait_for_url("https://success.com")
+
+**Key Features:**
+- Full Playwright browser automation capabilities
+- Cross-browser support (Chromium, Firefox, Safari)
+- Advanced element interaction and form handling
+- Screenshot and page analysis
+- JavaScript evaluation and custom scripting
+- File upload and download handling
+
+Puppeteer MCP Provider
+~~~~~~~~~~~~~~~~~~~~~
+
+Chrome-specific automation with Puppeteer for detailed browser control:
+
+.. code-block:: python
+
+    from python_a2a.mcp.providers import PuppeteerMCPServer
+    
+    # Using context manager (recommended)
+    async with PuppeteerMCPServer() as puppeteer:
+        # Basic navigation
+        await puppeteer.navigate("https://example.com")
+        await puppeteer.go_back()
+        await puppeteer.go_forward()
+        await puppeteer.reload()
+        
+        # Screenshots and PDFs
+        screenshot = await puppeteer.screenshot()
+        pdf = await puppeteer.generate_pdf()
+        
+        # Element interaction
+        await puppeteer.click("button")
+        await puppeteer.type("input", "text")
+        await puppeteer.hover("element")
+        
+        # JavaScript execution
+        result = await puppeteer.evaluate("document.title")
+        
+        # Page analysis
+        title = await puppeteer.get_title()
+        content = await puppeteer.get_content()
+        
+        # Cookie and session management
+        await puppeteer.set_cookie("name", "value")
+        cookies = await puppeteer.get_cookies()
+        
+        # Viewport and device emulation
+        await puppeteer.set_viewport(1920, 1080)
+        
+        # Performance monitoring
+        metrics = await puppeteer.get_metrics()
+
+**Key Features:**
+- Chrome DevTools Protocol access
+- PDF generation capabilities
+- Cookie and session management
+- Performance monitoring and metrics
+- Device emulation and viewport control
+- Network interception capabilities
+
 Creating Agents with MCP Providers
 ----------------------------------
 
@@ -172,7 +279,7 @@ You can easily integrate MCP providers with A2A agents:
 .. code-block:: python
 
     from python_a2a import A2AServer, AgentCard, run_server
-    from python_a2a.mcp.providers import GitHubMCPServer, FilesystemMCPServer
+    from python_a2a.mcp.providers import GitHubMCPServer, FilesystemMCPServer, PlaywrightMCPServer
     from python_a2a import TaskStatus, TaskState
     
     class DevOpsAgent(A2AServer):
@@ -264,6 +371,30 @@ GitHub Provider Configuration
         token="your-github-token",          # Required: GitHub personal access token
         use_docker=True,                    # Use Docker (True) or NPX (False)
         github_host="github.enterprise.com" # Optional: GitHub Enterprise host
+    )
+
+Playwright Provider Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    playwright = PlaywrightMCPServer(
+        use_npx=True,                      # Use NPX to run the server
+        browser_type="chromium",           # Browser: chromium, firefox, safari
+        headless=True,                     # Run in headless mode
+        timeout=30000                      # Default timeout in milliseconds
+    )
+
+Puppeteer Provider Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    puppeteer = PuppeteerMCPServer(
+        use_npx=True,                      # Use NPX to run the server
+        headless=True,                     # Run in headless mode
+        devtools=False,                    # Enable Chrome DevTools
+        timeout=30000                      # Default timeout in milliseconds
     )
 
 Browserbase Provider Configuration
