@@ -21,6 +21,7 @@ class OllamaA2AClient(OpenAIA2AClient):
         self,
         api_url: str,
         model: str,
+        api_key: str = "ollama",
         temperature: float = 0.7,
         system_prompt: Optional[str] = None,
         functions: Optional[List[Dict[str, Any]]] = None,
@@ -48,6 +49,7 @@ class OllamaA2AClient(OpenAIA2AClient):
 
         # Initialize OpenAI compatible client
         self.__api_url = api_url
+        self.function_role = "tool"  # Ollama uses "tool" as the function role
 
         try:
             self.__models = self.list_models()
@@ -59,7 +61,7 @@ class OllamaA2AClient(OpenAIA2AClient):
         if model not in self.__models:
             raise A2AImportError(f"Model '{model}' is not available in the Ollama API.")
 
-        self.client = OpenAI(base_url=f"{api_url}/v1", api_key="ollama")
+        self.client = OpenAI(base_url=f"{api_url}/v1", api_key=api_key)
 
     def list_models(self) -> List[str]:
         """
