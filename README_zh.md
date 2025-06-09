@@ -23,7 +23,7 @@
 
 ## 🌟 概述
 
-Python A2A 是一个全面且适用于生产环境的库，用于实现 Google 的 [Agent-to-Agent (A2A) 协议](https://google.github.io/A2A/)，并完全支持 [Model Context Protocol (MCP)](https://contextual.ai/introducing-mcp/)。它提供了构建可互操作的 AI 代理生态系统所需的所有功能，这些代理可以无缝协作以解决复杂问题。
+Python A2A 是一个全面且适用于生产环境的库，用于实现 Google 的 [Agent-to-Agent (A2A) 协议](https://google.github.io/A2A/)，并完全支持 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)。它提供了构建可互操作的 AI 代理生态系统所需的所有功能，这些代理可以无缝协作以解决复杂问题。
 
 A2A 协议为 AI 代理之间的交互建立了标准通信格式，而 MCP 通过提供标准化的方法扩展了这一功能，使代理能够访问外部工具和数据源。Python A2A 通过直观的 API 使这些协议易于使用，开发者可以使用这些 API 构建复杂的多代理系统。
 

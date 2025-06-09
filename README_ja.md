@@ -24,7 +24,7 @@
 
 ## 🌟 概要
 
-Python A2A は、Google の [Agent-to-Agent (A2A) プロトコル](https://google.github.io/A2A/) の包括的で本番環境対応のライブラリであり、[Model Context Protocol (MCP)](https://contextual.ai/introducing-mcp/) との完全なサポートを提供します。このプロトコルは、複雑な問題を解決するために AI エージェントがシームレスに協力できるようにするためのすべての機能を提供します。
+Python A2A は、Google の [Agent-to-Agent (A2A) プロトコル](https://google.github.io/A2A/) の包括的で本番環境対応のライブラリであり、[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) との完全なサポートを提供します。このプロトコルは、複雑な問題を解決するために AI エージェントがシームレスに協力できるようにするためのすべての機能を提供します。
 
 A2A プロトコルは、AI エージェント間の相互作用のための標準的な通信形式を確立し、MCP はエージェントが外部ツールやデータソースにアクセスするための標準化された方法を提供することで、この機能を拡張します。Python A2A は直感的な API を通じてこれらのプロトコルを簡単に使用できるようにし、これらの API を使用して複雑なマルチエージェントシステムを構築できます。
 
