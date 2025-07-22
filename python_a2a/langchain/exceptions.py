@@ -15,6 +15,12 @@ class LangChainNotInstalledError(LangChainIntegrationError):
         self.message = message or "LangChain is not installed. Install it with 'pip install langchain langchain_core'"
         super().__init__(self.message)
 
+class MCPNotInstalledError(Exception):
+    """Raised when mcp is not installed"""
+
+    def __init__(self, message=None):
+        self.message = message or "mcp is not installed. Install it with 'pip install mcp'"
+
 class LangChainToolConversionError(LangChainIntegrationError):
     """Raised when a LangChain tool cannot be converted."""
     pass

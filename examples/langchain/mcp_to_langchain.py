@@ -10,6 +10,7 @@ import sys
 import time
 import threading
 import socket
+import asyncio
 
 def find_available_port(start_port=5000, max_tries=10):
     """Find an available port"""
@@ -91,7 +92,7 @@ def main():
     
     # 3. Convert the MCP tool to a LangChain tool
     print(f"\nConverting MCP tool to LangChain tool from {server_url}")
-    calculator_tool = to_langchain_tool(server_url, "calculator")
+    calculator_tool = asyncio.run(to_langchain_tool(server_url, "calculator"))
     
     # 4. Use the LangChain tool
     print("\nUsing the LangChain tool:")

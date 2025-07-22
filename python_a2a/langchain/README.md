@@ -143,10 +143,10 @@ server.run(port=8080)
 from python_a2a.langchain import to_langchain_tool
 
 # Convert all tools from an MCP server
-tools = to_langchain_tool("http://localhost:8080")
+tools = asyncio.run(to_langchain_tool("http://localhost:8080"))
 
 # Convert a specific tool
-calculator_tool = to_langchain_tool("http://localhost:8080", "calculator")
+calculator_tool = asyncio.run(to_langchain_tool("http://localhost:8080", "calculator"))
 
 # Use in LangChain
 from langchain.agents import initialize_agent
@@ -191,7 +191,7 @@ The integration provides detailed error handling with specific exception types:
 
 ```python
 try:
-    tool = to_langchain_tool("http://localhost:8080", "non_existent_tool")
+    tool = asyncio.run(to_langchain_tool("http://localhost:8080", "non_existent_tool"))
 except MCPToolConversionError as e:
     print(f"MCP tool error: {e}")
 ```

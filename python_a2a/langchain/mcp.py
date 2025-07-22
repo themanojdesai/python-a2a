@@ -10,6 +10,7 @@ import inspect
 import json
 import requests
 from typing import Any, Dict, List, Optional, Union, Callable, Type, get_type_hints
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +18,15 @@ logger = logging.getLogger(__name__)
 from .exceptions import (
     LangChainNotInstalledError,
     LangChainToolConversionError,
-    MCPToolConversionError
+    MCPToolConversionError,
+    MCPNotInstalledError
 )
 
 # Check for LangChain availability without failing
 try:
     # Try to import LangChain components
     try:
-        from langchain_core.tools import BaseTool, ToolException
+        from langchain_core.tools import BaseTool, ToolException, tool
     except ImportError:
         # Fall back to older LangChain structure
         from langchain.tools import BaseTool, ToolException
@@ -40,6 +42,13 @@ except ImportError:
     class ToolException(Exception):
         pass
 
+# Check for MCP availability without failing
+try:
+    from mcp import ClientSession, Tool as MCPTool
+    from mcp.client.streamable_http import streamablehttp_client
+    HAS_MCP = True
+except ImportError:
+    HAS_MCP = False
 
 # Utility for mapping between Python types and MCP types
 class TypeMapper:
@@ -448,11 +457,61 @@ def to_mcp_server(langchain_tools):
     except Exception as e:
         logger.exception("Failed to create MCP server from LangChain tools")
         raise LangChainToolConversionError(f"Failed to convert LangChain tools: {str(e)}")
+    
 
 
-def to_langchain_tool(mcp_url, tool_name=None):
+async def get_tool(available_tool: MCPTool, mcp_url: str):
     """
-    Convert MCP server tool(s) to LangChain tool(s).
+    Get langchain tool function for a mentioned MCP Tool from MCP Server
+    """
+    tool_name = available_tool.name
+    if not tool_name:
+        logger.exception("Tool Name not found in the tool")
+        raise LangChainToolConversionError("Tool Name not found in the tool")
+    parameters = available_tool.inputSchema["properties"].values()
+    args = [i["title"].lower() for i in parameters]
+    args = [i.replace(" ", "_") for i in args]
+    arg_names = ", ".join(args)
+    func_def_str = f"""
+@tool
+async def {tool_name}({arg_names}):
+    '''Call MCP tool function'''
+    args2 = "{arg_names}".split(", ")
+    body = {{}}
+    for a in args2:
+        body[a] = locals()[a]
+    try:
+        async with streamablehttp_client("{mcp_url}") as (
+            read_stream, write_stream, _,
+            ):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                result = await session.call_tool("{tool_name}", body)
+                if "error" in result:
+                    return f"Error: {{result['error']}}"
+                
+                # Process content in response
+                if "content" in result:
+                    content = result.get("content", [])
+                    if content and isinstance(content, list) and "text" in content[0]:
+                        return content[0]["text"]
+                
+                # If no structured content, return the raw result
+                return str(result)
+
+    except BaseException as e:
+        return f"Error while calling tool: {{e}}"                        
+                """
+    dynamic_scope = {}
+
+    exec(func_def_str, globals(), dynamic_scope)
+    the_tool = dynamic_scope[tool_name]
+    return the_tool
+
+
+async def to_langchain_tool(mcp_url, tool_name=None):
+    """
+    Get Convert MCP server tool(s) & Convert them to LangChain tool(s).
     
     Args:
         mcp_url: URL of the MCP server
@@ -463,10 +522,13 @@ def to_langchain_tool(mcp_url, tool_name=None):
     
     Example:
         >>> # Convert a specific tool
-        >>> calculator_tool = to_langchain_tool("http://localhost:8000", "calculator")
-        >>> 
+        >>> calculator_tool = await to_langchain_tool("http://localhost:8080/mcp", "calculator")
+        >>> #or
+        >>> calculator_tool = asyncio.run(to_langchain_tool("http://localhost:8080/mcp", "calculator"))
         >>> # Convert all tools from a server
-        >>> tools = to_langchain_tool("http://localhost:8000")
+        >>> tools = await to_langchain_tool("http://localhost:8080/mcp")
+        >>> #or
+        >>> tools = asyncio.run(to_langchain_tool("http://localhost:8080/mcp"))
         
     Raises:
         LangChainNotInstalledError: If LangChain is not installed
@@ -475,129 +537,35 @@ def to_langchain_tool(mcp_url, tool_name=None):
     if not HAS_LANGCHAIN:
         raise LangChainNotInstalledError()
     
-    try:
-        # Try to import Tool from various possible locations in LangChain
-        try:
-            from langchain.tools import Tool
-        except ImportError:
-            try:
-                from langchain.agents import Tool
-            except ImportError:
-                raise ImportError("Cannot import Tool class from LangChain")
+    if not HAS_MCP:
+        raise MCPNotInstalledError()
         
+    try:        
         # Get available tools from MCP server
+        langchain_tools = []
         try:
-            tools_response = requests.get(f"{mcp_url}/tools")
-            if tools_response.status_code != 200:
-                raise MCPToolConversionError(f"Failed to get tools from MCP server: {tools_response.status_code}")
-            
-            available_tools = tools_response.json()
-            logger.info(f"Found {len(available_tools)} tools on MCP server")
+            async with streamablehttp_client(f"{mcp_url}") as (
+                read_stream, write_stream, _,
+            ):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    available_tools = await session.list_tools()
+
+                    if tool_name:
+                        available_tool = [t for t in available_tools.tools if t.name == tool_name][0]
+                        the_tool = await get_tool(available_tool, mcp_url)
+                        return the_tool
+                    
+                    all_available_tools = [t for t in available_tools.tools ]
+                    for a_tool in all_available_tools:
+                        the_tool = await get_tool(a_tool, mcp_url)
+                        langchain_tools.append(the_tool)
+                    return langchain_tools
         except Exception as e:
             logger.error(f"Error getting tools from MCP server: {e}")
             raise MCPToolConversionError(f"Failed to get tools from MCP server: {str(e)}")
         
         # Filter tools if a specific tool is requested
-        if tool_name is not None:
-            available_tools = [t for t in available_tools if t.get("name") == tool_name]
-            if not available_tools:
-                raise MCPToolConversionError(f"Tool '{tool_name}' not found on MCP server at {mcp_url}")
-        
-        # Create LangChain tools
-        langchain_tools = []
-        
-        for tool_info in available_tools:
-            name = tool_info.get("name", "unnamed_tool")
-            description = tool_info.get("description", f"MCP Tool: {name}")
-            parameters = tool_info.get("parameters", [])
-            
-            logger.info(f"Creating LangChain tool for MCP tool: {name}")
-            
-            # Create function to call the MCP tool
-            def create_tool_func(tool_name):
-                # Need this wrapper to properly capture tool_name in closure
-                def tool_func(*args, **kwargs):
-                    """Call MCP tool function"""
-                    try:
-                        # Handle different input patterns
-                        if len(args) == 1 and not kwargs:
-                            input_value = args[0]
-                            
-                            # If the input looks like a parameter=value string (for multi-param tools)
-                            if '=' in input_value and not input_value.startswith('{'):
-                                # Parse simple param=value&param2=value2 format
-                                params = {}
-                                for pair in input_value.split('&'):
-                                    if '=' in pair:
-                                        k, v = pair.split('=', 1)
-                                        params[k.strip()] = v.strip()
-                                if params:
-                                    kwargs = params
-                            # Try to detect parameter format based on tool parameters
-                            elif parameters and len(parameters) == 1:
-                                # Single parameter case - use the parameter name from tool info
-                                param_name = parameters[0]["name"]
-                                kwargs = {param_name: input_value}
-                            else:
-                                # Default to 'input' parameter
-                                kwargs = {"input": input_value}
-                        
-                        # Call the MCP tool
-                        response = requests.post(
-                            f"{mcp_url}/tools/{tool_name}",
-                            json=kwargs
-                        )
-                        
-                        if response.status_code != 200:
-                            return f"Error: HTTP {response.status_code} - {response.text}"
-                        
-                        # Parse the response
-                        result = response.json()
-                        
-                        # Process error in response
-                        if "error" in result:
-                            return f"Error: {result['error']}"
-                        
-                        # Process content in response
-                        if "content" in result:
-                            content = result.get("content", [])
-                            if content and isinstance(content, list) and "text" in content[0]:
-                                return content[0]["text"]
-                        
-                        # If no structured content, return the raw result
-                        return str(result)
-                    except Exception as e:
-                        logger.exception(f"Error calling MCP tool {tool_name}")
-                        return f"Error calling tool: {str(e)}"
-                
-                return tool_func
-            
-            # Create the tool with a function that properly handles tool name in closure
-            tool_func = create_tool_func(name)
-            
-            # Create the LangChain tool
-            lc_tool = Tool(
-                name=name,
-                description=description,
-                func=tool_func
-            )
-            
-            # Add metadata if applicable
-            if hasattr(lc_tool, "metadata"):
-                lc_tool.metadata = {
-                    "source": "mcp",
-                    "url": mcp_url,
-                    "parameters": parameters
-                }
-            
-            langchain_tools.append(lc_tool)
-            logger.info(f"Successfully created LangChain tool: {name}")
-        
-        # Return single tool if requested, otherwise return list
-        if tool_name is not None and len(langchain_tools) == 1:
-            return langchain_tools[0]
-        
-        return langchain_tools
         
     except MCPToolConversionError:
         # Re-raise without wrapping

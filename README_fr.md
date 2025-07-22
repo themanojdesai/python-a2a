@@ -473,7 +473,7 @@ server_thread.start()
 time.sleep(2)  # Permettre au serveur de démarrer
 
 # Convertir l'outil MCP vers LangChain
-calculator_tool = to_langchain_tool("http://localhost:5000", "calculator")
+calculator_tool = asyncio.run(to_langchain_tool("http://localhost:5000", "calculator"))
 
 # Utiliser l'outil dans LangChain
 result = calculator_tool.run("5 * 9 + 3")

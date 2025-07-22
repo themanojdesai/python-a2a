@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from python_a2a import (
     Message, TextContent, FunctionCallContent, FunctionResponseContent,
-    FunctionParameter, MessageRole, MessageType, Conversation
+    FunctionParameter, MessageRole, Conversation
 )
 from python_a2a.utils import pretty_print_message, create_text_message, format_function_params
 
