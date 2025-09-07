@@ -23,7 +23,7 @@
 
 ## 🌟 Aperçu
 
-Python A2A est une bibliothèque complète et prête pour la production pour implémenter le [protocole Agent-to-Agent (A2A) de Google](https://google.github.io/A2A/), avec un support complet pour le [Model Context Protocol (MCP)](https://contextual.ai/introducing-mcp/). Elle fournit toutes les fonctionnalités nécessaires pour construire un écosystème d'agents d'IA interoperables capables de collaborer en douceur pour résoudre des problèmes complexes.
+Python A2A est une bibliothèque complète et prête pour la production pour implémenter le [protocole Agent-to-Agent (A2A) de Google](https://google.github.io/A2A/), avec un support complet pour le [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction). Elle fournit toutes les fonctionnalités nécessaires pour construire un écosystème d'agents d'IA interoperables capables de collaborer en douceur pour résoudre des problèmes complexes.
 
 Le protocole A2A établit un format de communication standard permettant aux agents d'IA d'interagir, tandis que le MCP étend cette capacité en fournissant une méthode standardisée pour que les agents accèdent à des outils et des sources de données externes. Python A2A rend ces protocoles faciles à utiliser via une API intuitive, permettant aux développeurs de construire des systèmes d'agents d'IA complexes.
 
