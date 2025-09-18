@@ -57,6 +57,7 @@ class OpenAIA2AClient(BaseA2AClient):
         self.temperature = temperature
         self.system_prompt = system_prompt or "You are a helpful assistant."
         self.functions = functions
+        self.function_role = "function"  # Default role for function responses
         self.tools = self._convert_functions_to_tools() if functions else None
 
         # Initialize OpenAI client only if the API key is provided
@@ -122,7 +123,7 @@ class OpenAIA2AClient(BaseA2AClient):
                 # Format function response in OpenAI's expected format
                 openai_messages.append(
                     {
-                        "role": "function",
+                        "role": self.function_role,
                         "name": message.content.name,
                         "content": json.dumps(message.content.response),
                     }
@@ -185,7 +186,7 @@ class OpenAIA2AClient(BaseA2AClient):
                 elif message.content.type == "function_response":
                     self._conversation_histories[conversation_id].append(
                         {
-                            "role": "function",
+                            "role": self.function_role,
                             "name": message.content.name,
                             "content": json.dumps(message.content.response),
                         }
@@ -336,7 +337,7 @@ class OpenAIA2AClient(BaseA2AClient):
                     # Format function response for OpenAI
                     openai_messages.append(
                         {
-                            "role": "function",
+                            "role": self.function_role,
                             "name": msg.content.name,
                             "content": json.dumps(msg.content.response),
                         }
