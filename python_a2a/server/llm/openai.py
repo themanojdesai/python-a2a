@@ -564,7 +564,8 @@ class OpenAIA2AServer(BaseA2AServer):
                 **kwargs
             ):
                 if (
-                    hasattr(chunk.choices[0].delta, "content")
+                    chunk.choices
+                    and hasattr(chunk.choices[0].delta, "content")
                     and chunk.choices[0].delta.content
                 ):
                     yield chunk.choices[0].delta.content
