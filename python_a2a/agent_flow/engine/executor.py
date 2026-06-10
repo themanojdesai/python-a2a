@@ -5,6 +5,7 @@ This module provides the execution engine for running workflows,
 managing execution state, and handling message flow between nodes.
 """
 
+import ast
 import json
 import time
 import uuid
@@ -12,6 +13,42 @@ import logging
 from datetime import datetime
 from enum import Enum, auto
 from typing import Dict, List, Optional, Set, Any, Union, Tuple, Callable
+
+# Whitelist of AST node types allowed in workflow condition expressions.
+# Permits literals, arithmetic, comparisons, and boolean logic only.
+# Any other node type (calls, attribute access, imports, etc.) is rejected.
+_SAFE_AST_NODES = (
+    ast.Expression, ast.BoolOp, ast.Compare, ast.BinOp, ast.UnaryOp,
+    ast.Constant, ast.And, ast.Or, ast.Not,
+    ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
+    ast.In, ast.NotIn, ast.Add, ast.Sub, ast.Mult, ast.Div,
+    ast.Mod, ast.UAdd, ast.USub, ast.List, ast.Tuple,
+    ast.Load,  # context marker for list/tuple literals — safe; ast.Name is still excluded
+)
+
+
+def _safe_eval_expr(expr: str) -> bool:
+    """Evaluate a boolean/comparison expression using AST whitelisting.
+
+    Only literals, arithmetic operators, and comparison/boolean operators
+    are permitted. Function calls, attribute access, imports, and builtins
+    are all rejected, so this is safe to run on untrusted input.
+    """
+    try:
+        tree = ast.parse(expr, mode='eval')
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, _SAFE_AST_NODES):
+            logging.getLogger("WorkflowExecutor").warning(
+                "Condition expression rejected — unsafe AST node: %s in %r",
+                type(node).__name__, expr,
+            )
+            return False
+    try:
+        return bool(eval(compile(tree, '<condition>', 'eval'), {"__builtins__": {}}))
+    except Exception:
+        return False
 
 from ..models.workflow import (
     Workflow, WorkflowNode, WorkflowEdge, NodeType, EdgeType
@@ -1186,23 +1223,14 @@ class WorkflowExecution:
             content = input_message.content
             result = content == condition_value
         
-        elif condition_type == "javascript":
-            # Evaluate a JavaScript expression (simple implementation)
-            try:
-                # Replace placeholders in the expression
-                expr = condition_value
-                if input_message:
-                    content = input_message.content
-                    if isinstance(content, str):
-                        expr = expr.replace("$input", json.dumps(content))
-                    else:
-                        expr = expr.replace("$input", json.dumps(content))
-                
-                # Very basic evaluation (CAUTION: Not secure for production)
-                # A real implementation would use a proper JS engine or safe eval
-                result = bool(eval(expr))
-            except:
-                result = False
+        elif condition_type in ("expression", "javascript"):
+            # "javascript" accepted as a deprecated alias for backwards compatibility.
+            # Evaluates a simple boolean/comparison expression via AST whitelisting —
+            # no function calls, attribute access, or builtins are permitted.
+            expr = condition_value
+            if input_message:
+                expr = expr.replace("$input", json.dumps(input_message.content))
+            result = _safe_eval_expr(expr)
         
         # Create output message
         output_message = MessageValue(
