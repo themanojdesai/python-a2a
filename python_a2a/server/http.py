@@ -47,9 +47,13 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
     # Allow CORS for all routes
     @app.after_request
     def add_cors_headers(response):
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        allowed_origins = os.environ.get("A2A_ALLOWED_ORIGINS", "").split(",")
+        origin = request.headers.get("Origin", "")
+        if origin and origin in allowed_origins:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Vary'] = 'Origin'
         return response
     
     # Handle OPTIONS requests for CORS preflight
