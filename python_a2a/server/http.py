@@ -1,3 +1,4 @@
+import re
 """
 HTTP server implementation for the A2A protocol.
 """
@@ -108,10 +109,14 @@ def create_flask_app(agent: BaseA2AServer) -> Flask:
             })
         
         # Otherwise serve HTML by default
+    # Validate host_url to prevent Host-header injection
+    host_url = request.host_url
+    if not re.match(r'^https?://[a-zA-Z0-9._-]+(:\d+)?/', host_url):
+        host_url = request.scheme + "://" + request.host.split(":")[0]
         response = make_response(render_template_string(
             AGENT_INDEX_HTML,
             agent=agent,
-            request=request
+            host_url=host_url
         ))
         response.headers['Content-Type'] = 'text/html; charset=utf-8'
         return response
