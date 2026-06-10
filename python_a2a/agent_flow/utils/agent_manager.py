@@ -6,6 +6,7 @@ with auto-registration and status monitoring.
 """
 
 import os
+import shlex
 import time
 import json
 import logging
@@ -194,8 +195,8 @@ class AgentManager:
             
             # Start the server process
             process = subprocess.Popen(
-                command,
-                shell=True,
+                shlex.split(command) if isinstance(command, str) else command,
+                shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 universal_newlines=True
