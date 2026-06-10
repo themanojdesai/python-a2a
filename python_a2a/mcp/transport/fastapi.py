@@ -1,3 +1,4 @@
+import os
 """
 FastAPI transport for FastMCP.
 
@@ -48,12 +49,13 @@ def create_fastapi_app(mcp_server: FastMCP) -> FastAPI:
     )
     
     # Add CORS middleware
+    allowed_origins = os.environ.get("A2A_MCP_ALLOWED_ORIGINS", "").split(",")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=allowed_origins if allowed_origins and allowed_origins != [""] else [],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
     )
     
     # Health check endpoint
