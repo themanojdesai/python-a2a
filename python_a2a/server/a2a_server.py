@@ -1,3 +1,4 @@
+import os
 """
 Enhanced A2A server with protocol support.
 """
@@ -342,6 +343,21 @@ class A2AServer(BaseA2AServer):
     def setup_routes(self, app):
         """Setup Flask routes for A2A endpoints"""
         # Root endpoint for both GET and POST
+        @app.before_request
+        def check_auth():
+            """Require API key on all mutating routes."""
+            api_key = os.environ.get("A2A_API_KEY", "")
+            if not api_key:
+                return  # No key configured = open access (dev mode)
+            if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:]
+                else:
+                    token = auth_header
+                if token != api_key:
+                    return jsonify({"error": "Unauthorized"}), 401
+
         @app.route("/", methods=["GET"])
         def a2a_root_get():
             """Root endpoint for A2A (GET), redirects to agent card"""
