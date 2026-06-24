@@ -1099,3 +1099,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 Made with ❤️ by [Manoj Desai](https://github.com/themanojdesai)
+
+## Web3 & Security
+- [MetaVision AI Platform](https://metavision.click/.well-known/agent.json) - A2A/MCP compatible Web3 AI agent on Base. CVE Oracle (355k+ NVD CVEs), DeFi arbitrage signals, wallet fraud + rug pull detection. 18 MCP tools. x402 v2 micropayments.
